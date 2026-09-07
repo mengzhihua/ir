@@ -148,6 +148,14 @@ public class SandboxService {
         ScenarioParams params = read(
                 scenario.getParamsJson(), ScenarioParams.class).normalized();
         Map<String, Object> scenarioResult = result(scenario);
+        if (!scenarioResult.containsKey("skuWarehouse")
+                || !scenarioResult.containsKey("stockoutByWarehouseSku")) {
+            CtScenario refreshed = run(id);
+            if (refreshed != null) {
+                scenario = refreshed;
+                scenarioResult = result(scenario);
+            }
+        }
         List<CtAction> result = new ArrayList<>();
         Map<String, String> skuWarehouse = stringMap(
                 scenarioResult.get("skuWarehouse"));
@@ -201,7 +209,9 @@ public class SandboxService {
             if (current <= target) {
                 continue;
             }
-            for (ShipmentSnapshot shipment : entry.getValue()) {
+            int moves = Math.min(current - target, entry.getValue().size());
+            for (int index = 0; index < moves; index++) {
+                ShipmentSnapshot shipment = entry.getValue().get(index);
                 String destination = largestDeficit(deficits);
                 if (destination == null) {
                     break;
@@ -281,10 +291,13 @@ public class SandboxService {
 
     private List<ShipmentSnapshot> eligibleShipments() {
         List<ShipmentSnapshot> result = new ArrayList<>();
+        List<String> terminalStatuses = Arrays.asList(
+                "DELIVERED", "SIGNED", "CANCELLED", "CLOSED");
         for (ShipmentSnapshot shipment : shipmentMapper.selectList(null)) {
             if ("IN_TRANSIT".equals(shipment.getStatus())
-                    || shipment.getCarrierCode() == null
-                    || shipment.getCarrierCode().trim().isEmpty()) {
+                    || (!terminalStatuses.contains(shipment.getStatus())
+                    && (shipment.getCarrierCode() == null
+                    || shipment.getCarrierCode().trim().isEmpty()))) {
                 result.add(shipment);
             }
         }
@@ -298,20 +311,35 @@ public class SandboxService {
         if (total <= 0) {
             return result;
         }
+        BigDecimal shareTotal = BigDecimal.ZERO;
+        for (BigDecimal share : shares.values()) {
+            if (share != null && share.signum() > 0) {
+                shareTotal = shareTotal.add(share);
+            }
+        }
+        if (shareTotal.signum() == 0) {
+            return result;
+        }
         int allocated = 0;
         String highest = null;
         BigDecimal highestShare = null;
         for (Map.Entry<String, BigDecimal> entry : shares.entrySet()) {
-            int target = entry.getValue()
-                    .multiply(BigDecimal.valueOf(total))
+            BigDecimal share = entry.getValue() == null
+                    ? BigDecimal.ZERO : entry.getValue();
+            if (share.signum() <= 0) {
+                continue;
+            }
+            BigDecimal normalized = share.divide(shareTotal, 8,
+                    BigDecimal.ROUND_HALF_UP);
+            int target = normalized.multiply(BigDecimal.valueOf(total))
                     .setScale(0, BigDecimal.ROUND_HALF_UP)
                     .intValue();
             result.put(entry.getKey(), target);
             allocated += target;
             if (highestShare == null
-                    || entry.getValue().compareTo(highestShare) > 0) {
+                    || share.compareTo(highestShare) > 0) {
                 highest = entry.getKey();
-                highestShare = entry.getValue();
+                highestShare = share;
             }
         }
         if (highest != null) {
