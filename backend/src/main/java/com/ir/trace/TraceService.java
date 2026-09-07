@@ -1,28 +1,216 @@
 package com.ir.trace;
 
-import com.ir.alert.AlertEngine;
-import com.ir.action.ActionService;
-import com.ir.snapshot.*;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.ir.action.CtAction;
+import com.ir.action.CtActionMapper;
+import com.ir.alert.CtAlert;
+import com.ir.alert.CtAlertMapper;
+import com.ir.snapshot.CostRecord;
+import com.ir.snapshot.CostRecordMapper;
+import com.ir.snapshot.OrderSnapshot;
+import com.ir.snapshot.OrderSnapshotMapper;
+import com.ir.snapshot.ShipmentSnapshot;
+import com.ir.snapshot.ShipmentSnapshotMapper;
+import com.ir.snapshot.WmsOrderSnapshot;
+import com.ir.snapshot.WmsOrderSnapshotMapper;
 import org.springframework.stereotype.Service;
+
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class TraceService {
-    private final DataStore store; private final AlertEngine alerts; private final ActionService actions;
-    public TraceService(DataStore store,AlertEngine alerts,ActionService actions){this.store=store;this.alerts=alerts;this.actions=actions;}
-    public List<Map<String,Object>> page(String keyword,String status,String warehouse,String carrier,Boolean stuck){
-        List<Map<String,Object>> out=new ArrayList<>(); for(OrderSnapshot o:store.orders){
-            if(keyword!=null&&!o.getOrderNo().contains(keyword))continue;if(status!=null&&!status.equals(o.getStatus()))continue;if(warehouse!=null&&!warehouse.equals(o.getWarehouseCode()))continue;if(carrier!=null&&!carrier.equals(o.getCarrierCode()))continue;
-            WmsOrderSnapshot w=store.wms(o.getOrderNo());ShipmentSnapshot s=store.shipment(o.getOrderNo());long hours=stuckHours(o,w,s);if(Boolean.TRUE.equals(stuck)&&hours<=0)continue;
-            Map<String,Object>m=row(o,w,s,hours);out.add(m);
-        } return out;
+    private final OrderSnapshotMapper orderMapper;
+    private final WmsOrderSnapshotMapper wmsMapper;
+    private final ShipmentSnapshotMapper shipmentMapper;
+    private final CostRecordMapper costMapper;
+    private final CtAlertMapper alertMapper;
+    private final CtActionMapper actionMapper;
+
+    public TraceService(
+            OrderSnapshotMapper orderMapper,
+            WmsOrderSnapshotMapper wmsMapper,
+            ShipmentSnapshotMapper shipmentMapper,
+            CostRecordMapper costMapper,
+            CtAlertMapper alertMapper,
+            CtActionMapper actionMapper) {
+        this.orderMapper = orderMapper;
+        this.wmsMapper = wmsMapper;
+        this.shipmentMapper = shipmentMapper;
+        this.costMapper = costMapper;
+        this.alertMapper = alertMapper;
+        this.actionMapper = actionMapper;
     }
-    public Map<String,Object> detail(String no){OrderSnapshot o=store.order(no);if(o==null)return null;WmsOrderSnapshot w=store.wms(no);ShipmentSnapshot s=store.shipment(no);Map<String,Object>m=row(o,w,s,stuckHours(o,w,s));List<Map<String,Object>>timeline=new ArrayList<>();timeline.add(node("OMS","ORDER",o.getOrderTime(),o.getStatus(),o.getOrderNo()));if(w!=null)timeline.add(node("WMS","OUTBOUND",o.getShipTime(),w.getStatus(),w.getCode()));if(s!=null)timeline.add(node("TMS","WAYBILL",s.getActualArriveTime()!=null?s.getActualArriveTime():s.getPlannedArriveTime(),s.getStatus(),s.getWaybillCode()));m.put("timeline",timeline);List<Map<String,Object>> aa=new ArrayList<>();for(Map<String,Object>a:alerts.page(null))if(no.equals(a.get("targetKey")))aa.add(a);m.put("alerts",aa);m.put("actions",actions.page());return m;}
-    private Map<String,Object> row(OrderSnapshot o,WmsOrderSnapshot w,ShipmentSnapshot s,long hours){Map<String,Object>m=new LinkedHashMap<>();m.put("orderNo",o.getOrderNo());m.put("oms",o);m.put("wms",w);m.put("tms",s);m.put("stage",stage(o,w,s));m.put("stuckHours",hours);BigDecimal c=BigDecimal.ZERO;for(CostRecord x:store.costs)if(o.getOrderNo().equals(x.getOrderNo()))c=c.add(x.getAmount());m.put("costTotal",c);return m;}
-    private String stage(OrderSnapshot o,WmsOrderSnapshot w,ShipmentSnapshot s){if("CANCELLED".equals(o.getStatus()))return"CANCELLED";if(s!=null&&("DELIVERED".equals(s.getStatus())||"CLOSED".equals(s.getStatus())))return"DELIVERED";if(s!=null)return"TRANSPORT";if(w!=null)return"WAREHOUSE";return"ORDER";}
-    private long stuckHours(OrderSnapshot o,WmsOrderSnapshot w,ShipmentSnapshot s){if("AUDITED".equals(o.getStatus()))return Math.max(0,Duration.between(o.getOrderTime(),LocalDateTime.now()).toHours()-4);if(w!=null&&"PICKING".equals(w.getStatus()))return Math.max(0,Duration.between(o.getOrderTime(),LocalDateTime.now()).toHours()-6);if(s!=null&&s.getPlannedArriveTime()!=null&&s.getPlannedArriveTime().isBefore(LocalDateTime.now())&&!("DELIVERED".equals(s.getStatus())||"CLOSED".equals(s.getStatus())))return Math.max(1,Duration.between(s.getPlannedArriveTime(),LocalDateTime.now()).toHours());return 0;}
-    private Map<String,Object> node(String system,String node,LocalDateTime time,String status,String detail){Map<String,Object>m=new LinkedHashMap<>();m.put("system",system);m.put("node",node);m.put("time",time);m.put("status",status);m.put("detail",detail);return m;}
+
+    public List<Map<String, Object>> page(
+            String keyword,
+            String status,
+            String warehouseCode,
+            String carrierCode,
+            Boolean stuck) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (OrderSnapshot order : orderMapper.selectList(
+                new LambdaQueryWrapper<OrderSnapshot>()
+                        .orderByDesc(OrderSnapshot::getOrderTime))) {
+            if (keyword != null && !order.getOrderNo().contains(keyword)) {
+                continue;
+            }
+            if (status != null && !status.equals(order.getStatus())) {
+                continue;
+            }
+            if (warehouseCode != null
+                    && !warehouseCode.equals(order.getWarehouseCode())) {
+                continue;
+            }
+            if (carrierCode != null
+                    && !carrierCode.equals(order.getCarrierCode())) {
+                continue;
+            }
+            WmsOrderSnapshot wms = wms(order.getOrderNo());
+            ShipmentSnapshot shipment = shipment(order.getOrderNo());
+            long stuckHours = stuckHours(order, wms, shipment);
+            if (Boolean.TRUE.equals(stuck) && stuckHours <= 0) {
+                continue;
+            }
+            result.add(row(order, wms, shipment, stuckHours));
+        }
+        return result;
+    }
+
+    public Map<String, Object> detail(String orderNo) {
+        OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
+                .eq(OrderSnapshot::getOrderNo, orderNo));
+        if (order == null) {
+            return null;
+        }
+        WmsOrderSnapshot wms = wms(orderNo);
+        ShipmentSnapshot shipment = shipment(orderNo);
+        Map<String, Object> result = row(
+                order, wms, shipment, stuckHours(order, wms, shipment));
+        result.put("timeline", timeline(order, wms, shipment));
+        result.put("costs", costMapper.selectList(new LambdaQueryWrapper<CostRecord>()
+                .eq(CostRecord::getOrderNo, orderNo)
+                .orderByAsc(CostRecord::getBizDate)));
+        result.put("alerts", alertMapper.selectList(new LambdaQueryWrapper<CtAlert>()
+                .eq(CtAlert::getTargetKey, orderNo)));
+        result.put("actions", actionMapper.selectList(new LambdaQueryWrapper<CtAction>()
+                .eq(CtAction::getTargetKey, orderNo)));
+        return result;
+    }
+
+    private Map<String, Object> row(
+            OrderSnapshot order,
+            WmsOrderSnapshot wms,
+            ShipmentSnapshot shipment,
+            long stuckHours) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("orderNo", order.getOrderNo());
+        row.put("oms", order);
+        row.put("wms", wms);
+        row.put("tms", shipment);
+        row.put("stage", stage(order, wms, shipment));
+        row.put("stuckHours", stuckHours);
+        BigDecimal total = BigDecimal.ZERO;
+        for (CostRecord cost : costMapper.selectList(new LambdaQueryWrapper<CostRecord>()
+                .eq(CostRecord::getOrderNo, order.getOrderNo()))) {
+            total = total.add(cost.getAmount());
+        }
+        row.put("costTotal", total);
+        return row;
+    }
+
+    private List<Map<String, Object>> timeline(
+            OrderSnapshot order,
+            WmsOrderSnapshot wms,
+            ShipmentSnapshot shipment) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        result.add(node("OMS", "ORDER", order.getOrderTime(),
+                order.getStatus(), order.getOrderNo()));
+        if (wms != null) {
+            result.add(node("WMS", "OUTBOUND", wms.getPackedAt(),
+                    wms.getStatus(), wms.getCode()));
+        }
+        if (shipment != null) {
+            LocalDateTime time = shipment.getActualArriveTime() == null
+                    ? shipment.getPlannedArriveTime()
+                    : shipment.getActualArriveTime();
+            result.add(node("TMS", "WAYBILL", time,
+                    shipment.getStatus(), shipment.getWaybillCode()));
+        }
+        return result;
+    }
+
+    private WmsOrderSnapshot wms(String orderNo) {
+        return wmsMapper.selectOne(new LambdaQueryWrapper<WmsOrderSnapshot>()
+                .eq(WmsOrderSnapshot::getExternalNo, orderNo));
+    }
+
+    private ShipmentSnapshot shipment(String orderNo) {
+        return shipmentMapper.selectOne(new LambdaQueryWrapper<ShipmentSnapshot>()
+                .eq(ShipmentSnapshot::getSourceNo, orderNo));
+    }
+
+    private String stage(
+            OrderSnapshot order,
+            WmsOrderSnapshot wms,
+            ShipmentSnapshot shipment) {
+        if ("CANCELLED".equals(order.getStatus())) {
+            return "CANCELLED";
+        }
+        if (shipment != null && Arrays.asList("DELIVERED", "CLOSED")
+                .contains(shipment.getStatus())) {
+            return "DELIVERED";
+        }
+        if (shipment != null) {
+            return "TRANSPORT";
+        }
+        if (wms != null) {
+            return "WAREHOUSE";
+        }
+        return "ORDER";
+    }
+
+    private long stuckHours(
+            OrderSnapshot order,
+            WmsOrderSnapshot wms,
+            ShipmentSnapshot shipment) {
+        LocalDateTime now = LocalDateTime.now();
+        if ("AUDITED".equals(order.getStatus())) {
+            return Math.max(0, Duration.between(order.getOrderTime(), now)
+                    .toHours() - 4);
+        }
+        if (wms != null && "PICKING".equals(wms.getStatus())) {
+            return Math.max(0, Duration.between(order.getOrderTime(), now)
+                    .toHours() - 6);
+        }
+        if (shipment != null && shipment.getPlannedArriveTime() != null
+                && shipment.getPlannedArriveTime().isBefore(now)
+                && !Arrays.asList("DELIVERED", "CLOSED")
+                .contains(shipment.getStatus())) {
+            return Math.max(1, Duration.between(
+                    shipment.getPlannedArriveTime(), now).toHours());
+        }
+        return 0;
+    }
+
+    private Map<String, Object> node(
+            String system,
+            String node,
+            LocalDateTime time,
+            String status,
+            String detail) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("system", system);
+        result.put("node", node);
+        result.put("time", time);
+        result.put("status", status);
+        result.put("detail", detail);
+        return result;
+    }
 }

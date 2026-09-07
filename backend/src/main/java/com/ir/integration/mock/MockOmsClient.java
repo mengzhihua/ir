@@ -1,25 +1,62 @@
 package com.ir.integration.mock;
 
-import com.ir.integration.client.*;
-import com.ir.snapshot.*;
+import com.ir.integration.client.ActionCommand;
+import com.ir.integration.client.OmsClient;
+import com.ir.snapshot.InventorySnapshot;
+import com.ir.snapshot.OrderSnapshot;
+import com.ir.snapshot.SalesPoint;
 import org.springframework.stereotype.Component;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @Component
 public class MockOmsClient implements OmsClient {
-    private final DataStore store;
-    public MockOmsClient(DataStore store) { this.store = store; }
-    public List<OrderSnapshot> fetchOrders() { return new ArrayList<>(store.orders); }
-    public List<InventorySnapshot> fetchInventory() { return new ArrayList<>(store.inventory); }
-    public List<SalesPoint> fetchDailySales(int days) { return new ArrayList<>(store.sales); }
-    public Map<String, Object> dashboard() { Map<String,Object> m = new LinkedHashMap<>(); m.put("orders", store.orders.size()); return m; }
-    public void execute(ActionCommand c) {
-        OrderSnapshot o = store.order(c.getTargetKey()); if (o == null) return;
-        if ("OMS_HOLD".equals(c.getType())) o.setStatus("HOLD");
-        else if ("OMS_UNHOLD".equals(c.getType())) o.setStatus("AUDITED");
-        else if ("OMS_PRIORITIZE".equals(c.getType())) { }
-        else if ("OMS_CANCEL".equals(c.getType())) o.setStatus("CANCELLED");
-        else if ("OMS_REROUTE_WAREHOUSE".equals(c.getType()) && c.getParams() != null) o.setWarehouseCode(String.valueOf(c.getParams().get("warehouseCode")));
+    private final MockDataset dataset;
+
+    public MockOmsClient(MockDataset dataset) {
+        this.dataset = dataset;
     }
-    public boolean health() { return true; }
+
+    @Override
+    public List<OrderSnapshot> fetchOrders() {
+        return new ArrayList<>(dataset.orders());
+    }
+
+    @Override
+    public List<InventorySnapshot> fetchInventory() {
+        return new ArrayList<>(dataset.inventory());
+    }
+
+    @Override
+    public List<SalesPoint> fetchDailySales(int days) {
+        return new ArrayList<>(dataset.sales());
+    }
+
+    @Override
+    public Map<String, Object> dashboard() {
+        Map<String, Object> dashboard = new LinkedHashMap<>();
+        dashboard.put("orders", dataset.orders().size());
+        dashboard.put("todayOrders", dataset.orders().size() / 60);
+        return dashboard;
+    }
+
+    @Override
+    public void execute(ActionCommand command) {
+        if ("OMS_HOLD".equals(command.getType())
+                || "OMS_PRIORITIZE".equals(command.getType())) {
+            for (OrderSnapshot order : dataset.orders()) {
+                if (command.getTargetKey().equals(order.getOrderNo())) {
+                    order.setStatus("HOLD".equals(command.getType()) ? "HOLD" : order.getStatus());
+                }
+            }
+        }
+    }
+
+    @Override
+    public boolean health() {
+        return true;
+    }
 }

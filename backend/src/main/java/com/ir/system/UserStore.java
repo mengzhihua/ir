@@ -1,35 +1,48 @@
 package com.ir.system;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
-@Component
+@Service
 public class UserStore {
-    private final Map<String, User> users = new ConcurrentHashMap<>();
-    private final AtomicLong ids = new AtomicLong();
-    @Value("${ir.auth.admin-password:admin123}") private String adminPassword;
+    private final UserMapper mapper;
 
-    @PostConstruct
-    public void init() {
-        User u = new User();
-        u.setId(ids.incrementAndGet()); u.setUsername("admin"); u.setPassword(hash(adminPassword));
-        u.setRealName("系统管理员"); u.setRole(User.ADMIN); users.put(u.getUsername(), u);
+    public UserStore(UserMapper mapper) {
+        this.mapper = mapper;
     }
-    public User find(String username) { return users.get(username); }
-    public User get(Long id) { return users.values().stream().filter(u -> u.getId().equals(id)).findFirst().orElse(null); }
+
+    public User find(String username) {
+        return mapper.selectOne(new LambdaQueryWrapper<User>()
+                .eq(User::getUsername, username));
+    }
+
+    public User get(Long id) {
+        return mapper.selectById(id);
+    }
+
+    public User save(User user) {
+        if (user.getId() == null) {
+            mapper.insert(user);
+        } else {
+            mapper.updateById(user);
+        }
+        return user;
+    }
+
     public static String hash(String value) {
         try {
-            byte[] out = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder b = new StringBuilder();
-            for (byte x : out) b.append(String.format("%02x", x));
-            return b.toString();
-        } catch (Exception e) { throw new IllegalStateException(e); }
+            byte[] bytes = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder();
+            for (byte valueByte : bytes) {
+                result.append(String.format("%02x", valueByte));
+            }
+            return result.toString();
+        } catch (Exception ex) {
+            throw new IllegalStateException("无法计算密码摘要", ex);
+        }
     }
 }

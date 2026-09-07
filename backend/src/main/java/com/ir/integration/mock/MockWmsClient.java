@@ -1,20 +1,57 @@
 package com.ir.integration.mock;
 
-import com.ir.integration.client.*;
-import com.ir.snapshot.*;
+import com.ir.integration.client.ActionCommand;
+import com.ir.integration.client.WmsClient;
+import com.ir.snapshot.InventorySnapshot;
+import com.ir.snapshot.WmsOrderSnapshot;
 import org.springframework.stereotype.Component;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @Component
 public class MockWmsClient implements WmsClient {
-    private final DataStore store;
-    public MockWmsClient(DataStore store) { this.store = store; }
-    public List<WmsOrderSnapshot> fetchOutbound() { return new ArrayList<>(store.wmsOrders); }
-    public List<InventorySnapshot> fetchInventorySummary() { return new ArrayList<>(store.inventory); }
-    public Map<String,Object> dashboard() { Map<String,Object> m = new LinkedHashMap<>(); m.put("orders", store.wmsOrders.size()); return m; }
-    public void execute(ActionCommand c) {
-        if ("WMS_ALLOCATE".equals(c.getType())) { WmsOrderSnapshot w = store.wms(c.getTargetKey()); if (w != null && "NEW".equals(w.getStatus())) w.setStatus("ALLOCATED"); }
-        if ("WMS_REPLENISH".equals(c.getType()) && c.getParams() != null) for (InventorySnapshot x : store.inventory) if (String.valueOf(c.getParams().get("warehouseCode")).equals(x.getWarehouseCode())) x.setQtyAvailable(x.getQtyAvailable().add(x.getSafetyQty()));
+    private final MockDataset dataset;
+
+    public MockWmsClient(MockDataset dataset) {
+        this.dataset = dataset;
     }
-    public boolean health() { return true; }
+
+    @Override
+    public List<WmsOrderSnapshot> fetchOutbound() {
+        return new ArrayList<>(dataset.outbound());
+    }
+
+    @Override
+    public List<InventorySnapshot> fetchInventorySummary() {
+        return new ArrayList<>(dataset.inventory());
+    }
+
+    @Override
+    public Map<String, Object> dashboard() {
+        Map<String, Object> dashboard = new LinkedHashMap<>();
+        dashboard.put("outboundOrders", dataset.outbound().size());
+        dashboard.put("inventoryRows", dataset.inventory().size());
+        return dashboard;
+    }
+
+    @Override
+    public void execute(ActionCommand command) {
+        for (WmsOrderSnapshot order : dataset.outbound()) {
+            if (!command.getTargetKey().equals(order.getCode())
+                    && !command.getTargetKey().equals(order.getExternalNo())) {
+                continue;
+            }
+            if ("WMS_ALLOCATE".equals(command.getType())) {
+                order.setStatus("ALLOCATED");
+            }
+        }
+    }
+
+    @Override
+    public boolean health() {
+        return true;
+    }
 }

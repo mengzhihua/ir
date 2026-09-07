@@ -1,17 +1,78 @@
 package com.ir.integration.mock;
 
-import com.ir.integration.client.*;
-import com.ir.snapshot.*;
+import com.ir.integration.client.ActionCommand;
+import com.ir.integration.client.TmsClient;
+import com.ir.snapshot.CostRecord;
+import com.ir.snapshot.ShipmentSnapshot;
 import org.springframework.stereotype.Component;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @Component
 public class MockTmsClient implements TmsClient {
-    private final DataStore store;
-    public MockTmsClient(DataStore store) { this.store = store; }
-    public List<ShipmentSnapshot> fetchWaybills() { return new ArrayList<>(store.shipments); }
-    public List<CostRecord> fetchFreightBills() { List<CostRecord> out = new ArrayList<>(); for (CostRecord c : store.costs) if ("FREIGHT".equals(c.getCostType())) out.add(c); return out; }
-    public Map<String,Object> dashboard() { Map<String,Object> m = new LinkedHashMap<>(); m.put("waybills", store.shipments.size()); return m; }
-    public void execute(ActionCommand c) { ShipmentSnapshot s = store.shipment(c.getTargetKey()); if (s == null) return; if ("TMS_DISPATCH".equals(c.getType())) s.setStatus("DISPATCHED"); else if ("TMS_SYNC_TRACK".equals(c.getType())) { if (s.isExceptionFlag()) s.setExceptionFlag(false); } }
-    public boolean health() { return true; }
+    private final MockDataset dataset;
+
+    public MockTmsClient(MockDataset dataset) {
+        this.dataset = dataset;
+    }
+
+    @Override
+    public List<ShipmentSnapshot> fetchWaybills() {
+        return new ArrayList<>(dataset.shipments());
+    }
+
+    @Override
+    public List<CostRecord> fetchFreightBills() {
+        List<CostRecord> freight = new ArrayList<>();
+        for (CostRecord cost : dataset.costs()) {
+            if ("FREIGHT".equals(cost.getCostType())) {
+                freight.add(cost);
+            }
+        }
+        for (ShipmentSnapshot shipment : dataset.shipments()) {
+            CostRecord cost = new CostRecord();
+            cost.setBizDate(shipment.getPlannedArriveTime().toLocalDate());
+            cost.setOrderNo(shipment.getSourceNo());
+            cost.setCarrierCode(shipment.getCarrierCode());
+            cost.setCostType("FREIGHT");
+            cost.setAmount(shipment.getFreightAmount());
+            cost.setSourceSystem("TMS");
+            freight.add(cost);
+        }
+        return freight;
+    }
+
+    @Override
+    public Map<String, Object> dashboard() {
+        Map<String, Object> dashboard = new LinkedHashMap<>();
+        dashboard.put("waybills", dataset.shipments().size());
+        return dashboard;
+    }
+
+    @Override
+    public void execute(ActionCommand command) {
+        for (ShipmentSnapshot shipment : dataset.shipments()) {
+            if (!command.getTargetKey().equals(shipment.getWaybillCode())
+                    && !command.getTargetKey().equals(shipment.getSourceNo())) {
+                continue;
+            }
+            if ("TMS_SYNC_TRACK".equals(command.getType())) {
+                shipment.setStatus("IN_TRANSIT");
+            }
+            if ("TMS_SWITCH_CARRIER".equals(command.getType())) {
+                Object carrier = command.getParams().get("carrierCode");
+                if (carrier != null) {
+                    shipment.setCarrierCode(String.valueOf(carrier));
+                }
+            }
+        }
+    }
+
+    @Override
+    public boolean health() {
+        return true;
+    }
 }

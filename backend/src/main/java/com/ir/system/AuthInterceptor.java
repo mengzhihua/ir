@@ -23,7 +23,9 @@ public class AuthInterceptor implements HandlerInterceptor {
         if ("OPTIONS".equalsIgnoreCase(req.getMethod()) || "/api/auth/login".equals(req.getRequestURI())) return true;
         TokenService.UserPrincipal p = tokens.parse(bearer(req.getHeader("Authorization")));
         User user = p == null ? null : users.get(p.getId());
-        if (user == null || !user.isEnabled()) return reject(res, 401, "未登录或登录已过期");
+        if (user == null || !Boolean.TRUE.equals(user.getEnabled())) {
+            return reject(res, 401, "未登录或登录已过期");
+        }
         if (!allows(user, req.getMethod(), req.getRequestURI())) return reject(res, 403, "当前角色无权执行此操作");
         CurrentUser.set(user); return true;
     }
