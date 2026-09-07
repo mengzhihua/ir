@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -318,34 +319,81 @@ public class SandboxService {
             }
         }
         if (shareTotal.signum() == 0) {
+            if (!shares.isEmpty()) {
+                result.put(shares.keySet().iterator().next(), total);
+            }
             return result;
         }
         int allocated = 0;
-        String highest = null;
-        BigDecimal highestShare = null;
+        List<CarrierAllocation> allocations = new ArrayList<>();
+        int insertionOrder = 0;
         for (Map.Entry<String, BigDecimal> entry : shares.entrySet()) {
             BigDecimal share = entry.getValue() == null
                     ? BigDecimal.ZERO : entry.getValue();
-            if (share.signum() <= 0) {
-                continue;
+            if (share.signum() > 0) {
+                BigDecimal exact = share
+                        .divide(shareTotal, 12, BigDecimal.ROUND_HALF_UP)
+                        .multiply(BigDecimal.valueOf(total));
+                int floor = exact.setScale(0, BigDecimal.ROUND_FLOOR)
+                        .intValue();
+                allocations.add(new CarrierAllocation(
+                        entry.getKey(),
+                        share,
+                        exact.subtract(BigDecimal.valueOf(floor)),
+                        floor,
+                        insertionOrder));
+                result.put(entry.getKey(), floor);
+                allocated += floor;
+            } else {
+                result.put(entry.getKey(), 0);
             }
-            BigDecimal normalized = share.divide(shareTotal, 8,
-                    BigDecimal.ROUND_HALF_UP);
-            int target = normalized.multiply(BigDecimal.valueOf(total))
-                    .setScale(0, BigDecimal.ROUND_HALF_UP)
-                    .intValue();
-            result.put(entry.getKey(), target);
-            allocated += target;
-            if (highestShare == null
-                    || share.compareTo(highestShare) > 0) {
-                highest = entry.getKey();
-                highestShare = share;
-            }
+            insertionOrder++;
         }
-        if (highest != null) {
-            result.put(highest, result.get(highest) + total - allocated);
+        allocations.sort(Comparator
+                .comparing(CarrierAllocation::remainder).reversed()
+                .thenComparing(CarrierAllocation::share, Comparator.reverseOrder())
+                .thenComparingInt(CarrierAllocation::insertionOrder));
+        int remaining = total - allocated;
+        for (int index = 0; index < remaining; index++) {
+            CarrierAllocation allocation = allocations.get(index);
+            result.put(allocation.key(), result.get(allocation.key()) + 1);
         }
         return result;
+    }
+
+    private static class CarrierAllocation {
+        private final String key;
+        private final BigDecimal share;
+        private final BigDecimal remainder;
+        private final int insertionOrder;
+
+        private CarrierAllocation(
+                String key,
+                BigDecimal share,
+                BigDecimal remainder,
+                int floor,
+                int insertionOrder) {
+            this.key = key;
+            this.share = share;
+            this.remainder = remainder;
+            this.insertionOrder = insertionOrder;
+        }
+
+        private String key() {
+            return key;
+        }
+
+        private BigDecimal share() {
+            return share;
+        }
+
+        private BigDecimal remainder() {
+            return remainder;
+        }
+
+        private int insertionOrder() {
+            return insertionOrder;
+        }
     }
 
     private String largestDeficit(Map<String, Integer> deficits) {
