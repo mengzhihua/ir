@@ -124,6 +124,38 @@ class SandboxServiceTest {
     }
 
     @Test
+    void carrierTargetsUseLargestRemainderAndStableTies() {
+        CtScenario scenario = scenario(
+                "{\"carrierMix\":{\"A\":0.26,\"B\":0.247,\"C\":0.247,"
+                        + "\"D\":0.246}}",
+                "{\"skuWarehouse\":{},\"stockoutByWarehouseSku\":{}}");
+        CtScenarioMapper scenarios = mock(CtScenarioMapper.class);
+        OrderSnapshotMapper orders = mock(OrderSnapshotMapper.class);
+        InventorySnapshotMapper inventory = mock(InventorySnapshotMapper.class);
+        SalesDailyMapper sales = mock(SalesDailyMapper.class);
+        ShipmentSnapshotMapper shipmentMapper = mock(ShipmentSnapshotMapper.class);
+        WmsOrderSnapshotMapper outbound = mock(WmsOrderSnapshotMapper.class);
+        ActionService actions = mock(ActionService.class);
+        when(scenarios.selectById(1L)).thenReturn(scenario);
+        when(inventory.selectList(any())).thenReturn(new ArrayList<>());
+        when(sales.selectList(any())).thenReturn(new ArrayList<>());
+        when(orders.selectList(any())).thenReturn(new ArrayList<>());
+        when(outbound.selectList(any())).thenReturn(new ArrayList<>());
+        when(shipmentMapper.selectList(any())).thenReturn(
+                shipments("A", 2));
+        when(actions.createPending(any())).thenAnswer(invocation ->
+                action(invocation.getArgument(0)));
+
+        SandboxService service = service(
+                scenarios, inventory, sales, orders, shipmentMapper, outbound,
+                actions);
+        List<CtAction> created = service.apply(1L);
+
+        assertEquals(1, created.size());
+        assertEquals("B", readParams(created.get(0)).get("carrierCode"));
+    }
+
+    @Test
     void applyCreatesReplenishmentPerWarehouseSkuStockout() {
         CtScenario scenario = scenario(
                 "{}",
