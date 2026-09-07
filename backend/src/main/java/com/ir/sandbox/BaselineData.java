@@ -15,4 +15,6 @@ public class BaselineData {
     private Map<String, List<BigDecimal>> demandBySku = new LinkedHashMap<>();
     private Map<String, String> skuWarehouse = new LinkedHashMap<>();
     private Map<String, Map<String, BigDecimal>> channelRatios = new LinkedHashMap<>();
+    private Map<String, Map<String, BigDecimal>> channelShare = new LinkedHashMap<>();
+    private Map<String, Map<String, BigDecimal>> regionShare = new LinkedHashMap<>();
 }

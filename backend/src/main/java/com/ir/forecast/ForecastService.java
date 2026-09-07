@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 @Service
 public class ForecastService {
@@ -83,7 +84,8 @@ public class ForecastService {
         value.put("backtest", result.getBacktest());
 
         CtForecast forecast = new CtForecast();
-        forecast.setRunNo(codes.next("FC"));
+        forecast.setRunNo("FC" + UUID.randomUUID().toString()
+                .replace("-", "").substring(0, 20));
         forecast.setSku(sku);
         forecast.setWarehouseCode(warehouseCode);
         forecast.setMethod(result.getMethod());

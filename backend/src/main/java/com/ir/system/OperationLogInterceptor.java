@@ -31,7 +31,8 @@ public class OperationLogInterceptor implements HandlerInterceptor {
         }
         OpLog log = new OpLog();
         log.setOperator(user.getUsername());
-        log.setModule(request.getRequestURI());
+        String[] segments = request.getRequestURI().split("/");
+        log.setModule(segments.length > 2 ? segments[2] : "");
         log.setAction(request.getMethod());
         log.setTarget(request.getRequestURI());
         log.setDetail("HTTP " + response.getStatus());

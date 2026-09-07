@@ -1,0 +1,13 @@
+* { box-sizing: border-box }
+html, body, #app { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f4f7fb; color: #24324a }
+.page { padding: 20px; min-height: 100%; }
+.page-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.page-title h2 { margin: 0; font-size: 22px; }
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.panel { background: #fff; border-radius: 10px; padding: 18px; box-shadow: 0 2px 10px rgba(26, 53, 88, .05); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.stat { background: linear-gradient(135deg, #fff, #f7fbff); border-left: 4px solid #409eff; border-radius: 10px; padding: 16px; }
+.stat .label { color: #8492a6; font-size: 13px; }.stat .value { font-size: 26px; font-weight: 700; margin-top: 8px; }
+.chart { height: 300px; }.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.muted { color: #909399 }.danger { color: #f56c6c }.success { color: #67c23a }
+@media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr } }

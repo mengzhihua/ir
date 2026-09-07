@@ -133,6 +133,10 @@ public class CostService {
         return target;
     }
 
+    public void deleteTarget(Long id) {
+        targetMapper.deleteById(id);
+    }
+
     private Map<String, BigDecimal> targetVsActual(BigDecimal actual) {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         List<CtCostTarget> targets = targetMapper.selectList(

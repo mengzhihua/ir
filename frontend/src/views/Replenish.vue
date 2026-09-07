@@ -1,0 +1,5 @@
+<template><div class="page"><div class="page-title"><h2>补货建议</h2><el-button type="primary" :disabled="!canWrite()" @click="toAction">转为指令</el-button></div><div class="panel"><el-table :data="rows" stripe @selection-change="selected=$event"><el-table-column type="selection" width="50" /><el-table-column prop="sku" label="SKU" /><el-table-column prop="warehouseCode" label="仓库" /><el-table-column prop="available" label="可用库存" /><el-table-column prop="forecastDemand" label="预测需求" /><el-table-column prop="safety" label="安全库存" /><el-table-column prop="suggestQty" label="建议补货" /><el-table-column prop="stockoutDate" label="预计缺货日" /></el-table></div></div></template>
+<script setup>
+import { ref } from 'vue'; import { forecastApi } from '../api'; import { canWrite } from '../auth'; import { ElMessage } from 'element-plus'
+const rows=ref([]),selected=ref([]); async function load(){rows.value=await forecastApi.replenish({horizon:14,serviceDays:3})}; async function toAction(){if(!selected.value.length)return ElMessage.warning('请选择记录');await forecastApi.toAction(selected.value);ElMessage.success('已生成采购建议')};load()
+</script>

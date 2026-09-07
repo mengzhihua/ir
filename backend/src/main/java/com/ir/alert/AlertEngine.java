@@ -5,8 +5,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.action.ActionService;
 import com.ir.action.CtAction;
+import com.ir.forecast.ForecastService;
+import com.ir.snapshot.CostRecord;
 import com.ir.snapshot.InventorySnapshot;
 import com.ir.snapshot.InventorySnapshotMapper;
+import com.ir.snapshot.CostRecordMapper;
 import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.OrderSnapshotMapper;
 import com.ir.snapshot.ShipmentSnapshot;
@@ -18,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +38,8 @@ public class AlertEngine {
     private final ActionService actions;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
+    private final CostRecordMapper costMapper;
+    private final ForecastService forecastService;
 
     public AlertEngine(
             CtRuleMapper ruleMapper,
@@ -44,7 +50,9 @@ public class AlertEngine {
             InventorySnapshotMapper inventoryMapper,
             ActionService actions,
             CodeGenerator codes,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            CostRecordMapper costMapper,
+            ForecastService forecastService) {
         this.ruleMapper = ruleMapper;
         this.alertMapper = alertMapper;
         this.orderMapper = orderMapper;
@@ -54,6 +62,8 @@ public class AlertEngine {
         this.actions = actions;
         this.codes = codes;
         this.objectMapper = objectMapper;
+        this.costMapper = costMapper;
+        this.forecastService = forecastService;
     }
 
     @Transactional
@@ -71,6 +81,10 @@ public class AlertEngine {
                 evaluateShipments(rule, now);
             } else if ("LOW_STOCK".equals(rule.getType())) {
                 evaluateInventory(rule);
+            } else if ("COST_OVERRUN".equals(rule.getType())) {
+                evaluateCost(rule, params);
+            } else if ("FORECAST_STOCKOUT".equals(rule.getType())) {
+                evaluateForecast(rule, params);
             }
         }
         return page(null);
@@ -140,13 +154,81 @@ public class AlertEngine {
     }
 
     private void evaluateShipments(CtRule rule, LocalDateTime now) {
+        boolean exceptionOnly = String.valueOf(rule.getParams())
+                .contains("\"exception\":true");
         for (ShipmentSnapshot shipment : shipmentMapper.selectList(null)) {
-            if (shipment.getPlannedArriveTime() != null
+            if ((exceptionOnly && !Boolean.TRUE.equals(shipment.getExceptionFlag()))
+                    || (!exceptionOnly && shipment.getPlannedArriveTime() == null)) {
+                continue;
+            }
+            if ((exceptionOnly && Boolean.TRUE.equals(shipment.getExceptionFlag()))
+                    || (shipment.getPlannedArriveTime() != null
                     && shipment.getPlannedArriveTime().isBefore(now)
                     && !"DELIVERED".equals(shipment.getStatus())
-                    && !"CLOSED".equals(shipment.getStatus())) {
+                    && !"CLOSED".equals(shipment.getStatus()))) {
                 add(rule, "WAYBILL", shipment.getWaybillCode(), null,
                         "运输到达延迟", "计划到达时间已过");
+            }
+        }
+    }
+
+    private void evaluateCost(CtRule rule, Map<String, Object> params) {
+        LocalDate from = LocalDate.now().minusDays(number(
+                params.get("days"), 7L) - 1L);
+        java.util.Map<String, java.math.BigDecimal> amountByWarehouse =
+                new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.util.Set<String>> ordersByWarehouse =
+                new java.util.LinkedHashMap<>();
+        for (CostRecord row : costMapper.selectList(
+                new LambdaQueryWrapper<CostRecord>()
+                        .ge(CostRecord::getBizDate, from))) {
+            String warehouse = row.getWarehouseCode() == null
+                    ? "UNKNOWN" : row.getWarehouseCode();
+            amountByWarehouse.put(warehouse,
+                    amountByWarehouse.getOrDefault(warehouse,
+                            java.math.BigDecimal.ZERO).add(row.getAmount()));
+            ordersByWarehouse.computeIfAbsent(warehouse,
+                    key -> new java.util.LinkedHashSet<>()).add(
+                    row.getOrderNo() == null ? row.getId().toString()
+                            : row.getOrderNo());
+        }
+        java.math.BigDecimal threshold = new java.math.BigDecimal(
+                String.valueOf(params.getOrDefault(
+                        "costPerOrderThreshold", params.getOrDefault(
+                                "threshold", "0"))));
+        for (String warehouse : amountByWarehouse.keySet()) {
+            int count = ordersByWarehouse.get(warehouse).size();
+            java.math.BigDecimal perOrder = amountByWarehouse.get(warehouse)
+                    .divide(java.math.BigDecimal.valueOf(Math.max(1, count)),
+                            4, java.math.RoundingMode.HALF_UP);
+            if (perOrder.compareTo(threshold) > 0) {
+                add(rule, "WAREHOUSE", warehouse, warehouse,
+                        "仓库成本超标", "近 " + params.getOrDefault(
+                                "days", 7) + " 天单均成本 " + perOrder);
+            }
+        }
+    }
+
+    private void evaluateForecast(CtRule rule, Map<String, Object> params) {
+        int horizon = (int) number(params.get("horizon"),
+                number(params.get("days"), 14L));
+        int serviceDays = (int) number(params.get("serviceDays"), 3L);
+        LocalDate limit = LocalDate.now().plusDays(horizon);
+        for (Map<String, Object> row : forecastService.replenish(
+                null, horizon, serviceDays)) {
+            Object stockoutValue = row.get("stockoutDate");
+            if (stockoutValue == null) {
+                continue;
+            }
+            LocalDate stockout = stockoutValue instanceof LocalDate
+                    ? (LocalDate) stockoutValue
+                    : LocalDate.parse(String.valueOf(stockoutValue));
+            if (!stockout.isAfter(limit)) {
+                String sku = String.valueOf(row.get("sku"));
+                String warehouse = String.valueOf(row.get("warehouseCode"));
+                add(rule, "SKU_WAREHOUSE", sku + "/" + warehouse,
+                        warehouse, "预测即将缺货",
+                        "预计 " + stockout + " 缺货");
             }
         }
     }

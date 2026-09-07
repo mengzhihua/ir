@@ -79,6 +79,8 @@ public class MockDataset {
 
         if (index % 43 == 0) {
             order.setStatus("AUDITED");
+        } else if (!shipped && index % 11 == 0) {
+            order.setStatus("PAID");
         } else if (!shipped) {
             order.setStatus(index % 2 == 0 ? "CREATED" : "ALLOCATED");
         } else if (index % 31 == 0) {
