@@ -38,6 +38,7 @@ public class HttpOmsClient implements OmsClient {
         for (Map<String, Object> row : pages("/api/order/page")) {
             OrderSnapshot order = new OrderSnapshot();
             order.setOrderNo(HttpSupport.string(row, "orderNo", "orderSn", "orderCode"));
+            order.setSku(HttpSupport.string(row, "sku", "skuCode"));
             order.setChannelCode(HttpSupport.string(row, "channelCode", "channel"));
             order.setShopCode(HttpSupport.string(row, "shopCode", "shopName"));
             order.setWarehouseCode(HttpSupport.string(row, "warehouseCode"));

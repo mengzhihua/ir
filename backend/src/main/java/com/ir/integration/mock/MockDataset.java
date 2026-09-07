@@ -66,6 +66,7 @@ public class MockDataset {
 
         OrderSnapshot order = new OrderSnapshot();
         order.setOrderNo(String.format("SO%06d", index + 1));
+        order.setSku(SKUS.get(index % SKUS.size()));
         order.setChannelCode(CHANNELS.get(index % CHANNELS.size()));
         order.setShopCode("SHOP" + (index % 5 + 1));
         order.setWarehouseCode(OMS_WAREHOUSES.get(warehouseIndex));
@@ -104,6 +105,7 @@ public class MockDataset {
         WmsOrderSnapshot outboundOrder = new WmsOrderSnapshot();
         outboundOrder.setCode(order.getOrderNo());
         outboundOrder.setExternalNo(order.getOrderNo());
+        outboundOrder.setSku(order.getSku());
         outboundOrder.setWarehouseCode(WMS_WAREHOUSES.get(index % WMS_WAREHOUSES.size()));
         outboundOrder.setTotalQty(order.getQty());
         outboundOrder.setCarrier(order.getCarrierCode());

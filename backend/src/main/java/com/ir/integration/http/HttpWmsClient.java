@@ -36,6 +36,7 @@ public class HttpWmsClient implements WmsClient {
             WmsOrderSnapshot order = new WmsOrderSnapshot();
             order.setCode(HttpSupport.string(row, "code", "orderNo", "orderCode"));
             order.setExternalNo(HttpSupport.string(row, "externalNo", "sourceNo"));
+            order.setSku(HttpSupport.string(row, "sku", "skuCode"));
             order.setWarehouseCode(HttpSupport.string(row, "warehouseCode", "warehouse"));
             order.setStatus(HttpSupport.string(row, "status"));
             order.setTotalQty(decimal(row, "totalQty", "qty"));
