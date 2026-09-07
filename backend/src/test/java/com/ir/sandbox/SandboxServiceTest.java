@@ -47,7 +47,8 @@ class SandboxServiceTest {
     void applyReroutesOpenOrdersUsingSkuWarehouse() {
         CtScenario scenario = scenario(
                 "{\"allocationStrategy\":\"NEAREST\"}",
-                "{\"skuWarehouse\":{\"SKU001\":\"WH-TARGET\"}}");
+                "{\"skuWarehouse\":{\"SKU001\":\"WH-TARGET\"},"
+                        + "\"stockoutByWarehouseSku\":{}}");
         CtScenarioMapper scenarios = mock(CtScenarioMapper.class);
         OrderSnapshotMapper orders = mock(OrderSnapshotMapper.class);
         InventorySnapshotMapper inventory = mock(InventorySnapshotMapper.class);
@@ -84,8 +85,8 @@ class SandboxServiceTest {
     @Test
     void applyRebalancesCarriersBySurplusAndDeficit() {
         CtScenario scenario = scenario(
-                "{\"carrierMix\":{\"SF\":0.8,\"JDL\":0.1,\"SELF\":0.1}}",
-                "{}");
+                "{\"carrierMix\":{\"SF\":4,\"JDL\":3,\"SELF\":3}}",
+                "{\"skuWarehouse\":{},\"stockoutByWarehouseSku\":{}}");
         CtScenarioMapper scenarios = mock(CtScenarioMapper.class);
         OrderSnapshotMapper orders = mock(OrderSnapshotMapper.class);
         InventorySnapshotMapper inventory = mock(InventorySnapshotMapper.class);
@@ -94,9 +95,9 @@ class SandboxServiceTest {
         WmsOrderSnapshotMapper outbound = mock(WmsOrderSnapshotMapper.class);
         ActionService actions = mock(ActionService.class);
         List<ShipmentSnapshot> rows = new ArrayList<>();
-        rows.addAll(shipments("SF", 4));
-        rows.addAll(shipments("JDL", 3));
-        rows.addAll(shipments("SELF", 3));
+        rows.addAll(shipments("SF", 5));
+        rows.addAll(shipments("JDL", 5));
+        rows.addAll(shipments("SELF", 0));
         when(scenarios.selectById(1L)).thenReturn(scenario);
         when(inventory.selectList(any())).thenReturn(new ArrayList<>());
         when(sales.selectList(any())).thenReturn(new ArrayList<>());
@@ -111,17 +112,23 @@ class SandboxServiceTest {
                 actions);
         List<CtAction> created = service.apply(1L);
 
-        assertEquals(4, created.size());
+        assertEquals(3, created.size());
         assertEquals("TMS_SWITCH_CARRIER", created.get(0).getType());
-        assertEquals("SF", readParams(created.get(0)).get("carrierCode"));
-        assertEquals("SF", readParams(created.get(3)).get("carrierCode"));
+        assertEquals("SELF", readParams(created.get(0)).get("carrierCode"));
+        assertEquals(1, created.stream()
+                .filter(value -> value.getTargetKey().startsWith("SF-"))
+                .count());
+        assertEquals(2, created.stream()
+                .filter(value -> value.getTargetKey().startsWith("JDL-"))
+                .count());
     }
 
     @Test
     void applyCreatesReplenishmentPerWarehouseSkuStockout() {
         CtScenario scenario = scenario(
                 "{}",
-                "{\"stockoutByWarehouseSku\":{\"WH-1/SKU001\":3.50}}");
+                "{\"skuWarehouse\":{},"
+                        + "\"stockoutByWarehouseSku\":{\"WH-1/SKU001\":3.50}}");
         CtScenarioMapper scenarios = mock(CtScenarioMapper.class);
         OrderSnapshotMapper orders = mock(OrderSnapshotMapper.class);
         InventorySnapshotMapper inventory = mock(InventorySnapshotMapper.class);
@@ -153,6 +160,95 @@ class SandboxServiceTest {
                         .get("qty"))));
     }
 
+    @Test
+    void applyCapsEachSurplusCarrierAndExcludesTerminalUnassigned() {
+        CtScenario scenario = scenario(
+                "{\"carrierMix\":{\"A\":4,\"B\":1,\"C\":5}}",
+                "{\"skuWarehouse\":{},\"stockoutByWarehouseSku\":{}}");
+        CtScenarioMapper scenarios = mock(CtScenarioMapper.class);
+        OrderSnapshotMapper orders = mock(OrderSnapshotMapper.class);
+        InventorySnapshotMapper inventory = mock(InventorySnapshotMapper.class);
+        SalesDailyMapper sales = mock(SalesDailyMapper.class);
+        ShipmentSnapshotMapper shipmentMapper = mock(ShipmentSnapshotMapper.class);
+        WmsOrderSnapshotMapper outbound = mock(WmsOrderSnapshotMapper.class);
+        ActionService actions = mock(ActionService.class);
+        List<ShipmentSnapshot> rows = new ArrayList<>();
+        rows.addAll(shipments("A", 5));
+        rows.addAll(shipments("B", 5));
+        rows.addAll(shipments("C", 0));
+        ShipmentSnapshot delivered = new ShipmentSnapshot();
+        delivered.setWaybillCode("DELIVERED-1");
+        delivered.setStatus("DELIVERED");
+        rows.add(delivered);
+        when(scenarios.selectById(1L)).thenReturn(scenario);
+        when(inventory.selectList(any())).thenReturn(new ArrayList<>());
+        when(sales.selectList(any())).thenReturn(new ArrayList<>());
+        when(orders.selectList(any())).thenReturn(new ArrayList<>());
+        when(outbound.selectList(any())).thenReturn(new ArrayList<>());
+        when(shipmentMapper.selectList(any())).thenReturn(rows);
+        when(actions.createPending(any())).thenAnswer(invocation ->
+                action(invocation.getArgument(0)));
+
+        SandboxService service = service(
+                scenarios, inventory, sales, orders, shipmentMapper, outbound,
+                actions);
+        List<CtAction> created = service.apply(1L);
+
+        assertEquals(5, created.size());
+        assertEquals(4, created.stream()
+                .filter(value -> value.getTargetKey().startsWith("B-"))
+                .count());
+        assertEquals(1, created.stream()
+                .filter(value -> value.getTargetKey().startsWith("A-"))
+                .count());
+        assertEquals(5, created.stream()
+                .filter(value -> "C".equals(
+                        readParams(value).get("carrierCode")))
+                .count());
+    }
+
+    @Test
+    void applyRerunsLegacyScenarioBeforeCreatingActions() {
+        CtScenario scenario = scenario(
+                "{\"carrierMix\":{\"SF\":1}}", "{}");
+        CtScenarioMapper scenarios = mock(CtScenarioMapper.class);
+        OrderSnapshotMapper orders = mock(OrderSnapshotMapper.class);
+        InventorySnapshotMapper inventory = mock(InventorySnapshotMapper.class);
+        SalesDailyMapper sales = mock(SalesDailyMapper.class);
+        ShipmentSnapshotMapper shipmentMapper = mock(ShipmentSnapshotMapper.class);
+        WmsOrderSnapshotMapper outbound = mock(WmsOrderSnapshotMapper.class);
+        ActionService actions = mock(ActionService.class);
+        SandboxEngine sandboxEngine = mock(SandboxEngine.class);
+        OrderSnapshot order = new OrderSnapshot();
+        order.setOrderNo("LEGACY-1");
+        order.setSku("SKU001");
+        order.setWarehouseCode("WH-OLD");
+        order.setStatus("ALLOCATED");
+        SandboxEngine.Result fresh = new SandboxEngine.Result();
+        fresh.getSkuWarehouse().put("SKU001", "WH-TARGET");
+        fresh.getStockoutByWarehouseSku().put("WH-TARGET/SKU001",
+                BigDecimal.valueOf(2));
+        when(scenarios.selectById(1L)).thenReturn(scenario);
+        when(inventory.selectList(any())).thenReturn(new ArrayList<>());
+        when(sales.selectList(any())).thenReturn(new ArrayList<>());
+        when(orders.selectList(any())).thenReturn(Arrays.asList(order));
+        when(outbound.selectList(any())).thenReturn(new ArrayList<>());
+        when(shipmentMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(sandboxEngine.run(any(), any())).thenReturn(fresh);
+        when(actions.createPending(any())).thenAnswer(invocation ->
+                action(invocation.getArgument(0)));
+
+        SandboxService service = service(
+                scenarios, inventory, sales, orders, shipmentMapper, outbound,
+                actions, sandboxEngine);
+        List<CtAction> created = service.apply(1L);
+
+        assertEquals(2, created.size());
+        assertEquals("OMS_REROUTE_WAREHOUSE", created.get(0).getType());
+        assertEquals("WMS_REPLENISH", created.get(1).getType());
+        org.mockito.Mockito.verify(sandboxEngine).run(any(), any());
+    }
+
     private SandboxService service(
             CtScenarioMapper scenarios,
             InventorySnapshotMapper inventory,
@@ -164,6 +260,21 @@ class SandboxServiceTest {
         return new SandboxService(
                 scenarios, inventory, sales, orders, shipments, outbound,
                 new SandboxEngine(), actions, mock(CodeGenerator.class),
+                new ObjectMapper());
+    }
+
+    private SandboxService service(
+            CtScenarioMapper scenarios,
+            InventorySnapshotMapper inventory,
+            SalesDailyMapper sales,
+            OrderSnapshotMapper orders,
+            ShipmentSnapshotMapper shipments,
+            WmsOrderSnapshotMapper outbound,
+            ActionService actions,
+            SandboxEngine engine) {
+        return new SandboxService(
+                scenarios, inventory, sales, orders, shipments, outbound,
+                engine, actions, mock(CodeGenerator.class),
                 new ObjectMapper());
     }
 
