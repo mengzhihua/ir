@@ -19,6 +19,7 @@ public class CtSystem extends BaseEntity {
     private String username;
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String apiKey;
     private String mode;
     private Boolean enabled;

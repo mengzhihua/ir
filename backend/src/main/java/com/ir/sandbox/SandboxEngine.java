@@ -222,8 +222,12 @@ public class SandboxEngine {
                 BigDecimal quantity = target.subtract(available)
                         .subtract(outstanding).max(BigDecimal.ZERO);
                 if (quantity.signum() > 0) {
-                    int arrivalDay = day + Math.max(0,
-                            params.getReplenishLeadDays());
+                    if (params.getReplenishLeadDays() == 0) {
+                        stock.put(key(warehouse, sku),
+                                available.add(quantity));
+                        continue;
+                    }
+                    int arrivalDay = day + params.getReplenishLeadDays();
                     arrivals.computeIfAbsent(arrivalDay,
                             ignored -> new LinkedHashMap<>());
                     Map<String, BigDecimal> due = arrivals.get(arrivalDay);

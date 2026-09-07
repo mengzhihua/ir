@@ -36,6 +36,11 @@ npm run dev
 
 系统接入配置预置 OMS/TMS/WMS/BMS 为 `MOCK`，SRM 为禁用预留。切换 HTTP 时使用 OTWB 事实表中的端点：OMS `/api/order/page`、`/api/inventory/page`、`/api/dashboard`、`/api/report/order-daily`；WMS `/api/outbound/order/page`、`/api/inventory/summary`、`/api/dashboard`、`/api/report/kpi`；TMS `/api/waybill/page`、`/api/billing/page`、`/api/dashboard`。BMS 约定 `GET /api/open/cost/records?from&to`，尚未上线。
 
+HTTP 集成的 `baseUrl` 只接受 HTTP/HTTPS URL，并实现了 loopback、链路本地和
+`169.254.0.0/16` 云元数据地址检查。默认
+`ir.integration.allow-private-hosts=true` 以支持本地 OTWB；生产环境建议设置为
+`false`。HTTP 客户端连接超时为 3 秒，读取超时为 10 秒。
+
 ## 算法和沙盘
 
 预测支持 7 日移动平均、指数平滑、Holt、4 周同星期 Seasonal Naive，AUTO 按最近 14 天回测 MAPE 选最优。沙盘支持 NEAREST、LOWEST_COST、BALANCED、SINGLE_WAREHOUSE，输出成本、服务水平、缺货、日序列和 SKU 汇总。

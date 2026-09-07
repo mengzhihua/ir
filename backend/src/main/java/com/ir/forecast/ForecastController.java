@@ -47,17 +47,30 @@ public class ForecastController {
     }
 
     @GetMapping("/replenish")
-    public R<List<Map<String, Object>>> replenish(
+    public R<Page<Map<String, Object>>> replenish(
             @RequestParam(required = false) String warehouseCode,
+            @RequestParam(required = false) String sku,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "20") long size,
             @RequestParam(defaultValue = "14") int horizon,
             @RequestParam(defaultValue = "3") int serviceDays) {
-        return R.ok(service.replenish(warehouseCode, horizon, serviceDays));
+        return R.ok(service.replenish(
+                sku, warehouseCode, current, size, horizon, serviceDays));
     }
 
     @PostMapping("/replenish/to-action")
     public R<List<CtAction>> toAction(
-            @RequestBody List<Map<String, Object>> rows) {
-        return R.ok(service.toActions(rows));
+            @RequestBody Map<String, Object> request) {
+        String type = request.get("type") == null
+                ? "SRM_PURCHASE_SUGGEST"
+                : String.valueOf(request.get("type"));
+        String supplier = request.get("supplier") == null
+                ? "" : String.valueOf(request.get("supplier"));
+        Object value = request.get("rows");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = value instanceof List
+                ? (List<Map<String, Object>>) value : java.util.Collections.emptyList();
+        return R.ok(service.toActions(rows, type, supplier));
     }
 
     @GetMapping("/page")

@@ -14,4 +14,24 @@ class SandboxEngineTest {
     @Test void carrierMixChangesCarrierCost(){ScenarioParams a=new ScenarioParams();a.setHorizonDays(7);SandboxEngine.Result first=new SandboxEngine().run(a,data());a.setCarrierMix(Collections.singletonMap("SF",BigDecimal.ONE));SandboxEngine.Result second=new SandboxEngine().run(a,data());assertNotEquals(first.getCostByCarrier(),second.getCostByCarrier());}
     @Test void emptyCarrierMixUsesBaselineDefaults(){ScenarioParams a=new ScenarioParams();a.setHorizonDays(7);a.setCarrierMix(Collections.emptyMap());SandboxEngine.Result result=new SandboxEngine().run(a,data());assertFalse(result.getCostByCarrier().isEmpty());assertTrue(result.getCostByCarrier().containsKey("SF"));}
     @Test void replenishmentQueueReducesStockout(){ScenarioParams fast=new ScenarioParams();fast.setHorizonDays(7);fast.setInitialInventoryMultiplier(BigDecimal.ZERO);fast.setReplenishLeadDays(3);ScenarioParams slow=new ScenarioParams();slow.setHorizonDays(7);slow.setInitialInventoryMultiplier(BigDecimal.ZERO);slow.setReplenishLeadDays(999);SandboxEngine e=new SandboxEngine();assertTrue(e.run(fast,data()).getStockoutUnits().compareTo(e.run(slow,data()).getStockoutUnits())<0);}
+    @Test void sameDayAndNextDayReplenishmentIncreaseStock(){
+        ScenarioParams immediate=new ScenarioParams();
+        immediate.setHorizonDays(3);
+        immediate.setInitialInventoryMultiplier(BigDecimal.ZERO);
+        immediate.setReplenishLeadDays(0);
+        ScenarioParams nextDay=new ScenarioParams();
+        nextDay.setHorizonDays(3);
+        nextDay.setInitialInventoryMultiplier(BigDecimal.ZERO);
+        nextDay.setReplenishLeadDays(1);
+        ScenarioParams never = new ScenarioParams();
+        never.setHorizonDays(3);
+        never.setInitialInventoryMultiplier(BigDecimal.ZERO);
+        never.setReplenishLeadDays(999);
+        SandboxEngine e=new SandboxEngine();
+        BigDecimal immediateStockout = e.run(immediate, data()).getStockoutUnits();
+        BigDecimal nextDayStockout = e.run(nextDay, data()).getStockoutUnits();
+        BigDecimal neverStockout = e.run(never, data()).getStockoutUnits();
+        assertTrue(immediateStockout.compareTo(neverStockout) < 0);
+        assertTrue(nextDayStockout.compareTo(neverStockout) < 0);
+    }
 }

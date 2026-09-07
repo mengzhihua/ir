@@ -27,6 +27,8 @@ ir:
     origins: ${IR_CORS_ORIGINS:http://localhost:5174}
   sync:
     enabled: ${IR_SYNC_ENABLED:true}
+  integration:
+    allow-private-hosts: ${IR_ALLOW_PRIVATE_HOSTS:true}
   cost:
     handling-per-order: ${IR_COST_HANDLING_PER_ORDER:1.5}
     packaging-per-order: ${IR_COST_PACKAGING_PER_ORDER:0.8}

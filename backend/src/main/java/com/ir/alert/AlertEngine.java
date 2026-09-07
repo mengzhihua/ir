@@ -233,7 +233,8 @@ public class AlertEngine {
         int serviceDays = (int) number(params.get("serviceDays"), 3L);
         LocalDate limit = LocalDate.now().plusDays(horizon);
         for (Map<String, Object> row : forecastService.replenish(
-                null, horizon, serviceDays)) {
+                null, null, 1, Integer.MAX_VALUE, horizon, serviceDays)
+                .getRecords()) {
             Object stockoutValue = row.get("stockoutDate");
             if (stockoutValue == null) {
                 continue;

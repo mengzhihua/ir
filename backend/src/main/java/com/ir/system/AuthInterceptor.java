@@ -34,7 +34,9 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (User.ADMIN.equals(u.getRole())) return true;
         if ("GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method)) return true;
         if (path.startsWith("/api/auth/")) return true;
-        return User.PLANNER.equals(u.getRole()) && !path.startsWith("/api/system/");
+        return User.PLANNER.equals(u.getRole())
+                && !path.startsWith("/api/system/")
+                && !path.startsWith("/api/integration/system");
     }
     private static String bearer(String h) { return h != null && h.regionMatches(true, 0, "Bearer ", 0, 7) ? h.substring(7).trim() : null; }
     private boolean reject(HttpServletResponse res, int status, String msg) throws Exception {
