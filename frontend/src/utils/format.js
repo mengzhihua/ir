@@ -42,5 +42,23 @@ export function pageResult(value) {
 }
 
 export function percent(value) {
-  return `${Number(value || 0).toFixed(2)}%`
+  return `${(Number(value || 0) * 100).toFixed(1)}%`
+}
+
+export function parseJson(value, fallback = {}) {
+  if (value === null || value === undefined || value === '') {
+    return fallback
+  }
+  if (typeof value !== 'string') {
+    return value
+  }
+  try {
+    return JSON.parse(value)
+  } catch {
+    return fallback
+  }
+}
+
+export function jsonText(value) {
+  return JSON.stringify(parseJson(value, value || {}), null, 2)
 }

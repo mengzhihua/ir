@@ -44,9 +44,7 @@ export const sandboxApi = {
   page: (params) => http.get('/sandbox/scenario/page', { params }),
   get: (id) => http.get(`/sandbox/scenario/${id}`),
   compare: (ids) => http.get('/sandbox/compare', { params: { ids: ids.join(',') } }),
-  defaults: (id) => id
-    ? http.get(`/sandbox/scenario/${id}`)
-    : http.get('/sandbox/defaults'),
+  defaults: (id) => (id ? http.get(`/sandbox/scenario/${id}`) : http.get('/sandbox/defaults')),
   apply: (id) => http.post(`/sandbox/scenario/${id}/apply`)
 }
 export const costApi = {
@@ -63,7 +61,7 @@ export const integrationApi = {
   update: (id, data) => http.put(`/integration/system/${id}`, data),
   remove: (id) => http.delete(`/integration/system/${id}`),
   health: (code) => http.post(`/integration/system/${code}/health`),
-  sync: (code) => code ? http.post(`/integration/sync/${code}`) : http.post('/integration/sync'),
+  sync: (code) => (code ? http.post(`/integration/sync/${code}`) : http.post('/integration/sync')),
   logs: (params) => http.get('/integration/sync-log/page', { params })
 }
 export const systemApi = {

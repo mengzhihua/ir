@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ui-check": "node scripts/ui-check.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -19,6 +20,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
+    "playwright": "^1.63.0",
+    "prettier": "^3.3.3",
     "vite": "^5.4.11"
   }
 }

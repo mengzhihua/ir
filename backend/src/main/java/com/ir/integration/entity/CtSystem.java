@@ -1,6 +1,7 @@
 package com.ir.integration.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ir.common.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -16,6 +17,7 @@ public class CtSystem extends BaseEntity {
     private String baseUrl;
     private String authType;
     private String username;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
     private String apiKey;
     private String mode;

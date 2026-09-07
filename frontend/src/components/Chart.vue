@@ -1,16 +1,7 @@
 <template>
   <div class="chart-wrap">
-    <v-chart
-      v-if="!empty"
-      class="chart"
-      :option="option"
-      autoresize
-    />
-    <el-empty
-      v-else
-      class="chart-empty"
-      description="暂无数据"
-    />
+    <v-chart v-if="!empty" class="chart" :option="option" autoresize />
+    <el-empty v-else class="chart-empty" description="暂无数据" />
   </div>
 </template>
 <script setup>
@@ -50,9 +41,12 @@ const props = defineProps({
 
 const empty = computed(() => {
   const series = props.option.series || []
-  return !series.length || series.every((item) => {
-    return !item.data || item.data.length === 0
-  })
+  return (
+    !series.length ||
+    series.every((item) => {
+      return !item.data || item.data.length === 0
+    })
+  )
 })
 </script>
 <style scoped>

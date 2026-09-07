@@ -73,7 +73,7 @@ public class AlertEngine {
                 new LambdaQueryWrapper<CtRule>().eq(CtRule::getEnabled, true));
         LocalDateTime now = LocalDateTime.now();
         for (CtRule rule : rules) {
-            Map<String, Object> params = params(rule.getParams());
+            Map<String, Object> params = params(rule.getParamsJson());
             if ("ORDER_STUCK".equals(rule.getType())) {
                 evaluateOrders(rule, params, now);
             } else if ("WMS_STUCK".equals(rule.getType())) {
@@ -172,7 +172,7 @@ public class AlertEngine {
     }
 
     private void evaluateShipments(CtRule rule, LocalDateTime now) {
-        boolean exceptionOnly = String.valueOf(rule.getParams())
+        boolean exceptionOnly = String.valueOf(rule.getParamsJson())
                 .contains("\"exception\":true");
         for (ShipmentSnapshot shipment : shipmentMapper.selectList(null)) {
             if ((exceptionOnly && !Boolean.TRUE.equals(shipment.getExceptionFlag()))

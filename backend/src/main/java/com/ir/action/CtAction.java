@@ -1,6 +1,10 @@
 package com.ir.action;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonRawValue;
 import com.ir.common.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -16,11 +20,50 @@ public class CtAction extends BaseEntity {
     private String type;
     private String targetSystem;
     private String targetKey;
-    private String params;
+    @TableField("params")
+    @JsonIgnore
+    private String paramsJson;
     private String status;
-    private String result;
+    @TableField("result")
+    @JsonIgnore
+    private String resultJson;
     private Long alertId;
     private String operator;
     private BigDecimal expectedSaving;
     private LocalDateTime executedAt;
+
+    @JsonProperty("params")
+    @JsonRawValue
+    public String getParams() {
+        return paramsJson;
+    }
+
+    public void setParams(String value) {
+        this.paramsJson = value;
+    }
+
+    public String getParamsJson() {
+        return paramsJson;
+    }
+
+    public void setParamsJson(String value) {
+        this.paramsJson = value;
+    }
+
+    @JsonProperty("result")
+    public String getResult() {
+        return resultJson;
+    }
+
+    public void setResult(String value) {
+        this.resultJson = value;
+    }
+
+    public String getResultJson() {
+        return resultJson;
+    }
+
+    public void setResultJson(String value) {
+        this.resultJson = value;
+    }
 }

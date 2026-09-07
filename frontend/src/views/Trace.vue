@@ -15,35 +15,15 @@
         style="width: 220px"
         @keyup.enter="search"
       />
-      <el-select
-        v-model="filters.status"
-        clearable
-        placeholder="OMS订单状态"
-        style="width: 180px"
-      >
-        <el-option
-          v-for="item in statusOptions"
-          :key="item"
-          :label="item"
-          :value="item"
-        />
+      <el-select v-model="filters.status" clearable placeholder="OMS订单状态" style="width: 180px">
+        <el-option v-for="item in statusOptions" :key="item" :label="item" :value="item" />
       </el-select>
-      <el-select
-        v-model="filters.warehouseCode"
-        clearable
-        placeholder="仓库"
-        style="width: 150px"
-      >
+      <el-select v-model="filters.warehouseCode" clearable placeholder="仓库" style="width: 150px">
         <el-option label="上海仓" value="WH-SH" />
         <el-option label="北京仓" value="WH-BJ" />
         <el-option label="广州仓" value="WH-GZ" />
       </el-select>
-      <el-select
-        v-model="filters.stuck"
-        clearable
-        placeholder="卡滞状态"
-        style="width: 150px"
-      >
+      <el-select v-model="filters.stuck" clearable placeholder="卡滞状态" style="width: 150px">
         <el-option label="仅看卡滞" :value="true" />
         <el-option label="仅看正常" :value="false" />
       </el-select>
@@ -51,18 +31,12 @@
       <el-button @click="reset">重置</el-button>
     </div>
     <div class="panel">
-      <el-table
-        v-loading="loading"
-        :data="rows"
-        row-key="orderNo"
-        stripe
-        @row-click="openDetail"
-      >
+      <el-table v-loading="loading" :data="rows" row-key="orderNo" stripe @row-click="openDetail">
         <el-table-column prop="orderNo" label="订单号" min-width="170" />
         <el-table-column label="OMS状态" width="120">
           <template #default="{ row }">
             <el-tag :type="statusType(row.oms?.status)">
-              {{ row.oms?.status || '-' }}
+              {{ labelOf(row.oms?.status, orderStatusLabels) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -95,9 +69,7 @@
         </el-table-column>
         <el-table-column label="操作" width="90" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click.stop="openDetail(row)">
-              详情
-            </el-button>
+            <el-button link type="primary" @click.stop="openDetail(row)"> 详情 </el-button>
           </template>
         </el-table-column>
         <template #empty>
@@ -121,15 +93,23 @@
       <template v-else-if="detail">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="订单号">{{ detail.orderNo }}</el-descriptions-item>
-          <el-descriptions-item label="渠道">{{ detail.oms?.channelCode || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="仓库">{{ detail.oms?.warehouseCode || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="渠道">{{
+            detail.oms?.channelCode || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item label="仓库">{{
+            detail.oms?.warehouseCode || '-'
+          }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusType(detail.oms?.status)">
-              {{ detail.oms?.status || '-' }}
+              {{ labelOf(detail.oms?.status, orderStatusLabels) }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="订单金额">{{ formatMoney(detail.oms?.payAmount) }}</el-descriptions-item>
-          <el-descriptions-item label="运费">{{ formatMoney(detail.oms?.freight) }}</el-descriptions-item>
+          <el-descriptions-item label="订单金额">{{
+            formatMoney(detail.oms?.payAmount)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="运费">{{
+            formatMoney(detail.oms?.freight)
+          }}</el-descriptions-item>
         </el-descriptions>
         <div class="drawer-section">
           <h4>OMS → WMS → TMS → 成本时间线</h4>
@@ -144,7 +124,7 @@
                 <div class="timeline-head">
                   <el-tag size="small">{{ node.system }}</el-tag>
                   <strong>{{ node.node }}</strong>
-                  <span class="muted">{{ node.status }}</span>
+                  <span class="muted">{{ labelOf(node.status, orderStatusLabels) }}</span>
                 </div>
                 <div class="muted">{{ node.detail || '暂无说明' }}</div>
               </el-card>
@@ -168,8 +148,16 @@
           <h4>关联预警</h4>
           <el-table :data="detail.alerts || []" size="small">
             <el-table-column prop="title" label="预警" min-width="180" />
-            <el-table-column prop="severity" label="等级" />
-            <el-table-column prop="status" label="状态" />
+            <el-table-column label="等级"
+              ><template #default="{ row }">{{
+                labelOf(row.severity, severityLabels)
+              }}</template></el-table-column
+            >
+            <el-table-column label="状态"
+              ><template #default="{ row }">{{
+                labelOf(row.status, alertStatusLabels)
+              }}</template></el-table-column
+            >
             <el-table-column label="操作" width="150">
               <template #default="{ row }">
                 <el-button
@@ -190,7 +178,11 @@
           <el-table :data="detail.actions || []" size="small">
             <el-table-column prop="actionNo" label="指令号" />
             <el-table-column prop="type" label="类型" />
-            <el-table-column prop="status" label="状态" />
+            <el-table-column label="状态"
+              ><template #default="{ row }">{{
+                labelOf(row.status, actionStatusLabels)
+              }}</template></el-table-column
+            >
             <el-table-column prop="result" label="执行结果" min-width="180" />
           </el-table>
         </div>
@@ -211,8 +203,12 @@
             <el-option label="OMS自动处理" value="OMS_AUTO_PROCESS" />
           </el-select>
         </el-form-item>
-        <el-form-item label="订单号"><el-input v-model="actionForm.targetKey" disabled /></el-form-item>
-        <el-form-item label="参数JSON"><el-input v-model="actionForm.params" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item label="订单号"
+          ><el-input v-model="actionForm.targetKey" disabled
+        /></el-form-item>
+        <el-form-item label="参数JSON"
+          ><el-input v-model="actionForm.params" type="textarea" :rows="4"
+        /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="actionVisible = false">取消</el-button>
@@ -229,6 +225,13 @@ import { Refresh, Search } from '@element-plus/icons-vue'
 import { actionApi, alertApi, traceApi } from '../api'
 import { canWrite } from '../auth'
 import { formatDate, formatMoney, formatNumber, pageResult } from '../utils/format'
+import {
+  actionStatusLabels,
+  alertStatusLabels,
+  labelOf,
+  orderStatusLabels,
+  severityLabels
+} from '../utils/labels'
 
 const statusOptions = [
   'CREATED',
@@ -287,13 +290,17 @@ function stageType(stage) {
 }
 
 function stageLabel(stage) {
-  return {
-    ORDER: '订单处理',
-    WAREHOUSE: '仓内作业',
-    TRANSPORT: '运输中',
-    DELIVERED: '已送达',
-    CANCELLED: '已取消'
-  }[stage] || stage || '-'
+  return (
+    {
+      ORDER: '订单处理',
+      WAREHOUSE: '仓内作业',
+      TRANSPORT: '运输中',
+      DELIVERED: '已送达',
+      CANCELLED: '已取消'
+    }[stage] ||
+    stage ||
+    '-'
+  )
 }
 
 async function load() {

@@ -66,7 +66,7 @@ public class ActionService {
             return action;
         }
         try {
-            execute(action, read(action.getParams()));
+            execute(action, read(action.getParamsJson()));
         } catch (Exception ex) {
             action.setStatus("FAILED");
             action.setResult(ex.getMessage());
@@ -141,7 +141,7 @@ public class ActionService {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("type", original.getType());
         request.put("targetKey", original.getTargetKey());
-        request.put("params", read(original.getParams()));
+        request.put("params", read(original.getParamsJson()));
         request.put("alertId", original.getAlertId());
         return createAndExecute(request);
     }
@@ -168,18 +168,22 @@ public class ActionService {
 
     public List<Map<String, Object>> types() {
         return Arrays.asList(
-                type("OMS_REROUTE_WAREHOUSE", "OMS", "orderNo,warehouseCode"),
-                type("OMS_HOLD", "OMS", "orderNo"),
-                type("OMS_UNHOLD", "OMS", "orderNo"),
-                type("OMS_PRIORITIZE", "OMS", "orderNo,priority"),
-                type("OMS_AUTO_PROCESS", "OMS", "orderNo"),
-                type("OMS_CANCEL", "OMS", "orderNo"),
-                type("WMS_ALLOCATE", "WMS", "orderCode"),
-                type("WMS_REPLENISH", "WMS", "warehouseCode"),
-                type("TMS_DISPATCH", "TMS", "waybillId"),
-                type("TMS_SYNC_TRACK", "TMS", "waybillId"),
-                type("TMS_SWITCH_CARRIER", "TMS", "waybillId,carrierCode"),
-                type("SRM_PURCHASE_SUGGEST", "SRM", "sku,qty"));
+                type("OMS_REROUTE_WAREHOUSE", "OMS", field("orderNo", "订单号", true),
+                        field("warehouseCode", "仓库编码", true)),
+                type("OMS_HOLD", "OMS", field("orderNo", "订单号", true)),
+                type("OMS_UNHOLD", "OMS", field("orderNo", "订单号", true)),
+                type("OMS_PRIORITIZE", "OMS", field("orderNo", "订单号", true),
+                        field("priority", "优先级", true)),
+                type("OMS_AUTO_PROCESS", "OMS", field("orderNo", "订单号", true)),
+                type("OMS_CANCEL", "OMS", field("orderNo", "订单号", true)),
+                type("WMS_ALLOCATE", "WMS", field("orderCode", "出库单号", true)),
+                type("WMS_REPLENISH", "WMS", field("warehouseCode", "仓库编码", true)),
+                type("TMS_DISPATCH", "TMS", field("waybillId", "运单号", true)),
+                type("TMS_SYNC_TRACK", "TMS", field("waybillId", "运单号", true)),
+                type("TMS_SWITCH_CARRIER", "TMS", field("waybillId", "运单号", true),
+                        field("carrierCode", "承运商编码", true)),
+                type("SRM_PURCHASE_SUGGEST", "SRM", field("sku", "SKU", true),
+                        field("qty", "建议数量", true)));
     }
 
     private void mutateSnapshot(CtAction action, Map<String, Object> params) {
@@ -215,11 +219,25 @@ public class ActionService {
         }
     }
 
-    private Map<String, Object> type(String name, String system, String params) {
+    private Map<String, Object> type(
+            String name,
+            String system,
+            Map<String, Object>... params) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("type", name);
         result.put("targetSystem", system);
-        result.put("params", params);
+        result.put("params", Arrays.asList(params));
+        return result;
+    }
+
+    private Map<String, Object> field(
+            String name,
+            String label,
+            boolean required) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("name", name);
+        result.put("label", label);
+        result.put("required", required);
         return result;
     }
 

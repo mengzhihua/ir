@@ -118,8 +118,7 @@ public class SandboxService {
             BigDecimal saving = baseCost.signum() == 0
                     ? BigDecimal.ZERO
                     : baseCost.subtract(cost)
-                    .divide(baseCost, 6, BigDecimal.ROUND_HALF_UP)
-                    .multiply(BigDecimal.valueOf(100));
+                    .divide(baseCost, 6, BigDecimal.ROUND_HALF_UP);
             row.put("savingPercent", saving);
             row.put("savingPct", saving);
             row.put("delta", deltas(baseResult, result(scenario)));

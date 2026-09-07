@@ -8,51 +8,95 @@
       <el-button type="primary" :loading="loading" @click="load">刷新数据</el-button>
     </div>
     <div class="stats">
-      <div v-for="item in cards" :key="item.label" class="stat" :style="{ borderColor: item.color }">
+      <div
+        v-for="item in cards"
+        :key="item.label"
+        class="stat"
+        :style="{ borderColor: item.color }"
+      >
         <div class="label">{{ item.label }}</div>
         <div class="value">{{ item.value }}</div>
       </div>
     </div>
     <div class="grid-2">
       <div class="panel">
-        <div class="panel-title"><h3>OTW履约漏斗</h3><span class="muted">OMS / WMS / TMS</span></div>
+        <div class="panel-title">
+          <h3>OTW履约漏斗</h3>
+          <span class="muted">OMS / WMS / TMS</span>
+        </div>
         <Chart :option="funnelOption" />
       </div>
       <div class="panel">
-        <div class="panel-title"><h3>30日成本趋势</h3><span class="muted">按成本类型堆叠</span></div>
+        <div class="panel-title">
+          <h3>30日成本趋势</h3>
+          <span class="muted">按成本类型堆叠</span>
+        </div>
         <Chart :option="costOption" />
       </div>
     </div>
     <div class="grid-2">
       <div class="panel">
-        <div class="panel-title"><h3>仓库负载</h3><span class="muted">订单和库存风险</span></div>
+        <div class="panel-title">
+          <h3>仓库负载</h3>
+          <span class="muted">订单和库存风险</span>
+        </div>
         <el-table :data="overview.warehouseLoad || []" stripe>
           <el-table-column prop="warehouseCode" label="仓库" />
           <el-table-column prop="pendingOrders" label="待处理订单" align="right" />
           <el-table-column prop="inventoryQty" label="库存量" align="right" />
           <el-table-column prop="lowStockSkus" label="低库存SKU" align="right">
-            <template #default="{ row }"><span :class="{ danger: row.lowStockSkus > 0 }">{{ row.lowStockSkus }}</span></template>
+            <template #default="{ row }"
+              ><span :class="{ danger: row.lowStockSkus > 0 }">{{
+                row.lowStockSkus
+              }}</span></template
+            >
           </el-table-column>
           <template #empty><el-empty description="暂无仓库数据" /></template>
         </el-table>
       </div>
       <div class="panel">
-        <div class="panel-title"><h3>重点预警</h3><el-button link type="primary" @click="$router.push('/alert')">查看全部</el-button></div>
+        <div class="panel-title">
+          <h3>重点预警</h3>
+          <el-button link type="primary" @click="$router.push('/alert')">查看全部</el-button>
+        </div>
         <el-table :data="overview.alertsTop || []" stripe>
           <el-table-column prop="title" label="预警" min-width="180" />
-          <el-table-column prop="severity" label="等级" width="85"><template #default="{ row }"><el-tag :type="severityType(row.severity)">{{ row.severity }}</el-tag></template></el-table-column>
+          <el-table-column prop="severity" label="等级" width="85"
+            ><template #default="{ row }"
+              ><el-tag :type="tagTypes.severity[row.severity]">{{
+                labelOf(row.severity, severityLabels)
+              }}</el-tag></template
+            ></el-table-column
+          >
           <el-table-column prop="warehouseCode" label="仓库" width="90" />
-          <el-table-column prop="createdAt" label="时间" width="155"><template #default="{ row }">{{ formatDate(row.createdAt) }}</template></el-table-column>
+          <el-table-column prop="createdAt" label="时间" width="155"
+            ><template #default="{ row }">{{
+              formatDate(row.createdAt)
+            }}</template></el-table-column
+          >
           <template #empty><el-empty description="暂无开放预警" /></template>
         </el-table>
       </div>
     </div>
     <div class="panel">
-      <div class="panel-title"><h3>系统健康</h3><span class="muted">最后同步时间</span></div>
+      <div class="panel-title">
+        <h3>系统健康</h3>
+        <span class="muted">最后同步时间</span>
+      </div>
       <div class="health-list">
-        <div v-for="system in overview.systems || []" :key="system.id || system.code" class="health">
+        <div
+          v-for="system in overview.systems || []"
+          :key="system.id || system.code"
+          class="health"
+        >
           <i :class="{ ok: healthOk(system) }" />
-          <div><b>{{ system.name || system.systemName || system.code }}</b><div class="muted">{{ system.mode }} · {{ formatDate(system.lastSyncAt) }}</div></div>
+          <div>
+            <b>{{ system.name || system.systemName || system.code }}</b>
+            <div class="muted">
+              {{ labelOf(system.mode, systemModeLabels) }} ·
+              {{ formatDate(system.lastHealthAt) }}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -64,6 +108,7 @@ import { computed, reactive, ref } from 'vue'
 import { towerApi } from '../api'
 import Chart from '../components/Chart.vue'
 import { formatDate, formatMoney, formatNumber, percent } from '../utils/format'
+import { labelOf, severityLabels, systemModeLabels, tagTypes } from '../utils/labels'
 
 const loading = ref(false)
 const overview = reactive({
@@ -84,8 +129,12 @@ const cards = computed(() => [
   { label: '开放预警', value: formatNumber(overview.kpi.openAlerts, 0), color: '#f56c6c' },
   { label: '30日总成本', value: formatMoney(overview.kpi.totalCost30d), color: '#409eff' },
   { label: '单均成本', value: formatMoney(overview.kpi.costPerOrder30d), color: '#409eff' },
-  { label: 'OTIF', value: percent(Number(overview.kpi.otif30d || 0) * 100), color: '#67c23a' },
-  { label: '平均时效', value: `${formatNumber(overview.kpi.avgLeadTimeHours, 1)}小时`, color: '#909399' }
+  { label: 'OTIF', value: percent(overview.kpi.otif30d), color: '#67c23a' },
+  {
+    label: '平均时效',
+    value: `${formatNumber(overview.kpi.avgLeadTimeHours, 1)}小时`,
+    color: '#909399'
+  }
 ])
 
 const costOption = computed(() => {
@@ -117,7 +166,8 @@ const funnelOption = computed(() => {
     出库: ['SHIPPED', 'PACKED'],
     完成: ['COMPLETED', 'DELIVERED', 'CLOSED']
   }
-  const value = (group, label) => (aliases[label] || []).reduce((sum, key) => sum + Number(group?.[key] || 0), 0)
+  const value = (group, label) =>
+    (aliases[label] || []).reduce((sum, key) => sum + Number(group?.[key] || 0), 0)
   return {
     tooltip: { trigger: 'axis' },
     legend: { data: ['OMS', 'WMS', 'TMS'] },
@@ -131,10 +181,6 @@ const funnelOption = computed(() => {
     }))
   }
 })
-
-function severityType(value) {
-  return { HIGH: 'danger', MEDIUM: 'warning', LOW: 'info' }[value] || ''
-}
 
 function healthOk(system) {
   return system.lastHealthOk === true || String(system.healthStatus).toUpperCase() === 'UP'
