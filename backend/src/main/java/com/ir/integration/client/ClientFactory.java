@@ -2,11 +2,15 @@ package com.ir.integration.client;
 
 import com.ir.integration.http.*;
 import com.ir.integration.mock.*;
-import org.springframework.stereotype.Component;
 import com.ir.integration.entity.CtSystem;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.client.ClientHttpRequestExecution;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+
+import java.io.IOException;
 
 @Component
 public class ClientFactory {
@@ -14,18 +18,38 @@ public class ClientFactory {
     private final MockWmsClient wms;
     private final MockTmsClient tms;
     private final MockBmsClient bms;
+    private final BaseUrlValidator validator;
     private final RestTemplate http;
 
-    public ClientFactory(MockOmsClient oms, MockWmsClient wms, MockTmsClient tms, MockBmsClient bms) {
+    public ClientFactory(
+            MockOmsClient oms,
+            MockWmsClient wms,
+            MockTmsClient tms,
+            MockBmsClient bms,
+            BaseUrlValidator validator) {
         this.oms = oms;
         this.wms = wms;
         this.tms = tms;
         this.bms = bms;
+        this.validator = validator;
         SimpleClientHttpRequestFactory factory =
                 new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(3000);
         factory.setReadTimeout(10000);
         this.http = new RestTemplate(factory);
+        this.http.getInterceptors().add(this::validateRequest);
+    }
+
+    private ClientHttpResponse validateRequest(
+            HttpRequest request,
+            byte[] body,
+            ClientHttpRequestExecution execution) throws IOException {
+        try {
+            validator.validate(request.getURI().toString());
+        } catch (IllegalArgumentException ex) {
+            throw new IntegrationException("集成地址校验失败", ex);
+        }
+        return execution.execute(request, body);
     }
 
     public OmsClient oms(CtSystem system) {
