@@ -1,6 +1,7 @@
 package com.ir.alert;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ir.common.R;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,9 +22,14 @@ public class RuleController {
     }
 
     @GetMapping("/page")
-    public R<List<CtRule>> page() {
-        return R.ok(mapper.selectList(new LambdaQueryWrapper<CtRule>()
-                .orderByAsc(CtRule::getId)));
+    public R<Page<CtRule>> page(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "1")
+            long current,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20")
+            long size) {
+        return R.ok(mapper.selectPage(new Page<>(current, size),
+                new LambdaQueryWrapper<CtRule>()
+                        .orderByAsc(CtRule::getId)));
     }
 
     @PutMapping("/{id}")

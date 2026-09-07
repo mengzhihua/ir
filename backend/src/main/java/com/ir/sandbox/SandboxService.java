@@ -1,6 +1,7 @@
 package com.ir.sandbox;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.action.ActionService;
 import com.ir.action.CtAction;
@@ -83,10 +84,20 @@ public class SandboxService {
         return scenarioMapper.selectById(id);
     }
 
-    public List<CtScenario> page() {
-        return scenarioMapper.selectList(
-                new LambdaQueryWrapper<CtScenario>()
-                        .orderByDesc(CtScenario::getCreatedAt));
+    public Page<CtScenario> page(
+            String name,
+            String status,
+            long current,
+            long size) {
+        LambdaQueryWrapper<CtScenario> query = new LambdaQueryWrapper<>();
+        if (name != null && !name.trim().isEmpty()) {
+            query.like(CtScenario::getName, name.trim());
+        }
+        if (status != null && !status.trim().isEmpty()) {
+            query.eq(CtScenario::getStatus, status);
+        }
+        query.orderByDesc(CtScenario::getCreatedAt);
+        return scenarioMapper.selectPage(new Page<>(current, size), query);
     }
 
     public List<Map<String, Object>> compare(String ids) {

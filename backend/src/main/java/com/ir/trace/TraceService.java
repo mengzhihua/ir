@@ -1,6 +1,7 @@
 package com.ir.trace;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ir.action.CtAction;
 import com.ir.action.CtActionMapper;
 import com.ir.alert.CtAlert;
@@ -48,39 +49,44 @@ public class TraceService {
         this.actionMapper = actionMapper;
     }
 
-    public List<Map<String, Object>> page(
+    public Page<Map<String, Object>> page(
             String keyword,
             String status,
             String warehouseCode,
             String carrierCode,
-            Boolean stuck) {
+            Boolean stuck,
+            long current,
+            long size) {
+        LambdaQueryWrapper<OrderSnapshot> query = new LambdaQueryWrapper<>();
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            query.like(OrderSnapshot::getOrderNo, keyword.trim());
+        }
+        if (status != null && !status.trim().isEmpty()) {
+            query.eq(OrderSnapshot::getStatus, status);
+        }
+        if (warehouseCode != null && !warehouseCode.trim().isEmpty()) {
+            query.eq(OrderSnapshot::getWarehouseCode, warehouseCode);
+        }
+        if (carrierCode != null && !carrierCode.trim().isEmpty()) {
+            query.eq(OrderSnapshot::getCarrierCode, carrierCode);
+        }
+        query.orderByDesc(OrderSnapshot::getOrderTime);
+        Page<OrderSnapshot> orders = orderMapper.selectPage(
+                new Page<>(current, size), query);
+        Page<Map<String, Object>> resultPage = new Page<>(
+                current, size, orders.getTotal());
         List<Map<String, Object>> result = new ArrayList<>();
-        for (OrderSnapshot order : orderMapper.selectList(
-                new LambdaQueryWrapper<OrderSnapshot>()
-                        .orderByDesc(OrderSnapshot::getOrderTime))) {
-            if (keyword != null && !order.getOrderNo().contains(keyword)) {
-                continue;
-            }
-            if (status != null && !status.equals(order.getStatus())) {
-                continue;
-            }
-            if (warehouseCode != null
-                    && !warehouseCode.equals(order.getWarehouseCode())) {
-                continue;
-            }
-            if (carrierCode != null
-                    && !carrierCode.equals(order.getCarrierCode())) {
-                continue;
-            }
+        for (OrderSnapshot order : orders.getRecords()) {
             WmsOrderSnapshot wms = wms(order.getOrderNo());
             ShipmentSnapshot shipment = shipment(order.getOrderNo());
             long stuckHours = stuckHours(order, wms, shipment);
-            if (Boolean.TRUE.equals(stuck) && stuckHours <= 0) {
+            if (stuck != null && stuck != (stuckHours > 0)) {
                 continue;
             }
             result.add(row(order, wms, shipment, stuckHours));
         }
-        return result;
+        resultPage.setRecords(result);
+        return resultPage;
     }
 
     public Map<String, Object> detail(String orderNo) {

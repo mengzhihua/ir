@@ -1,6 +1,7 @@
 package com.ir.forecast;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.action.ActionService;
 import com.ir.action.CtAction;
@@ -134,9 +135,24 @@ public class ForecastService {
         return result;
     }
 
-    public List<CtForecast> page() {
-        return forecastMapper.selectList(
-                new LambdaQueryWrapper<CtForecast>().orderByDesc(CtForecast::getCreatedAt));
+    public Page<CtForecast> page(
+            String sku,
+            String warehouseCode,
+            String method,
+            long current,
+            long size) {
+        LambdaQueryWrapper<CtForecast> query = new LambdaQueryWrapper<>();
+        if (sku != null && !sku.trim().isEmpty()) {
+            query.eq(CtForecast::getSku, sku);
+        }
+        if (warehouseCode != null && !warehouseCode.trim().isEmpty()) {
+            query.eq(CtForecast::getWarehouseCode, warehouseCode);
+        }
+        if (method != null && !method.trim().isEmpty()) {
+            query.eq(CtForecast::getMethod, method);
+        }
+        query.orderByDesc(CtForecast::getCreatedAt);
+        return forecastMapper.selectPage(new Page<>(current, size), query);
     }
 
     public List<CtAction> toActions(List<Map<String, Object>> rows) {

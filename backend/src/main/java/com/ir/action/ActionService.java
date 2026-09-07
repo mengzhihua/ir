@@ -1,6 +1,7 @@
 package com.ir.action;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.common.CodeGenerator;
@@ -145,9 +146,24 @@ public class ActionService {
         return createAndExecute(request);
     }
 
-    public List<CtAction> page() {
-        return actionMapper.selectList(
-                new LambdaQueryWrapper<CtAction>().orderByDesc(CtAction::getCreatedAt));
+    public Page<CtAction> page(
+            String type,
+            String status,
+            String targetKey,
+            long current,
+            long size) {
+        LambdaQueryWrapper<CtAction> query = new LambdaQueryWrapper<>();
+        if (type != null && !type.trim().isEmpty()) {
+            query.eq(CtAction::getType, type);
+        }
+        if (status != null && !status.trim().isEmpty()) {
+            query.eq(CtAction::getStatus, status);
+        }
+        if (targetKey != null && !targetKey.trim().isEmpty()) {
+            query.like(CtAction::getTargetKey, targetKey.trim());
+        }
+        query.orderByDesc(CtAction::getCreatedAt);
+        return actionMapper.selectPage(new Page<>(current, size), query);
     }
 
     public List<Map<String, Object>> types() {

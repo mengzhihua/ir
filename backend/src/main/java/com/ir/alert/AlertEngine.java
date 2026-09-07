@@ -1,6 +1,7 @@
 package com.ir.alert;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.action.ActionService;
@@ -87,16 +88,33 @@ public class AlertEngine {
                 evaluateForecast(rule, params);
             }
         }
-        return page(null);
+        return all();
     }
 
-    public List<CtAlert> page(String status) {
+    public Page<CtAlert> page(
+            String status,
+            String severity,
+            String type,
+            long current,
+            long size) {
         LambdaQueryWrapper<CtAlert> query = new LambdaQueryWrapper<>();
-        if (status != null) {
+        if (status != null && !status.trim().isEmpty()) {
             query.eq(CtAlert::getStatus, status);
         }
+        if (severity != null && !severity.trim().isEmpty()) {
+            query.eq(CtAlert::getSeverity, severity);
+        }
+        if (type != null && !type.trim().isEmpty()) {
+            query.eq(CtAlert::getType, type);
+        }
         query.orderByDesc(CtAlert::getCreatedAt);
-        return alertMapper.selectList(query);
+        return alertMapper.selectPage(new Page<>(current, size), query);
+    }
+
+    public List<CtAlert> all() {
+        return alertMapper.selectList(
+                new LambdaQueryWrapper<CtAlert>()
+                        .orderByDesc(CtAlert::getCreatedAt));
     }
 
     public CtAlert update(Long id, String status) {

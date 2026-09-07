@@ -10,17 +10,25 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use((response) => {
   const body = response.data
   if (body?.code !== undefined && body.code !== 0) {
-    ElMessage.error(body.msg || '请求失败')
-    return Promise.reject(new Error(body.msg))
+    const message = body.msg || '请求失败'
+    ElMessage.error(message)
+    return Promise.reject(new Error(message))
   }
   return body?.data ?? body
 }, (error) => {
   if (error.response?.status === 401) {
     clearAuth()
-    if (location.pathname !== '/login') location.assign('/login')
+    if (location.pathname !== '/login') {
+      location.assign('/login')
+    }
   } else {
-    ElMessage.error(error.response?.data?.msg || error.message || '网络错误')
+    const message = error.response?.data?.msg
+      || error.message
+      || '网络请求失败'
+    ElMessage.error(message)
   }
-  return Promise.reject(error)
+  return Promise.reject(new Error(
+    error.response?.data?.msg || error.message || '网络请求失败'
+  ))
 })
 export default http

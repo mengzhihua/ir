@@ -2,6 +2,7 @@ package com.ir.alert;
 
 import com.ir.action.CtAction;
 import com.ir.common.R;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,8 +24,13 @@ public class AlertController {
     }
 
     @GetMapping("/page")
-    public R<List<CtAlert>> page(@RequestParam(required = false) String status) {
-        return R.ok(engine.page(status));
+    public R<Page<CtAlert>> page(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String severity,
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "20") long size) {
+        return R.ok(engine.page(status, severity, type, current, size));
     }
 
     @PostMapping("/evaluate")
@@ -34,7 +40,7 @@ public class AlertController {
 
     @GetMapping("/stats")
     public R<Map<String, Object>> stats() {
-        List<CtAlert> alerts = engine.page(null);
+        List<CtAlert> alerts = engine.all();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", alerts.size());
         result.put("open", count(alerts, "OPEN"));

@@ -1,6 +1,7 @@
 package com.ir.integration;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ir.common.R;
 import com.ir.integration.entity.CtSyncLog;
 import com.ir.integration.entity.CtSystem;
@@ -17,9 +18,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/integration")
@@ -89,9 +89,11 @@ public class IntegrationController {
     }
 
     @GetMapping("/sync-log/page")
-    public R<Map<String, Object>> logs(
+    public R<Page<CtSyncLog>> logs(
             @RequestParam(required = false) String systemCode,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "20") long size) {
         LambdaQueryWrapper<CtSyncLog> query = new LambdaQueryWrapper<>();
         if (systemCode != null) {
             query.eq(CtSyncLog::getSystemCode, systemCode);
@@ -100,10 +102,6 @@ public class IntegrationController {
             query.eq(CtSyncLog::getStatus, status);
         }
         query.orderByDesc(CtSyncLog::getStartedAt);
-        List<CtSyncLog> rows = syncLogMapper.selectList(query);
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("records", rows);
-        result.put("total", rows.size());
-        return R.ok(result);
+        return R.ok(syncLogMapper.selectPage(new Page<>(current, size), query));
     }
 }

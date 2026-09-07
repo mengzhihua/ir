@@ -1,36 +1,49 @@
-<template><div class="page"><div class="page-title"><h2>需求预测</h2></div><div class="panel"><div class="toolbar"><el-input v-model="form.sku" placeholder="SKU" /><el-input v-model="form.warehouseCode" placeholder="仓库" /><el-select v-model="form.method" style="width:150px"><el-option v-for="m in ['AUTO','MOVING_AVERAGE','SES','HOLT','SEASONAL_NAIVE']" :key="m" :label="m" :value="m" /></el-select><el-input-number v-model="form.horizon" :min="1" :max="90" /><el-button type="primary" @click="run">运行预测</el-button></div><Chart :option="option" /></div><div class="panel"><h3>运行历史</h3><el-table :data="history" stripe><el-table-column prop="runNo" label="运行号" /><el-table-column prop="sku" label="SKU" /><el-table-column prop="method" label="方法" /><el-table-column prop="horizon" label="预测天数" /><el-table-column prop="mape" label="MAPE" /><el-table-column prop="createdAt" label="时间" /></el-table></div></div></template>
+<template>
+  <div class="page">
+    <div class="page-title"><div><h2>需求预测</h2><p class="subtitle">按SKU和仓库运行预测，辅助补货决策</p></div><el-button @click="loadHistory">刷新历史</el-button></div>
+    <div class="panel">
+      <el-form :model="form" inline>
+        <el-form-item label="SKU"><el-input v-model="form.sku" placeholder="SKU001" /></el-form-item>
+        <el-form-item label="仓库"><el-select v-model="form.warehouseCode" clearable><el-option label="WH-SH" value="WH-SH" /><el-option label="WH-BJ" value="WH-BJ" /><el-option label="WH-GZ" value="WH-GZ" /></el-select></el-form-item>
+        <el-form-item label="方法"><el-select v-model="form.method"><el-option label="自动选择" value="AUTO" /><el-option label="移动平均" value="MOVING_AVERAGE" /><el-option label="季节朴素" value="SEASONAL_NAIVE" /></el-select></el-form-item>
+        <el-form-item label="预测天数"><el-input-number v-model="form.horizon" :min="1" :max="90" /></el-form-item>
+        <el-button type="primary" :loading="running" @click="run">运行预测</el-button>
+      </el-form>
+    </div>
+    <div v-if="result" class="panel">
+      <div class="panel-title"><h3>预测结果</h3><el-tag type="success">MAPE {{ result.mape || '-' }}</el-tag></div>
+      <Chart :option="forecastOption" />
+      <el-table :data="result.backtest || []" size="small"><el-table-column prop="date" label="日期" /><el-table-column prop="actual" label="实际" align="right" /><el-table-column prop="predicted" label="预测" align="right" /><el-table-column prop="error" label="误差" align="right" /><template #empty><el-empty description="暂无回测明细" /></template></el-table>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><h3>预测运行历史</h3></div>
+      <el-table v-loading="loading" :data="history" stripe><el-table-column prop="runNo" label="运行号" /><el-table-column prop="sku" label="SKU" /><el-table-column prop="warehouseCode" label="仓库" /><el-table-column prop="method" label="方法" /><el-table-column prop="horizon" label="天数" align="right" /><el-table-column prop="createdAt" label="运行时间"><template #default="{ row }">{{ formatDate(row.createdAt) }}</template></el-table-column><el-table-column label="操作"><template #default="{ row }"><el-button link type="primary" @click="reopen(row)">查看</el-button></template></el-table-column><template #empty><el-empty description="暂无预测历史" /></template></el-table><div class="pagination"><el-pagination v-model:current-page="pager.current" v-model:page-size="pager.size" :total="pager.total" layout="total, prev, pager, next" @current-change="loadHistory" /></div>
+    </div>
+  </div>
+</template>
 <script setup>
-import { reactive, ref, computed } from 'vue'; import { forecastApi } from '../api'; import Chart from '../components/Chart.vue'
+import { computed, reactive, ref } from 'vue'
+import { forecastApi } from '../api'
+import Chart from '../components/Chart.vue'
+import { formatDate, pageResult } from '../utils/format'
 const form = reactive({ sku: 'SKU001', warehouseCode: 'WH-SH', method: 'AUTO', horizon: 14 })
-const result = ref({})
+const result = ref(null)
 const history = ref([])
-const option = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  legend: { bottom: 0 },
-  xAxis: {
-    type: 'category',
-    data: [
-      ...(result.value.history || []).map((_, index) => index + 1),
-      ...(result.value.forecast || []).map((_, index) => `+${index + 1}`)
-    ]
-  },
-  yAxis: { type: 'value' },
-  series: [
-    { name: '历史', type: 'line', data: result.value.history || [] },
-    {
-      name: '预测',
-      type: 'line',
-      data: [
-        ...(result.value.history || []).map(() => null),
-        ...(result.value.forecast || []).map((point) => point.qty || point)
-      ]
-    }
-  ]
-}))
-async function run() {
-  result.value = await forecastApi.run(form)
-  history.value = await forecastApi.page()
-}
-async function load() { history.value = await forecastApi.page() }
-load()
+const running = ref(false)
+const loading = ref(false)
+const pager = reactive({ current: 1, size: 20, total: 0 })
+const forecastOption = computed(() => {
+  const historyRows = result.value?.history || []
+  const forecastRows = result.value?.forecast || []
+  const labels = [...historyRows, ...forecastRows].map((item) => item.date)
+  const actual = historyRows.map((item) => item.value)
+  const predicted = [...historyRows.map(() => null), ...forecastRows.map((item) => item.value)]
+  const lower = [...historyRows.map(() => null), ...forecastRows.map((item) => item.lower)]
+  const band = [...historyRows.map(() => null), ...forecastRows.map((item) => Number(item.upper || 0) - Number(item.lower || 0))]
+  return { tooltip: { trigger: 'axis' }, legend: { data: ['历史', '预测', '置信区间'] }, xAxis: { type: 'category', data: labels }, yAxis: { type: 'value' }, series: [{ name: '历史', type: 'line', data: actual }, { name: '预测', type: 'line', data: predicted, lineStyle: { type: 'dashed' } }, { name: '下界', type: 'line', stack: 'band', data: lower, lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 } }, { name: '置信区间', type: 'line', stack: 'band', data: band, lineStyle: { opacity: 0 }, areaStyle: { opacity: 0.18 } }] }
+})
+async function run() { running.value = true; try { result.value = await forecastApi.run(form); loadHistory() } finally { running.value = false } }
+async function loadHistory() { loading.value = true; try { const page = pageResult(await forecastApi.page({ ...pager })); history.value = page.records; pager.total = page.total } finally { loading.value = false } }
+async function reopen(row) { result.value = row.result ? (typeof row.result === 'string' ? JSON.parse(row.result) : row.result) : await forecastApi.run({ ...row, horizon: row.horizon || 14 }) }
+loadHistory()
 </script>

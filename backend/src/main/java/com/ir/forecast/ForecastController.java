@@ -2,6 +2,7 @@ package com.ir.forecast;
 
 import com.ir.action.CtAction;
 import com.ir.common.R;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -60,7 +61,12 @@ public class ForecastController {
     }
 
     @GetMapping("/page")
-    public R<List<CtForecast>> page() {
-        return R.ok(service.page());
+    public R<Page<CtForecast>> page(
+            @RequestParam(required = false) String sku,
+            @RequestParam(required = false) String warehouseCode,
+            @RequestParam(required = false) String method,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "20") long size) {
+        return R.ok(service.page(sku, warehouseCode, method, current, size));
     }
 }

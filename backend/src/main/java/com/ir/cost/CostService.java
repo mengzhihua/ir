@@ -1,6 +1,7 @@
 package com.ir.cost;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ir.action.CtAction;
 import com.ir.action.CtActionMapper;
 import com.ir.snapshot.CostRecord;
@@ -36,7 +37,8 @@ public class CostService {
 
     public Map<String, Object> summary(int days) {
         LocalDate from = LocalDate.now().minusDays(days - 1L);
-        List<CostRecord> rows = page(null, null, null, null, from, LocalDate.now());
+        List<CostRecord> rows = records(
+                null, null, null, null, from, LocalDate.now());
         BigDecimal total = BigDecimal.ZERO;
         Map<String, BigDecimal> byType = new LinkedHashMap<>();
         Map<String, BigDecimal> byWarehouse = new LinkedHashMap<>();
@@ -63,7 +65,35 @@ public class CostService {
         return result;
     }
 
-    public List<CostRecord> page(
+    public Page<CostRecord> page(
+            String orderNo,
+            String costType,
+            String warehouseCode,
+            String carrierCode,
+            LocalDate from,
+            LocalDate to,
+            long current,
+            long size) {
+        LambdaQueryWrapper<CostRecord> query = query(
+                orderNo, costType, warehouseCode, carrierCode, from, to);
+        query.orderByDesc(CostRecord::getBizDate);
+        return costMapper.selectPage(new Page<>(current, size), query);
+    }
+
+    private List<CostRecord> records(
+            String orderNo,
+            String costType,
+            String warehouseCode,
+            String carrierCode,
+            LocalDate from,
+            LocalDate to) {
+        LambdaQueryWrapper<CostRecord> query = query(
+                orderNo, costType, warehouseCode, carrierCode, from, to);
+        query.orderByDesc(CostRecord::getBizDate);
+        return costMapper.selectList(query);
+    }
+
+    private LambdaQueryWrapper<CostRecord> query(
             String orderNo,
             String costType,
             String warehouseCode,
@@ -89,8 +119,7 @@ public class CostService {
         if (to != null) {
             query.le(CostRecord::getBizDate, to);
         }
-        query.orderByDesc(CostRecord::getBizDate);
-        return costMapper.selectList(query);
+        return query;
     }
 
     public Map<String, Object> saving() {

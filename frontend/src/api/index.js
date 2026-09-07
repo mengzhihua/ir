@@ -21,11 +21,11 @@ export const alertApi = {
   ignore: (id) => http.post(`/alert/${id}/ignore`)
 }
 export const ruleApi = {
-  page: () => http.get('/rule/page'),
+  page: (params) => http.get('/rule/page', { params }),
   update: (id, data) => http.put(`/rule/${id}`, data)
 }
 export const actionApi = {
-  page: () => http.get('/action/page'),
+  page: (params) => http.get('/action/page', { params }),
   types: () => http.get('/action/types'),
   create: (data) => http.post('/action', data),
   retry: (id) => http.post(`/action/${id}/retry`)
@@ -35,15 +35,18 @@ export const forecastApi = {
   run: (data) => http.post('/forecast/run', data),
   replenish: (params) => http.get('/forecast/replenish', { params }),
   toAction: (data) => http.post('/forecast/replenish/to-action', data),
-  page: () => http.get('/forecast/page')
+  page: (params) => http.get('/forecast/page', { params })
 }
 export const sandboxApi = {
   baseline: () => http.post('/sandbox/baseline'),
   create: (data) => http.post('/sandbox/scenario', data),
   run: (id) => http.post(`/sandbox/scenario/${id}/run`),
-  page: () => http.get('/sandbox/scenario/page'),
+  page: (params) => http.get('/sandbox/scenario/page', { params }),
   get: (id) => http.get(`/sandbox/scenario/${id}`),
   compare: (ids) => http.get('/sandbox/compare', { params: { ids: ids.join(',') } }),
+  defaults: (id) => id
+    ? http.get(`/sandbox/scenario/${id}`)
+    : http.get('/sandbox/defaults'),
   apply: (id) => http.post(`/sandbox/scenario/${id}/apply`)
 }
 export const costApi = {
@@ -64,9 +67,9 @@ export const integrationApi = {
   logs: (params) => http.get('/integration/sync-log/page', { params })
 }
 export const systemApi = {
-  users: () => http.get('/system/user'),
+  users: (params) => http.get('/system/user', { params }),
   createUser: (data) => http.post('/system/user', data),
   updateUser: (id, data) => http.put(`/system/user/${id}`, data),
   deleteUser: (id) => http.delete(`/system/user/${id}`),
-  opLogs: () => http.get('/system/op-log/page')
+  opLogs: (params) => http.get('/system/op-log/page', { params })
 }

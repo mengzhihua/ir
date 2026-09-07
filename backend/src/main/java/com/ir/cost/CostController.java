@@ -1,6 +1,7 @@
 package com.ir.cost;
 
 import com.ir.common.R;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ir.snapshot.CostRecord;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -30,15 +31,18 @@ public class CostController {
     }
 
     @GetMapping("/page")
-    public R<List<CostRecord>> page(
+    public R<Page<CostRecord>> page(
             @RequestParam(required = false) String orderNo,
             @RequestParam(required = false) String costType,
             @RequestParam(required = false) String warehouseCode,
             @RequestParam(required = false) String carrierCode,
             @RequestParam(required = false) LocalDate from,
-            @RequestParam(required = false) LocalDate to) {
+            @RequestParam(required = false) LocalDate to,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "20") long size) {
         return R.ok(service.page(
-                orderNo, costType, warehouseCode, carrierCode, from, to));
+                orderNo, costType, warehouseCode, carrierCode, from, to,
+                current, size));
     }
 
     @GetMapping("/saving")

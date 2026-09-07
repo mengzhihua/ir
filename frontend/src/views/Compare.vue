@@ -1,5 +1,20 @@
-<template><div class="page"><div class="page-title"><h2>场景对比</h2></div><div class="panel"><div class="toolbar"><el-select v-model="ids" multiple placeholder="选择场景" style="width:400px"><el-option v-for="item in scenarios" :key="item.id" :label="item.name" :value="item.id" /></el-select><el-button type="primary" @click="compare">开始对比</el-button></div><el-table :data="rows" stripe><el-table-column label="场景"><template #default="{row}">{{ row.scenario?.name }}</template></el-table-column><el-table-column prop="savingPct" label="相对基线节省率" /><el-table-column label="成本变化"><template #default="{row}">{{ row.delta?.totalCost }}</template></el-table-column><el-table-column label="服务水平变化"><template #default="{row}">{{ row.delta?.serviceLevel }}</template></el-table-column><el-table-column label="缺货变化"><template #default="{row}">{{ row.delta?.stockoutUnits }}</template></el-table-column></el-table></div></div></template>
+<template>
+  <div class="page">
+    <div class="page-title"><div><h2>场景对比</h2><p class="subtitle">比较多套供应链策略相对基准的收益</p></div><el-button type="primary" @click="compare">开始对比</el-button></div>
+    <div class="panel toolbar"><el-select v-model="selected" multiple collapse-tags placeholder="选择场景" style="width: 480px"><el-option v-for="row in scenarios" :key="row.id" :label="row.name" :value="row.id" /></el-select></div>
+    <div v-if="result" class="panel"><el-table :data="result.metrics || []" border><el-table-column prop="metric" label="指标" fixed /><el-table-column v-for="scenario in result.scenarios || []" :key="scenario.id" :label="scenario.name" align="right"><template #default="{ row }">{{ row.values?.[scenario.id] ?? '-' }}</template></el-table-column><el-table-column label="差值"><template #default="{ row }">{{ row.delta ?? '-' }}</template></el-table-column><el-table-column label="节省率"><template #default="{ row }">{{ percent(row.savingPct) }}</template></el-table-column></el-table><Chart :option="chartOption" /></div><el-empty v-else description="请选择场景并开始对比" />
+  </div>
+</template>
 <script setup>
-import { ref } from 'vue'; import { sandboxApi } from '../api'
-const scenarios=ref([]),ids=ref([]),rows=ref([]); async function load(){scenarios.value=await sandboxApi.page()}; async function compare(){rows.value=await sandboxApi.compare(ids.value)};load()
+import { computed, ref } from 'vue'
+import { sandboxApi } from '../api'
+import Chart from '../components/Chart.vue'
+import { percent } from '../utils/format'
+const scenarios = ref([])
+const selected = ref([])
+const result = ref(null)
+const chartOption = computed(() => ({ tooltip: { trigger: 'axis' }, legend: {}, xAxis: { type: 'category', data: (result.value?.scenarios || []).map((item) => item.name) }, yAxis: { type: 'value' }, series: (result.value?.metrics || []).slice(0, 4).map((metric) => ({ name: metric.metric, type: 'bar', data: (result.value?.scenarios || []).map((item) => metric.values?.[item.id] || 0) })) }))
+async function load() { const page = await sandboxApi.page({ current: 1, size: 100 }); scenarios.value = page.records || [] }
+async function compare() { if (selected.value.length < 2) return; result.value = await sandboxApi.compare(selected.value) }
+load()
 </script>

@@ -2,6 +2,7 @@ package com.ir.sandbox;
 
 import com.ir.action.CtAction;
 import com.ir.common.R;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,13 +42,22 @@ public class SandboxController {
     }
 
     @GetMapping("/scenario/page")
-    public R<List<CtScenario>> page() {
-        return R.ok(service.page());
+    public R<Page<CtScenario>> page(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "20") long size) {
+        return R.ok(service.page(name, status, current, size));
     }
 
     @GetMapping("/scenario/{id}")
     public R<CtScenario> get(@PathVariable Long id) {
         return R.ok(service.get(id));
+    }
+
+    @GetMapping("/defaults")
+    public R<ScenarioParams> defaults() {
+        return R.ok(new ScenarioParams());
     }
 
     @GetMapping("/compare")
