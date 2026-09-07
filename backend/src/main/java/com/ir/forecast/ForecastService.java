@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ForecastService {
@@ -98,17 +99,24 @@ public class ForecastService {
         return value;
     }
 
-    public List<Map<String, Object>> replenish(
+    public Page<Map<String, Object>> replenish(
+            String sku,
             String warehouseCode,
+            long current,
+            long size,
             int horizon,
             int serviceDays) {
         List<Map<String, Object>> result = new ArrayList<>();
         LambdaQueryWrapper<InventorySnapshot> query = new LambdaQueryWrapper<>();
-        if (warehouseCode != null) {
+        if (warehouseCode != null && !warehouseCode.trim().isEmpty()) {
             query.eq(InventorySnapshot::getWarehouseCode, warehouseCode);
         }
         List<InventorySnapshot> inventory = inventoryMapper.selectList(query);
         for (InventorySnapshot item : inventory) {
+            if (sku != null && !sku.trim().isEmpty()
+                    && !sku.equals(item.getSku())) {
+                continue;
+            }
             Map<String, Object> forecast = run(
                     item.getSku(), item.getWarehouseCode(), horizon, "AUTO");
             BigDecimal demand = BigDecimal.ZERO;
@@ -132,7 +140,12 @@ public class ForecastService {
             row.put("stockoutDate", stockoutDate(item.getQtyAvailable(), daily));
             result.add(row);
         }
-        return result;
+        Page<Map<String, Object>> page = new Page<>(current, size, result.size());
+        int from = (int) Math.min(result.size(),
+                Math.max(0, (current - 1) * size));
+        int to = (int) Math.min(result.size(), from + size);
+        page.setRecords(result.subList(from, to));
+        return page;
     }
 
     public Page<CtForecast> page(
@@ -155,13 +168,27 @@ public class ForecastService {
         return forecastMapper.selectPage(new Page<>(current, size), query);
     }
 
-    public List<CtAction> toActions(List<Map<String, Object>> rows) {
+    public List<CtAction> toActions(
+            List<Map<String, Object>> rows,
+            String type,
+            String supplier) {
         List<CtAction> result = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             Map<String, Object> request = new LinkedHashMap<>();
-            request.put("type", "SRM_PURCHASE_SUGGEST");
-            request.put("targetKey", row.get("sku"));
-            request.put("params", row);
+            request.put("type", type);
+            String sku = String.valueOf(row.get("sku"));
+            String warehouse = String.valueOf(row.get("warehouseCode"));
+            request.put("targetKey", "WMS_REPLENISH".equals(type)
+                    ? warehouse + "/" + sku : sku);
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("sku", sku);
+            params.put("qty", row.get("suggestQty"));
+            if ("WMS_REPLENISH".equals(type)) {
+                params.put("warehouseCode", warehouse);
+            } else {
+                params.put("supplier", supplier);
+            }
+            request.put("params", params);
             result.add(actions.createAndExecute(request));
         }
         return result;

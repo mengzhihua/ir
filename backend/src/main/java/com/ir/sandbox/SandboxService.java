@@ -11,6 +11,8 @@ import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.OrderSnapshotMapper;
 import com.ir.snapshot.SalesDaily;
 import com.ir.snapshot.SalesDailyMapper;
+import com.ir.snapshot.ShipmentSnapshot;
+import com.ir.snapshot.ShipmentSnapshotMapper;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -27,6 +29,7 @@ public class SandboxService {
     private final InventorySnapshotMapper inventoryMapper;
     private final SalesDailyMapper salesMapper;
     private final OrderSnapshotMapper orderMapper;
+    private final ShipmentSnapshotMapper shipmentMapper;
     private final SandboxEngine engine;
     private final ActionService actions;
     private final CodeGenerator codes;
@@ -37,6 +40,7 @@ public class SandboxService {
             InventorySnapshotMapper inventoryMapper,
             SalesDailyMapper salesMapper,
             OrderSnapshotMapper orderMapper,
+            ShipmentSnapshotMapper shipmentMapper,
             SandboxEngine engine,
             ActionService actions,
             CodeGenerator codes,
@@ -45,6 +49,7 @@ public class SandboxService {
         this.inventoryMapper = inventoryMapper;
         this.salesMapper = salesMapper;
         this.orderMapper = orderMapper;
+        this.shipmentMapper = shipmentMapper;
         this.engine = engine;
         this.actions = actions;
         this.codes = codes;
@@ -135,52 +140,103 @@ public class SandboxService {
         if (scenario == null) {
             return new ArrayList<>();
         }
-        ScenarioParams params = read(scenario.getParamsJson(), ScenarioParams.class);
-        ScenarioParams baseParams = read(baseline().getParamsJson(),
-                ScenarioParams.class);
+        ScenarioParams params = read(
+                scenario.getParamsJson(), ScenarioParams.class).normalized();
         BaselineData baselineData = baselineData();
         List<CtAction> result = new ArrayList<>();
         if ("SINGLE_WAREHOUSE".equals(params.getAllocationStrategy())
                 || "LOWEST_COST".equals(params.getAllocationStrategy())) {
-            String targetWarehouse = params.getSingleWarehouse() == null
-                    ? "WH-SH" : params.getSingleWarehouse();
-            for (String sku : baselineData.getDemandBySku().keySet()) {
-                String current = baselineData.getSkuWarehouse().get(sku);
-                if (targetWarehouse.equals(current)) {
+            for (OrderSnapshot order : orderMapper.selectList(
+                    new LambdaQueryWrapper<OrderSnapshot>()
+                            .in(OrderSnapshot::getStatus,
+                                    "CREATED", "AUDITED", "ALLOCATED"))) {
+                String targetWarehouse = params.getSingleWarehouse() == null
+                        ? "WH-SH" : params.getSingleWarehouse();
+                if (targetWarehouse.equals(order.getWarehouseCode())) {
                     continue;
                 }
                 Map<String, Object> request = new LinkedHashMap<>();
                 request.put("type", "OMS_REROUTE_WAREHOUSE");
-                request.put("targetKey", sku);
+                request.put("targetKey", order.getOrderNo());
                 Map<String, Object> actionParams = new LinkedHashMap<>();
-                actionParams.put("sku", sku);
                 actionParams.put("warehouseCode", targetWarehouse);
                 request.put("params", actionParams);
                 result.add(actions.createPending(request));
+                if (result.size() >= 50) {
+                    return result;
+                }
             }
         }
-        if (!params.getCarrierMix().equals(baseParams.getCarrierMix())) {
-            for (String carrier : params.getCarrierMix().keySet()) {
+        String preferredCarrier = highestShare(params.getCarrierMix());
+        if (preferredCarrier != null) {
+            for (ShipmentSnapshot shipment : shipmentMapper.selectList(
+                    new LambdaQueryWrapper<ShipmentSnapshot>()
+                            .eq(ShipmentSnapshot::getStatus, "IN_TRANSIT"))) {
+                BigDecimal share = params.getCarrierMix().getOrDefault(
+                        shipment.getCarrierCode(), BigDecimal.ZERO);
+                if (share.signum() != 0) {
+                    continue;
+                }
                 Map<String, Object> request = new LinkedHashMap<>();
                 request.put("type", "TMS_SWITCH_CARRIER");
-                request.put("targetKey", carrier);
-                request.put("params", params.getCarrierMix());
+                request.put("targetKey", shipment.getWaybillCode());
+                Map<String, Object> actionParams = new LinkedHashMap<>();
+                actionParams.put("carrierCode", preferredCarrier);
+                request.put("params", actionParams);
                 result.add(actions.createPending(request));
+                if (result.size() >= 50) {
+                    return result;
+                }
             }
         }
         Map<String, Object> scenarioResult = result(scenario);
-        Object stockout = scenarioResult.get("stockoutUnits");
-        if (stockout != null && new BigDecimal(String.valueOf(stockout))
-                .signum() > 0) {
-            for (String sku : baselineData.getDemandBySku().keySet()) {
+        Object summaries = scenarioResult.get("perSkuSummary");
+        if (summaries instanceof List) {
+            for (Object value : (List<?>) summaries) {
+                if (!(value instanceof Map)) {
+                    continue;
+                }
+                Map<?, ?> summary = (Map<?, ?>) value;
+                BigDecimal stockout = decimal(summary.get("stockout"));
+                if (stockout.signum() <= 0) {
+                    continue;
+                }
+                String sku = String.valueOf(summary.get("sku"));
+                String warehouse = params.getSingleWarehouse() == null
+                        ? baselineData.getSkuWarehouse().get(sku)
+                        : params.getSingleWarehouse();
                 Map<String, Object> request = new LinkedHashMap<>();
-                request.put("type", "SRM_PURCHASE_SUGGEST");
-                request.put("targetKey", sku);
-                request.put("params", Collections.singletonMap("sku", sku));
+                request.put("type", "WMS_REPLENISH");
+                request.put("targetKey", warehouse + "/" + sku);
+                Map<String, Object> actionParams = new LinkedHashMap<>();
+                actionParams.put("sku", sku);
+                actionParams.put("warehouseCode", warehouse);
+                actionParams.put("qty", stockout);
+                request.put("params", actionParams);
                 result.add(actions.createPending(request));
+                if (result.size() >= 50) {
+                    return result;
+                }
             }
         }
         return result;
+    }
+
+    private String highestShare(Map<String, BigDecimal> shares) {
+        String result = null;
+        BigDecimal highest = null;
+        for (Map.Entry<String, BigDecimal> entry : shares.entrySet()) {
+            if (highest == null || entry.getValue().compareTo(highest) > 0) {
+                result = entry.getKey();
+                highest = entry.getValue();
+            }
+        }
+        return result;
+    }
+
+    private BigDecimal decimal(Object value) {
+        return value == null ? BigDecimal.ZERO
+                : new BigDecimal(String.valueOf(value));
     }
 
     private CtScenario createAndRun(
@@ -249,10 +305,12 @@ public class SandboxService {
                         new LinkedHashMap<>(data.getRegionShare().get("*")));
             }
         }
+        normalizeShares(data.getChannelShare());
+        normalizeShares(data.getRegionShare());
         return data;
     }
 
-    private void addShare(
+    void addShare(
             Map<String, Map<String, BigDecimal>> shares,
             String key,
             String dimension,
@@ -261,13 +319,22 @@ public class SandboxService {
                 key, ignored -> new LinkedHashMap<>());
         values.put(dimension, values.getOrDefault(dimension,
                 BigDecimal.ZERO).add(amount));
+    }
+
+    void normalizeShares(
+            Map<String, Map<String, BigDecimal>> shares) {
+        for (Map<String, BigDecimal> values : shares.values()) {
         BigDecimal total = BigDecimal.ZERO;
         for (BigDecimal value : values.values()) {
             total = total.add(value);
         }
+            if (total.signum() == 0) {
+                continue;
+            }
         for (String name : new ArrayList<>(values.keySet())) {
             values.put(name, values.get(name).divide(total, 6,
                     BigDecimal.ROUND_HALF_UP));
+        }
         }
     }
 

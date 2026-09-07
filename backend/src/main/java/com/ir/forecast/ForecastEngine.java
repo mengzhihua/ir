@@ -110,24 +110,27 @@ public class ForecastEngine {
     public List<BigDecimal> seasonalNaive(
             List<BigDecimal> history,
             int horizon) {
+        List<BigDecimal> extended = new ArrayList<>(history);
         List<BigDecimal> forecast = new ArrayList<>();
         for (int i = 0; i < horizon; i++) {
-            int target = history.size() + i - SEASONAL_PERIOD;
+            int target = extended.size() - SEASONAL_PERIOD;
             List<BigDecimal> values = new ArrayList<>();
             for (int week = 0; week < 4; week++) {
                 int index = target - week * SEASONAL_PERIOD;
-                if (index >= 0 && index < history.size()) {
-                    values.add(history.get(index));
+                if (index >= 0 && index < extended.size()) {
+                    values.add(extended.get(index));
                 }
             }
             BigDecimal sum = BigDecimal.ZERO;
             for (BigDecimal value : values) {
                 sum = sum.add(value);
             }
-            forecast.add(values.isEmpty()
+            BigDecimal next = values.isEmpty()
                     ? BigDecimal.ZERO
                     : sum.divide(BigDecimal.valueOf(values.size()), 6,
-                    RoundingMode.HALF_UP));
+                            RoundingMode.HALF_UP);
+            forecast.add(next);
+            extended.add(next);
         }
         return forecast;
     }
@@ -175,7 +178,10 @@ public class ForecastEngine {
         if ("HOLT".equals(method)) {
             return holt(history, horizon);
         }
-        return seasonalNaive(history, horizon);
+        if ("SEASONAL_NAIVE".equals(method)) {
+            return seasonalNaive(history, horizon);
+        }
+        throw new IllegalArgumentException("未知预测方法: " + method);
     }
 
     public double backtest(

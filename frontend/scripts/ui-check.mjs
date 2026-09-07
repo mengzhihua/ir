@@ -61,7 +61,9 @@ async function assertPage(page, route) {
     const hasEmpty = await table.locator('.el-table__empty-text').count()
     const rows = await table.locator('.el-table__body-wrapper tbody tr').count()
     const requiresData =
-      route === '/sandbox' && (await table.locator('.sandbox-sku-table').count()) > 0
+      (route === '/sandbox' &&
+        (await table.locator('.sandbox-sku-table').count()) > 0) ||
+      route === '/replenish'
     if ((hasEmpty === 0 || requiresData) && rows === 0) {
       throw new Error(`第 ${index + 1} 个表格没有数据行`)
     }
@@ -76,6 +78,7 @@ async function assertPage(page, route) {
 }
 
 async function login(page, username, password) {
+  await page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle' })
   await page.evaluate(() => localStorage.clear())
   await page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle' })
   await page.locator('input').nth(0).fill(username)
@@ -92,7 +95,7 @@ try {
 }
 
 const context = browser.contexts()[0] || (await browser.newContext())
-const page = context.pages()[0] || (await context.newPage())
+const page = await context.newPage()
 const results = []
 
 try {

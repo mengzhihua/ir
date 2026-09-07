@@ -42,8 +42,12 @@ public class AuthController {
     @PostMapping("/login")
     public R<LoginResult> login(@RequestBody LoginReq request) {
         User user = users.find(request.getUsername());
-        if (user == null || !UserStore.hash(request.getPassword()).equals(user.getPassword())) {
+        if (user == null || !UserStore.verify(request.getPassword(),
+                user.getPassword())) {
             throw new BizException("用户名或密码错误");
+        }
+        if (UserStore.isLegacy(user.getPassword())) {
+            user.setPassword(UserStore.hash(request.getPassword()));
         }
         user.setLastLoginAt(LocalDateTime.now());
         users.save(user);

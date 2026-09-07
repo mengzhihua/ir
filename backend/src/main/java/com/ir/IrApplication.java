@@ -13,10 +13,15 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.ir.system.User;
+import com.ir.system.UserStore;
 
 @SpringBootApplication
 @EnableScheduling
 public class IrApplication implements CommandLineRunner {
+    private static final Logger log = LoggerFactory.getLogger(IrApplication.class);
     private final SyncService syncService;
     private final AlertEngine alertEngine;
     private final SandboxService sandboxService;
@@ -26,6 +31,7 @@ public class IrApplication implements CommandLineRunner {
     private final InventorySnapshotMapper inventoryMapper;
     private final SalesDailyMapper salesMapper;
     private final CostRecordMapper costMapper;
+    private final UserStore users;
 
     public IrApplication(
             SyncService syncService,
@@ -36,7 +42,8 @@ public class IrApplication implements CommandLineRunner {
             ShipmentSnapshotMapper shipmentMapper,
             InventorySnapshotMapper inventoryMapper,
             SalesDailyMapper salesMapper,
-            CostRecordMapper costMapper) {
+            CostRecordMapper costMapper,
+            UserStore users) {
         this.syncService = syncService;
         this.alertEngine = alertEngine;
         this.sandboxService = sandboxService;
@@ -46,6 +53,7 @@ public class IrApplication implements CommandLineRunner {
         this.inventoryMapper = inventoryMapper;
         this.salesMapper = salesMapper;
         this.costMapper = costMapper;
+        this.users = users;
     }
 
     public static void main(String[] args) {
@@ -59,6 +67,10 @@ public class IrApplication implements CommandLineRunner {
         }
         alertEngine.evaluate();
         sandboxService.ensureBaseline();
+        User admin = users.find("admin");
+        if (admin != null && UserStore.verify("admin123", admin.getPassword())) {
+            log.warn("admin仍使用默认密码，请尽快修改");
+        }
     }
 
     private boolean emptySnapshots() {

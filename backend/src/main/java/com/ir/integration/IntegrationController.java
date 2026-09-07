@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ir.common.R;
 import com.ir.integration.entity.CtSyncLog;
 import com.ir.integration.entity.CtSystem;
+import com.ir.integration.client.BaseUrlValidator;
 import com.ir.integration.mapper.CtSyncLogMapper;
 import com.ir.integration.mapper.CtSystemMapper;
 import com.ir.integration.sync.SyncService;
@@ -27,14 +28,17 @@ public class IntegrationController {
     private final SyncService sync;
     private final CtSystemMapper systemMapper;
     private final CtSyncLogMapper syncLogMapper;
+    private final BaseUrlValidator baseUrls;
 
     public IntegrationController(
             SyncService sync,
             CtSystemMapper systemMapper,
-            CtSyncLogMapper syncLogMapper) {
+            CtSyncLogMapper syncLogMapper,
+            BaseUrlValidator baseUrls) {
         this.sync = sync;
         this.systemMapper = systemMapper;
         this.syncLogMapper = syncLogMapper;
+        this.baseUrls = baseUrls;
     }
 
     @GetMapping("/system")
@@ -48,13 +52,37 @@ public class IntegrationController {
     public R<CtSystem> update(
             @PathVariable Long id,
             @RequestBody CtSystem request) {
-        request.setId(id);
-        systemMapper.updateById(request);
+        CtSystem existing = systemMapper.selectById(id);
+        if (existing == null) {
+            return R.fail(404, "系统不存在");
+        }
+        if (request.getBaseUrl() != null) {
+            baseUrls.validate(request.getBaseUrl());
+            existing.setBaseUrl(request.getBaseUrl());
+        }
+        if (request.getCode() != null) existing.setCode(request.getCode());
+        if (request.getName() != null) existing.setName(request.getName());
+        if (request.getAuthType() != null) existing.setAuthType(request.getAuthType());
+        if (request.getUsername() != null) existing.setUsername(request.getUsername());
+        if (request.getMode() != null) existing.setMode(request.getMode());
+        if (request.getEnabled() != null) existing.setEnabled(request.getEnabled());
+        if (request.getPassword() != null
+                && !request.getPassword().trim().isEmpty()
+                && !"******".equals(request.getPassword())) {
+            existing.setPassword(request.getPassword());
+        }
+        if (request.getApiKey() != null
+                && !request.getApiKey().trim().isEmpty()
+                && !"******".equals(request.getApiKey())) {
+            existing.setApiKey(request.getApiKey());
+        }
+        systemMapper.updateById(existing);
         return R.ok(systemMapper.selectById(id));
     }
 
     @PostMapping("/system")
     public R<CtSystem> create(@RequestBody CtSystem request) {
+        baseUrls.validate(request.getBaseUrl());
         systemMapper.insert(request);
         return R.ok(systemMapper.selectById(request.getId()));
     }

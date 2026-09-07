@@ -97,8 +97,11 @@ function batchAction() {
   visible.value = true
 }
 async function submitAction() {
-  for (const row of currentRows.value)
-    await forecastApi.toAction({ ...row, type: actionType.value })
+  await forecastApi.toAction({
+    type: actionType.value,
+    supplier: '默认供应商',
+    rows: currentRows.value
+  })
   visible.value = false
   ElMessage.success('已生成待执行指令')
 }
