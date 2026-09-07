@@ -26,6 +26,22 @@ public class BaseUrlValidator {
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("baseUrl格式不正确", ex);
         }
+        validateStructure(uri);
+        if (allowPrivateHosts) {
+            return;
+        }
+        try {
+            for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
+                validateAddress(address);
+            }
+        } catch (IllegalArgumentException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("baseUrl主机无法解析", ex);
+        }
+    }
+
+    void validateStructure(URI uri) {
         if (!"http".equalsIgnoreCase(uri.getScheme())
                 && !"https".equalsIgnoreCase(uri.getScheme())) {
             throw new IllegalArgumentException("baseUrl必须使用http或https");
@@ -33,25 +49,24 @@ public class BaseUrlValidator {
         if (uri.getHost() == null || uri.getHost().trim().isEmpty()) {
             throw new IllegalArgumentException("baseUrl必须包含主机名");
         }
-        if (allowPrivateHosts) {
-            return;
+    }
+
+    public void validateAddress(InetAddress address) {
+        if (address == null) {
+            throw new IllegalArgumentException("baseUrl主机无法解析");
         }
-        try {
-            for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
-                byte[] bytes = address.getAddress();
-                if (address.isLoopbackAddress() || address.isLinkLocalAddress()
-                        || address.isSiteLocalAddress()
-                        || isPrivateIpv4(bytes) || isUniqueLocal(bytes)
-                        || isMetadata(bytes)) {
-                    throw new IllegalArgumentException(
-                            "baseUrl不允许指向私有、回环、链路本地或云元数据地址");
-                }
-            }
-        } catch (IllegalArgumentException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("baseUrl主机无法解析", ex);
+        byte[] bytes = address.getAddress();
+        if (address.isLoopbackAddress() || address.isLinkLocalAddress()
+                || address.isSiteLocalAddress()
+                || isPrivateIpv4(bytes) || isUniqueLocal(bytes)
+                || isMetadata(bytes)) {
+            throw new IllegalArgumentException(
+                    "baseUrl不允许指向私有、回环、链路本地或云元数据地址");
         }
+    }
+
+    public boolean isPrivateHostsAllowed() {
+        return allowPrivateHosts;
     }
 
     private boolean isMetadata(byte[] bytes) {
