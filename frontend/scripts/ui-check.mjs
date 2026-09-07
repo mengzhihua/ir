@@ -10,7 +10,19 @@ const routes = [
   ['/action', null],
   ['/forecast', async (page) => page.getByRole('button', { name: '运行预测' }).click()],
   ['/replenish', null],
-  ['/sandbox', async (page) => page.locator('.el-table__body-wrapper tbody tr').first().click()],
+  [
+    '/sandbox',
+    async (page) => {
+      await page.locator('.el-table__body-wrapper tbody tr').first().click()
+      await page.getByRole('button', { name: '应用到OTW' }).first().click()
+      const dialog = page.getByRole('dialog', { name: '已生成待执行动作' })
+      await dialog.waitFor({ state: 'visible', timeout: 10000 })
+      const rows = dialog.locator('.el-table__body-wrapper tbody tr')
+      if ((await rows.count()) < 1) {
+        throw new Error('应用到OTW未生成待执行动作')
+      }
+    }
+  ],
   [
     '/compare',
     async (page) => {

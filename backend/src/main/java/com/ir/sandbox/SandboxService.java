@@ -13,6 +13,8 @@ import com.ir.snapshot.SalesDaily;
 import com.ir.snapshot.SalesDailyMapper;
 import com.ir.snapshot.ShipmentSnapshot;
 import com.ir.snapshot.ShipmentSnapshotMapper;
+import com.ir.snapshot.WmsOrderSnapshot;
+import com.ir.snapshot.WmsOrderSnapshotMapper;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -30,6 +32,7 @@ public class SandboxService {
     private final SalesDailyMapper salesMapper;
     private final OrderSnapshotMapper orderMapper;
     private final ShipmentSnapshotMapper shipmentMapper;
+    private final WmsOrderSnapshotMapper wmsOrderMapper;
     private final SandboxEngine engine;
     private final ActionService actions;
     private final CodeGenerator codes;
@@ -41,6 +44,7 @@ public class SandboxService {
             SalesDailyMapper salesMapper,
             OrderSnapshotMapper orderMapper,
             ShipmentSnapshotMapper shipmentMapper,
+            WmsOrderSnapshotMapper wmsOrderMapper,
             SandboxEngine engine,
             ActionService actions,
             CodeGenerator codes,
@@ -50,6 +54,7 @@ public class SandboxService {
         this.salesMapper = salesMapper;
         this.orderMapper = orderMapper;
         this.shipmentMapper = shipmentMapper;
+        this.wmsOrderMapper = wmsOrderMapper;
         this.engine = engine;
         this.actions = actions;
         this.codes = codes;
@@ -142,96 +147,210 @@ public class SandboxService {
         }
         ScenarioParams params = read(
                 scenario.getParamsJson(), ScenarioParams.class).normalized();
-        BaselineData baselineData = baselineData();
-        List<CtAction> result = new ArrayList<>();
-        if ("SINGLE_WAREHOUSE".equals(params.getAllocationStrategy())
-                || "LOWEST_COST".equals(params.getAllocationStrategy())) {
-            for (OrderSnapshot order : orderMapper.selectList(
-                    new LambdaQueryWrapper<OrderSnapshot>()
-                            .in(OrderSnapshot::getStatus,
-                                    "CREATED", "AUDITED", "ALLOCATED"))) {
-                String targetWarehouse = params.getSingleWarehouse() == null
-                        ? "WH-SH" : params.getSingleWarehouse();
-                if (targetWarehouse.equals(order.getWarehouseCode())) {
-                    continue;
-                }
-                Map<String, Object> request = new LinkedHashMap<>();
-                request.put("type", "OMS_REROUTE_WAREHOUSE");
-                request.put("targetKey", order.getOrderNo());
-                Map<String, Object> actionParams = new LinkedHashMap<>();
-                actionParams.put("warehouseCode", targetWarehouse);
-                request.put("params", actionParams);
-                result.add(actions.createPending(request));
-                if (result.size() >= 50) {
-                    return result;
-                }
-            }
-        }
-        String preferredCarrier = highestShare(params.getCarrierMix());
-        if (preferredCarrier != null) {
-            for (ShipmentSnapshot shipment : shipmentMapper.selectList(
-                    new LambdaQueryWrapper<ShipmentSnapshot>()
-                            .eq(ShipmentSnapshot::getStatus, "IN_TRANSIT"))) {
-                BigDecimal share = params.getCarrierMix().getOrDefault(
-                        shipment.getCarrierCode(), BigDecimal.ZERO);
-                if (share.signum() != 0) {
-                    continue;
-                }
-                Map<String, Object> request = new LinkedHashMap<>();
-                request.put("type", "TMS_SWITCH_CARRIER");
-                request.put("targetKey", shipment.getWaybillCode());
-                Map<String, Object> actionParams = new LinkedHashMap<>();
-                actionParams.put("carrierCode", preferredCarrier);
-                request.put("params", actionParams);
-                result.add(actions.createPending(request));
-                if (result.size() >= 50) {
-                    return result;
-                }
-            }
-        }
         Map<String, Object> scenarioResult = result(scenario);
-        Object summaries = scenarioResult.get("perSkuSummary");
-        if (summaries instanceof List) {
-            for (Object value : (List<?>) summaries) {
-                if (!(value instanceof Map)) {
-                    continue;
+        List<CtAction> result = new ArrayList<>();
+        Map<String, String> skuWarehouse = stringMap(
+                scenarioResult.get("skuWarehouse"));
+        Map<String, WmsOrderSnapshot> outboundByOrder =
+                outboundByOrder();
+        for (OrderSnapshot order : orderMapper.selectList(
+                new LambdaQueryWrapper<OrderSnapshot>()
+                        .in(OrderSnapshot::getStatus,
+                                "CREATED", "AUDITED", "ALLOCATED"))) {
+            String sku = orderSku(order, outboundByOrder);
+            String targetWarehouse = skuWarehouse.get(sku);
+            if (targetWarehouse == null
+                    || targetWarehouse.trim().isEmpty()
+                    || targetWarehouse.equals(order.getWarehouseCode())) {
+                continue;
+            }
+            Map<String, Object> actionParams = new LinkedHashMap<>();
+            actionParams.put("warehouseCode", targetWarehouse);
+            result.add(createPending("OMS_REROUTE_WAREHOUSE",
+                    order.getOrderNo(), actionParams));
+            if (result.size() >= 50) {
+                return result;
+            }
+        }
+
+        List<ShipmentSnapshot> eligibleShipments = eligibleShipments();
+        Map<String, Integer> targetCounts = carrierTargets(
+                params.getCarrierMix(), eligibleShipments.size());
+        Map<String, List<ShipmentSnapshot>> surplus =
+                new LinkedHashMap<>();
+        Map<String, Integer> currentCounts = new LinkedHashMap<>();
+        for (ShipmentSnapshot shipment : eligibleShipments) {
+            String carrier = carrier(shipment.getCarrierCode());
+            currentCounts.put(carrier,
+                    currentCounts.getOrDefault(carrier, 0) + 1);
+            surplus.computeIfAbsent(carrier,
+                    ignored -> new ArrayList<>()).add(shipment);
+        }
+        Map<String, Integer> deficits = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : targetCounts.entrySet()) {
+            int current = currentCounts.getOrDefault(entry.getKey(), 0);
+            if (entry.getValue() > current) {
+                deficits.put(entry.getKey(), entry.getValue() - current);
+            }
+        }
+
+        for (Map.Entry<String, List<ShipmentSnapshot>> entry
+                : surplus.entrySet()) {
+            int target = targetCounts.getOrDefault(entry.getKey(), 0);
+            int current = currentCounts.getOrDefault(entry.getKey(), 0);
+            if (current <= target) {
+                continue;
+            }
+            for (ShipmentSnapshot shipment : entry.getValue()) {
+                String destination = largestDeficit(deficits);
+                if (destination == null) {
+                    break;
                 }
-                Map<?, ?> summary = (Map<?, ?>) value;
-                BigDecimal stockout = decimal(summary.get("stockout"));
-                if (stockout.signum() <= 0) {
-                    continue;
-                }
-                String sku = String.valueOf(summary.get("sku"));
-                String warehouse = params.getSingleWarehouse() == null
-                        ? baselineData.getSkuWarehouse().get(sku)
-                        : params.getSingleWarehouse();
-                Map<String, Object> request = new LinkedHashMap<>();
-                request.put("type", "WMS_REPLENISH");
-                request.put("targetKey", warehouse + "/" + sku);
                 Map<String, Object> actionParams = new LinkedHashMap<>();
-                actionParams.put("sku", sku);
-                actionParams.put("warehouseCode", warehouse);
-                actionParams.put("qty", stockout);
-                request.put("params", actionParams);
-                result.add(actions.createPending(request));
+                actionParams.put("carrierCode", destination);
+                result.add(createPending("TMS_SWITCH_CARRIER",
+                        shipment.getWaybillCode(), actionParams));
+                deficits.put(destination, deficits.get(destination) - 1);
                 if (result.size() >= 50) {
                     return result;
                 }
+            }
+        }
+
+        for (Map.Entry<String, Object> entry
+                : objectMap(scenarioResult.get("stockoutByWarehouseSku"))
+                .entrySet()) {
+            BigDecimal quantity = decimal(entry.getValue());
+            String targetKey = entry.getKey();
+            int separator = targetKey.indexOf('/');
+            if (quantity.signum() <= 0 || separator <= 0
+                    || separator == targetKey.length() - 1) {
+                continue;
+            }
+            String warehouse = targetKey.substring(0, separator);
+            String sku = targetKey.substring(separator + 1);
+            Map<String, Object> actionParams = new LinkedHashMap<>();
+            actionParams.put("warehouseCode", warehouse);
+            actionParams.put("sku", sku);
+            actionParams.put("qty", quantity);
+            result.add(createPending("WMS_REPLENISH", targetKey,
+                    actionParams));
+            if (result.size() >= 50) {
+                return result;
             }
         }
         return result;
     }
 
-    private String highestShare(Map<String, BigDecimal> shares) {
-        String result = null;
-        BigDecimal highest = null;
+    private CtAction createPending(
+            String type,
+            String targetKey,
+            Map<String, Object> params) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("type", type);
+        request.put("targetKey", targetKey);
+        request.put("params", params);
+        return actions.createPending(request);
+    }
+
+    private Map<String, WmsOrderSnapshot> outboundByOrder() {
+        Map<String, WmsOrderSnapshot> result = new LinkedHashMap<>();
+        for (WmsOrderSnapshot row : wmsOrderMapper.selectList(null)) {
+            if (row.getCode() != null) {
+                result.put(row.getCode(), row);
+            }
+            if (row.getExternalNo() != null) {
+                result.put(row.getExternalNo(), row);
+            }
+        }
+        return result;
+    }
+
+    private String orderSku(
+            OrderSnapshot order,
+            Map<String, WmsOrderSnapshot> outboundByOrder) {
+        if (order.getSku() != null && !order.getSku().trim().isEmpty()) {
+            return order.getSku();
+        }
+        WmsOrderSnapshot outbound = outboundByOrder.get(order.getOrderNo());
+        if (outbound == null && order.getWmsOrderNo() != null) {
+            outbound = outboundByOrder.get(order.getWmsOrderNo());
+        }
+        return outbound == null ? null : outbound.getSku();
+    }
+
+    private List<ShipmentSnapshot> eligibleShipments() {
+        List<ShipmentSnapshot> result = new ArrayList<>();
+        for (ShipmentSnapshot shipment : shipmentMapper.selectList(null)) {
+            if ("IN_TRANSIT".equals(shipment.getStatus())
+                    || shipment.getCarrierCode() == null
+                    || shipment.getCarrierCode().trim().isEmpty()) {
+                result.add(shipment);
+            }
+        }
+        return result;
+    }
+
+    private Map<String, Integer> carrierTargets(
+            Map<String, BigDecimal> shares,
+            int total) {
+        Map<String, Integer> result = new LinkedHashMap<>();
+        if (total <= 0) {
+            return result;
+        }
+        int allocated = 0;
+        String highest = null;
+        BigDecimal highestShare = null;
         for (Map.Entry<String, BigDecimal> entry : shares.entrySet()) {
-            if (highest == null || entry.getValue().compareTo(highest) > 0) {
+            int target = entry.getValue()
+                    .multiply(BigDecimal.valueOf(total))
+                    .setScale(0, BigDecimal.ROUND_HALF_UP)
+                    .intValue();
+            result.put(entry.getKey(), target);
+            allocated += target;
+            if (highestShare == null
+                    || entry.getValue().compareTo(highestShare) > 0) {
+                highest = entry.getKey();
+                highestShare = entry.getValue();
+            }
+        }
+        if (highest != null) {
+            result.put(highest, result.get(highest) + total - allocated);
+        }
+        return result;
+    }
+
+    private String largestDeficit(Map<String, Integer> deficits) {
+        String result = null;
+        int highest = 0;
+        for (Map.Entry<String, Integer> entry : deficits.entrySet()) {
+            if (entry.getValue() > highest) {
                 result = entry.getKey();
                 highest = entry.getValue();
             }
         }
         return result;
+    }
+
+    private String carrier(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private Map<String, String> stringMap(Object value) {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : objectMap(value).entrySet()) {
+            if (entry.getValue() != null) {
+                result.put(entry.getKey(), String.valueOf(entry.getValue()));
+            }
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> objectMap(Object value) {
+        return value instanceof Map
+                ? (Map<String, Object>) value
+                : Collections.emptyMap();
     }
 
     private BigDecimal decimal(Object value) {

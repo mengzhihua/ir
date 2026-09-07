@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class WmsOrderSnapshot extends BaseEntity {
     private String code;
     private String externalNo;
+    private String sku;
     private String warehouseCode;
     private String status;
     private BigDecimal totalQty;

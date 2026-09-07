@@ -41,6 +41,9 @@ public class SandboxEngine {
         private BigDecimal avgLeadDays = BigDecimal.ZERO;
         private List<Map<String, Object>> dailySeries = new ArrayList<>();
         private List<Map<String, Object>> perSkuSummary = new ArrayList<>();
+        private Map<String, String> skuWarehouse = new LinkedHashMap<>();
+        private Map<String, BigDecimal> stockoutByWarehouseSku =
+                new LinkedHashMap<>();
     }
 
     public Result run(ScenarioParams params, BaselineData baseline) {
@@ -70,6 +73,8 @@ public class SandboxEngine {
             BigDecimal skuDemand = BigDecimal.ZERO;
             BigDecimal skuFulfilled = BigDecimal.ZERO;
             BigDecimal skuStockout = BigDecimal.ZERO;
+            Map<String, BigDecimal> fulfilledByWarehouse =
+                    new LinkedHashMap<>();
 
             for (int day = 0; day < days; day++) {
                 receive(arrivals, day, stock);
@@ -105,6 +110,9 @@ public class SandboxEngine {
                             available.subtract(regionalFulfilled));
                     fulfilled = fulfilled.add(regionalFulfilled);
                     stockout = stockout.add(regionalStockout);
+                    add(fulfilledByWarehouse, warehouse, regionalFulfilled);
+                    add(result.getStockoutByWarehouseSku(),
+                            key(warehouse, sku), regionalStockout);
 
                     BigDecimal distance = distance(warehouse, region.getKey());
                     dayFreight = dayFreight.add(carrierFreight(
@@ -166,6 +174,11 @@ public class SandboxEngine {
             summary.put("fulfilled", round(skuFulfilled, 2));
             summary.put("stockout", round(skuStockout, 2));
             result.getPerSkuSummary().add(summary);
+            String fulfilledWarehouse = mostFulfilledWarehouse(
+                    fulfilledByWarehouse);
+            if (fulfilledWarehouse != null) {
+                result.getSkuWarehouse().put(sku, fulfilledWarehouse);
+            }
         }
 
         result.setStockoutUnits(round(totalStockout, 2));
@@ -181,6 +194,7 @@ public class SandboxEngine {
         roundMap(result.getCostByType(), 2);
         roundMap(result.getCostByWarehouse(), 2);
         roundMap(result.getCostByCarrier(), 2);
+        roundMap(result.getStockoutByWarehouseSku(), 2);
         return result;
     }
 
@@ -459,6 +473,24 @@ public class SandboxEngine {
         BigDecimal result = BigDecimal.ZERO;
         for (BigDecimal value : values.values()) {
             result = result.add(value);
+        }
+        return result;
+    }
+
+    private String mostFulfilledWarehouse(
+            Map<String, BigDecimal> fulfilledByWarehouse) {
+        String result = null;
+        BigDecimal highest = null;
+        for (Map.Entry<String, BigDecimal> entry
+                : fulfilledByWarehouse.entrySet()) {
+            if (entry.getValue().signum() <= 0) {
+                continue;
+            }
+            if (highest == null
+                    || entry.getValue().compareTo(highest) > 0) {
+                result = entry.getKey();
+                highest = entry.getValue();
+            }
         }
         return result;
     }

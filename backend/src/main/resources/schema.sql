@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS ct_sync_log (
 CREATE TABLE IF NOT EXISTS ct_order_snapshot (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     order_no VARCHAR(80) NOT NULL UNIQUE,
+    sku VARCHAR(64),
     channel_code VARCHAR(32),
     shop_code VARCHAR(64),
     warehouse_code VARCHAR(32),
@@ -54,10 +55,13 @@ CREATE TABLE IF NOT EXISTS ct_order_snapshot (
     updated_at TIMESTAMP
 );
 
+ALTER TABLE ct_order_snapshot ADD COLUMN IF NOT EXISTS sku VARCHAR(64);
+
 CREATE TABLE IF NOT EXISTS ct_wms_order_snapshot (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(80) NOT NULL UNIQUE,
     external_no VARCHAR(80),
+    sku VARCHAR(64),
     warehouse_code VARCHAR(32),
     status VARCHAR(32),
     total_qty DECIMAL(18,2),
@@ -71,6 +75,8 @@ CREATE TABLE IF NOT EXISTS ct_wms_order_snapshot (
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
+
+ALTER TABLE ct_wms_order_snapshot ADD COLUMN IF NOT EXISTS sku VARCHAR(64);
 
 CREATE TABLE IF NOT EXISTS ct_shipment_snapshot (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 @TableName("ct_order_snapshot")
 public class OrderSnapshot extends BaseEntity {
     private String orderNo;
+    private String sku;
     private String channelCode;
     private String shopCode;
     private String warehouseCode;

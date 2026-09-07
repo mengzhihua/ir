@@ -40,9 +40,11 @@ public class BaseUrlValidator {
             for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
                 byte[] bytes = address.getAddress();
                 if (address.isLoopbackAddress() || address.isLinkLocalAddress()
+                        || address.isSiteLocalAddress()
+                        || isPrivateIpv4(bytes) || isUniqueLocal(bytes)
                         || isMetadata(bytes)) {
                     throw new IllegalArgumentException(
-                            "baseUrl不允许指向本机、链路本地或云元数据地址");
+                            "baseUrl不允许指向私有、回环、链路本地或云元数据地址");
                 }
             }
         } catch (IllegalArgumentException ex) {
@@ -56,5 +58,20 @@ public class BaseUrlValidator {
         return bytes.length == 4
                 && (bytes[0] & 0xff) == 169
                 && (bytes[1] & 0xff) == 254;
+    }
+
+    private boolean isPrivateIpv4(byte[] bytes) {
+        if (bytes.length != 4) {
+            return false;
+        }
+        int first = bytes[0] & 0xff;
+        int second = bytes[1] & 0xff;
+        return first == 10
+                || (first == 172 && second >= 16 && second <= 31)
+                || (first == 192 && second == 168);
+    }
+
+    private boolean isUniqueLocal(byte[] bytes) {
+        return bytes.length == 16 && ((bytes[0] & 0xff) & 0xfe) == 0xfc;
     }
 }

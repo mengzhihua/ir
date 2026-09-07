@@ -41,6 +41,11 @@ HTTP 集成的 `baseUrl` 只接受 HTTP/HTTPS URL，并实现了 loopback、链�
 `ir.integration.allow-private-hosts=true` 以支持本地 OTWB；生产环境建议设置为
 `false`。HTTP 客户端连接超时为 3 秒，读取超时为 10 秒。
 
+### 生产部署
+
+生产环境请设置 `IR_ALLOW_PRIVATE_HOSTS=false`，避免集成地址指向内网或云元数据服务，
+并立即修改默认管理员密码 `admin/admin123`。
+
 ## 算法和沙盘
 
 预测支持 7 日移动平均、指数平滑、Holt、4 周同星期 Seasonal Naive，AUTO 按最近 14 天回测 MAPE 选最优。沙盘支持 NEAREST、LOWEST_COST、BALANCED、SINGLE_WAREHOUSE，输出成本、服务水平、缺货、日序列和 SKU 汇总。
