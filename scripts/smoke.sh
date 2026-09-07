@@ -17,7 +17,8 @@ json -X POST "$BASE/api/forecast/run" -H 'Content-Type: application/json' -d '{"
 json "$BASE/api/forecast/replenish?warehouseCode=WH-SH&horizon=14&serviceDays=3" | jq -e '.code==0' >/dev/null
 json "$BASE/api/forecast/history?sku=SKU001&days=30" | jq -e '.code==0 and (.data|length)>0' >/dev/null
 BASELINE="$(json -X POST "$BASE/api/sandbox/baseline" | jq -r '.data.id')"
-SCENARIO="$(json -X POST "$BASE/api/sandbox/scenario" -H 'Content-Type: application/json' -d '{"name":"2倍需求","params":{"demandMultiplier":2,"allocationStrategy":"SINGLE_WAREHOUSE","singleWarehouse":"WH-SH"}}' | jq -r '.data.id')"
+SCENARIO_NAME="2倍需求-$(date +%H%M%S)"
+SCENARIO="$(json -X POST "$BASE/api/sandbox/scenario" -H 'Content-Type: application/json' -d "{\"name\":\"$SCENARIO_NAME\",\"params\":{\"demandMultiplier\":2,\"allocationStrategy\":\"SINGLE_WAREHOUSE\",\"singleWarehouse\":\"WH-SH\"}}" | jq -r '.data.id')"
 json -X POST "$BASE/api/sandbox/scenario/$SCENARIO/run" | jq -e '.code==0' >/dev/null
 json "$BASE/api/sandbox/compare?ids=$BASELINE,$SCENARIO" | jq -e '.code==0 and (.data|length)>=2' >/dev/null
 json "$BASE/api/cost/summary?days=30" | jq -e '.code==0 and (.data.total|numbers) and (.data.byType|length)>0' >/dev/null

@@ -44,6 +44,7 @@ public class SandboxEngine {
     }
 
     public Result run(ScenarioParams params, BaselineData baseline) {
+        params = params == null ? new ScenarioParams() : params.normalized();
         Result result = new Result();
         int days = Math.max(1, params.getHorizonDays());
         Map<String, BigDecimal> stock = initialStock(params, baseline);
@@ -161,22 +162,25 @@ public class SandboxEngine {
 
             Map<String, Object> summary = new LinkedHashMap<>();
             summary.put("sku", sku);
-            summary.put("demand", skuDemand);
-            summary.put("fulfilled", skuFulfilled);
-            summary.put("stockout", skuStockout);
+            summary.put("demand", round(skuDemand, 2));
+            summary.put("fulfilled", round(skuFulfilled, 2));
+            summary.put("stockout", round(skuStockout, 2));
             result.getPerSkuSummary().add(summary);
         }
 
-        result.setStockoutUnits(totalStockout);
-        result.setTotalCost(sum(result.getCostByType()));
+        result.setStockoutUnits(round(totalStockout, 2));
+        result.setTotalCost(round(sum(result.getCostByType()), 2));
         result.setServiceLevel(totalDemand.signum() == 0
-                ? BigDecimal.ONE
-                : totalFulfilled.divide(totalDemand, 6,
-                        RoundingMode.HALF_UP));
+                ? BigDecimal.ONE.setScale(4, RoundingMode.HALF_UP)
+                : round(totalFulfilled.divide(totalDemand, 6,
+                        RoundingMode.HALF_UP), 4));
         result.setAvgLeadDays(leadCount == 0
-                ? BigDecimal.ZERO
-                : totalLead.divide(BigDecimal.valueOf(leadCount), 6,
-                        RoundingMode.HALF_UP));
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : round(totalLead.divide(BigDecimal.valueOf(leadCount), 6,
+                        RoundingMode.HALF_UP), 2));
+        roundMap(result.getCostByType(), 2);
+        roundMap(result.getCostByWarehouse(), 2);
+        roundMap(result.getCostByCarrier(), 2);
         return result;
     }
 
@@ -425,10 +429,22 @@ public class SandboxEngine {
             BigDecimal cost) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("date", LocalDate.now().plusDays(offset + 1L));
-        row.put("demand", demand);
-        row.put("fulfilled", fulfilled);
-        row.put("cost", cost);
+        row.put("demand", round(demand, 2));
+        row.put("fulfilled", round(fulfilled, 2));
+        row.put("cost", round(cost, 2));
         return row;
+    }
+
+    private BigDecimal round(BigDecimal value, int scale) {
+        return value == null
+                ? BigDecimal.ZERO.setScale(scale, RoundingMode.HALF_UP)
+                : value.setScale(scale, RoundingMode.HALF_UP);
+    }
+
+    private void roundMap(Map<String, BigDecimal> values, int scale) {
+        for (Map.Entry<String, BigDecimal> entry : values.entrySet()) {
+            entry.setValue(round(entry.getValue(), scale));
+        }
     }
 
     private String key(String warehouse, String sku) {

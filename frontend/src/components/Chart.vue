@@ -1,6 +1,6 @@
 <template>
   <div class="chart-wrap">
-    <v-chart v-if="!empty" class="chart" :option="option" autoresize />
+    <v-chart v-if="!empty" class="chart" :option="chartOption" autoresize />
     <el-empty v-else class="chart-empty" description="暂无数据" />
   </div>
 </template>
@@ -48,6 +48,17 @@ const empty = computed(() => {
     })
   )
 })
+
+const chartOption = computed(() => ({
+  ...props.option,
+  grid: {
+    left: 60,
+    right: 24,
+    bottom: 32,
+    containLabel: true,
+    ...(props.option.grid || {})
+  }
+}))
 </script>
 <style scoped>
 .chart-wrap {

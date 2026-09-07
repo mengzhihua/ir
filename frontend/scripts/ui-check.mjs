@@ -60,7 +60,9 @@ async function assertPage(page, route) {
     const table = tables.nth(index)
     const hasEmpty = await table.locator('.el-table__empty-text').count()
     const rows = await table.locator('.el-table__body-wrapper tbody tr').count()
-    if (hasEmpty === 0 && rows === 0) {
+    const requiresData =
+      route === '/sandbox' && (await table.locator('.sandbox-sku-table').count()) > 0
+    if ((hasEmpty === 0 || requiresData) && rows === 0) {
       throw new Error(`第 ${index + 1} 个表格没有数据行`)
     }
   }
@@ -102,6 +104,12 @@ try {
       if (interaction) {
         await interaction(page)
         await waitForData(page)
+      }
+      if (route === '/sandbox') {
+        await page.screenshot({
+          path: '/home/ubuntu/screenshots/sandbox_after.png',
+          fullPage: true
+        })
       }
       results.push(await assertPage(page, route))
     } catch (error) {

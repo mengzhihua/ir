@@ -26,6 +26,10 @@
             ><template #default="{ row }">{{
               formatMoney(row.totalCost)
             }}</template></el-table-column
+          ><el-table-column prop="createdAt" label="创建时间" min-width="160"
+            ><template #default="{ row }">{{
+              formatDate(row.createdAt)
+            }}</template></el-table-column
           ><el-table-column label="服务水平" align="right"
             ><template #default="{ row }">{{
               percent(row.serviceLevel)
@@ -67,11 +71,11 @@
           </div>
           <div class="stat">
             <div class="label">缺货件数</div>
-            <div class="value danger">{{ selected.stockoutUnits || 0 }}</div>
+            <div class="value danger">{{ formatNumber(selected.stockoutUnits, 2) }}</div>
           </div>
           <div class="stat">
             <div class="label">平均时效</div>
-            <div class="value">{{ selected.avgLeadDays || 0 }}天</div>
+            <div class="value">{{ formatNumber(selected.avgLeadDays, 2) }}天</div>
           </div>
         </div>
         <div v-if="selected" class="grid-2">
@@ -79,17 +83,26 @@
             :option="warehouseOption"
           /><Chart :option="carrierOption" />
         </div>
-        <el-table v-if="selected" :data="selected.skuResults || []" size="small"
+        <el-table
+          v-if="selected"
+          class="sandbox-sku-table"
+          :data="selected.perSkuSummary || []"
+          size="small"
           ><el-table-column prop="sku" label="SKU" /><el-table-column
             prop="demand"
             label="需求"
             align="right"
-          /><el-table-column prop="fulfilled" label="满足" align="right" /><el-table-column
-            prop="stockout"
-            label="缺货"
-            align="right"
-          /><el-table-column prop="cost" label="成本" align="right"
-            ><template #default="{ row }">{{ formatMoney(row.cost) }}</template></el-table-column
+            ><template #default="{ row }">{{
+              formatNumber(row.demand, 2)
+            }}</template></el-table-column
+          ><el-table-column prop="fulfilled" label="满足" align="right"
+            ><template #default="{ row }">{{
+              formatNumber(row.fulfilled, 2)
+            }}</template></el-table-column
+          ><el-table-column prop="stockout" label="缺货" align="right"
+            ><template #default="{ row }">{{
+              formatNumber(row.stockout, 2)
+            }}</template></el-table-column
           ></el-table
         ><el-empty v-else description="选择一个场景查看结果" />
       </div>
@@ -166,7 +179,15 @@ import { ElMessage } from 'element-plus'
 import { sandboxApi } from '../api'
 import { canWrite } from '../auth'
 import Chart from '../components/Chart.vue'
-import { formatMoney, jsonText, pageResult, parseJson, percent } from '../utils/format'
+import {
+  formatDate,
+  formatMoney,
+  formatNumber,
+  jsonText,
+  pageResult,
+  parseJson,
+  percent
+} from '../utils/format'
 import { actionStatusLabels, labelOf, scenarioStatusLabels, tagTypes } from '../utils/labels'
 const channels = ['TMALL', 'JD', 'DOUYIN', 'OFFLINE', 'API']
 const carriers = ['SF', 'JDL', 'ZTO', 'SELF']
@@ -268,13 +289,22 @@ async function apply(row) {
 }
 async function openCreate() {
   const defaults = await sandboxApi.defaults()
-  Object.assign(form.params, defaults?.params || {})
+  Object.assign(form.params, defaults?.params || defaults || {})
+  form.params.channelDemandMultiplier = {
+    ...(defaults?.channelDemandMultiplier || defaults?.params?.channelDemandMultiplier || {})
+  }
+  form.params.carrierMix = {
+    ...(defaults?.carrierMix || defaults?.params?.carrierMix || {})
+  }
+  form.params.carrierRate = {
+    ...(defaults?.carrierRate || defaults?.params?.carrierRate || {})
+  }
   channels.forEach((key) => {
-    form.params.channelDemandMultiplier[key] = form.params.channelDemandMultiplier[key] || 1
+    form.params.channelDemandMultiplier[key] = form.params.channelDemandMultiplier[key] ?? 1
   })
   carriers.forEach((key) => {
-    form.params.carrierMix[key] = form.params.carrierMix[key] || 0.25
-    form.params.carrierRate[key] = form.params.carrierRate[key] || 1
+    form.params.carrierMix[key] = form.params.carrierMix[key] ?? 0
+    form.params.carrierRate[key] = form.params.carrierRate[key] ?? 1
   })
   visible.value = true
 }

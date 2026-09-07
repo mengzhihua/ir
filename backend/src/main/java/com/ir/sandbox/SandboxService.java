@@ -67,7 +67,9 @@ public class SandboxService {
     }
 
     public CtScenario create(String name, ScenarioParams params) {
-        return saveScenario(name, params, false, false);
+        return saveScenario(name,
+                params == null ? new ScenarioParams() : params.normalized(),
+                false, false);
     }
 
     public CtScenario run(Long id) {
@@ -76,6 +78,7 @@ public class SandboxService {
             return null;
         }
         ScenarioParams params = read(scenario.getParamsJson(), ScenarioParams.class);
+        params = params.normalized();
         return saveScenario(scenario.getName(), params,
                 Boolean.TRUE.equals(scenario.getBaseline()), true, scenario);
     }
@@ -201,6 +204,7 @@ public class SandboxService {
             boolean baseline,
             boolean update,
             CtScenario existing) {
+        params = params == null ? new ScenarioParams() : params.normalized();
         SandboxEngine.Result result = engine.run(params, baselineData());
         CtScenario scenario = existing == null ? new CtScenario() : existing;
         if (scenario.getScenarioNo() == null) {
