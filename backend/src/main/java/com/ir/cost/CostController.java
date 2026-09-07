@@ -1,0 +1,68 @@
+package com.ir.cost;
+
+import com.ir.common.R;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ir.snapshot.CostRecord;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/cost")
+public class CostController {
+    private final CostService service;
+
+    public CostController(CostService service) {
+        this.service = service;
+    }
+
+    @GetMapping("/summary")
+    public R<Map<String, Object>> summary(
+            @RequestParam(defaultValue = "30") int days) {
+        return R.ok(service.summary(days));
+    }
+
+    @GetMapping("/page")
+    public R<Page<CostRecord>> page(
+            @RequestParam(required = false) String orderNo,
+            @RequestParam(required = false) String costType,
+            @RequestParam(required = false) String warehouseCode,
+            @RequestParam(required = false) String carrierCode,
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "20") long size) {
+        return R.ok(service.page(
+                orderNo, costType, warehouseCode, carrierCode, from, to,
+                current, size));
+    }
+
+    @GetMapping("/saving")
+    public R<Map<String, Object>> saving() {
+        return R.ok(service.saving());
+    }
+
+    @GetMapping("/target")
+    public R<List<CtCostTarget>> target() {
+        return R.ok(service.targets());
+    }
+
+    @PostMapping("/target")
+    public R<CtCostTarget> target(@RequestBody CtCostTarget target) {
+        return R.ok(service.saveTarget(target));
+    }
+
+    @DeleteMapping("/target/{id}")
+    public R<Void> deleteTarget(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        service.deleteTarget(id);
+        return R.ok();
+    }
+}
