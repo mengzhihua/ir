@@ -1,0 +1,23 @@
+package com.ir.forecast;
+
+import lombok.Data;
+import org.springframework.stereotype.Component;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.*;
+
+@Component
+public class ForecastEngine {
+    @Data public static class Point { private LocalDate date; private BigDecimal qty, lower, upper; public Point(){} public Point(LocalDate d,BigDecimal q){date=d;qty=q;} }
+    @Data public static class Result { private List<BigDecimal> history=new ArrayList<>(), forecastValues=new ArrayList<>(); private List<Point> forecast=new ArrayList<>(); private String method; private double mape; private List<Map<String,Object>> backtest=new ArrayList<>(); }
+    public List<BigDecimal> movingAverage(List<BigDecimal> history,int horizon){List<BigDecimal>out=new ArrayList<>();List<BigDecimal>x=new ArrayList<>(history);for(int i=0;i<horizon;i++){BigDecimal s=BigDecimal.ZERO;int n=0;for(int j=Math.max(0,x.size()-7);j<x.size();j++){s=s.add(x.get(j));n++;}BigDecimal q=n==0?BigDecimal.ZERO:s.divide(BigDecimal.valueOf(n),6,RoundingMode.HALF_UP);out.add(q);x.add(q);}return out;}
+    public List<BigDecimal> ses(List<BigDecimal> history,int horizon){List<BigDecimal>x=new ArrayList<>(history);BigDecimal level=x.isEmpty()?BigDecimal.ZERO:x.get(0);for(int i=1;i<x.size();i++)level=BigDecimal.valueOf(.3).multiply(x.get(i)).add(BigDecimal.valueOf(.7).multiply(level));List<BigDecimal>out=new ArrayList<>();for(int i=0;i<horizon;i++)out.add(level);return out;}
+    public List<BigDecimal> holt(List<BigDecimal> h,int horizon){if(h.isEmpty()){return zeros(horizon);}BigDecimal level=h.get(0),trend=h.size()>1?h.get(1).subtract(h.get(0)):BigDecimal.ZERO;for(int i=1;i<h.size();i++){BigDecimal old=level;level=BigDecimal.valueOf(.3).multiply(h.get(i)).add(BigDecimal.valueOf(.7).multiply(level.add(trend)));trend=BigDecimal.valueOf(.1).multiply(level.subtract(old)).add(BigDecimal.valueOf(.9).multiply(trend));}List<BigDecimal>out=new ArrayList<>();for(int i=1;i<=horizon;i++)out.add(level.add(trend.multiply(BigDecimal.valueOf(i))));return out;}
+    public List<BigDecimal> seasonalNaive(List<BigDecimal> h,int horizon){List<BigDecimal>out=new ArrayList<>();for(int i=0;i<horizon;i++){int target=h.size()+i-7;List<BigDecimal>vals=new ArrayList<>();for(int k=0;k<4;k++){int ix=target-k*7;if(ix>=0&&ix<h.size())vals.add(h.get(ix));}BigDecimal s=BigDecimal.ZERO;for(BigDecimal x:vals)s=s.add(x);out.add(vals.isEmpty()?BigDecimal.ZERO:s.divide(BigDecimal.valueOf(vals.size()),6,RoundingMode.HALF_UP));}return out;}
+    public Result forecast(List<BigDecimal> history,int horizon,String requested){Result r=new Result();r.setHistory(new ArrayList<>(history));String method=requested==null?"AUTO":requested;List<String> methods=Arrays.asList("MA","SES","HOLT","SEASONAL_NAIVE");if("AUTO".equals(method)){double best=Double.MAX_VALUE;String bm="MA";for(String m:methods){double x=backtest(history,m);if(x<best){best=x;bm=m;}}method=bm;}List<BigDecimal> values=run(history,horizon,method);r.setMethod(method);r.setForecastValues(values);r.setMape(backtest(history,method));double sd=residualStd(history,method);List<Point> points=new ArrayList<>();for(int i=0;i<values.size();i++){Point p=new Point(LocalDate.now().plusDays(i+1),values.get(i));BigDecimal band=BigDecimal.valueOf(1.28*sd);p.setLower(values.get(i).subtract(band).max(BigDecimal.ZERO));p.setUpper(values.get(i).add(band));points.add(p);}r.setForecast(points);return r;}
+    public List<BigDecimal> run(List<BigDecimal> h,int horizon,String method){if("MA".equals(method))return movingAverage(h,horizon);if("SES".equals(method))return ses(h,horizon);if("HOLT".equals(method))return holt(h,horizon);return seasonalNaive(h,horizon);}
+    public double backtest(List<BigDecimal> h,String method){if(h.size()<8)return 0;int hold=Math.min(14,Math.max(1,h.size()/3));int start=h.size()-hold;double sum=0;int n=0;for(int i=start;i<h.size();i++){List<BigDecimal>train=h.subList(0,i);BigDecimal pred=run(train,1,method).get(0);double actual=h.get(i).doubleValue();if(actual!=0){sum+=Math.abs(pred.doubleValue()-actual)/Math.abs(actual);n++;}}return n==0?0:sum/n*100;}
+    private double residualStd(List<BigDecimal>h,String method){if(h.size()<8)return 0;int start=Math.max(1,h.size()-14);List<Double>e=new ArrayList<>();for(int i=start;i<h.size();i++){BigDecimal p=run(h.subList(0,i),1,method).get(0);e.add(h.get(i).subtract(p).doubleValue());}double avg=0;for(double x:e)avg+=x;avg/=Math.max(1,e.size());double s=0;for(double x:e)s+=(x-avg)*(x-avg);return Math.sqrt(s/Math.max(1,e.size()));}
+    private List<BigDecimal> zeros(int n){List<BigDecimal>o=new ArrayList<>();for(int i=0;i<n;i++)o.add(BigDecimal.ZERO);return o;}
+}
