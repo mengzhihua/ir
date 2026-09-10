@@ -23,6 +23,8 @@ public class ClientFactory {
     private final MockWmsClient wms;
     private final MockTmsClient tms;
     private final MockBmsClient bms;
+    private final MockSrmClient srm;
+    private final MockSapClient sap;
     private final BaseUrlValidator validator;
     private final RestTemplate http;
 
@@ -32,8 +34,10 @@ public class ClientFactory {
             MockWmsClient wms,
             MockTmsClient tms,
             MockBmsClient bms,
+            MockSrmClient srm,
+            MockSapClient sap,
             BaseUrlValidator validator) {
-        this(oms, wms, tms, bms, validator, null);
+        this(oms, wms, tms, bms, srm, sap, validator, null);
     }
 
     ClientFactory(
@@ -41,12 +45,16 @@ public class ClientFactory {
             MockWmsClient wms,
             MockTmsClient tms,
             MockBmsClient bms,
+            MockSrmClient srm,
+            MockSapClient sap,
             BaseUrlValidator validator,
             RestTemplate http) {
         this.oms = oms;
         this.wms = wms;
         this.tms = tms;
         this.bms = bms;
+        this.srm = srm;
+        this.sap = sap;
         this.validator = validator;
         this.http = http == null ? createHttp() : http;
         this.http.getInterceptors().add(this::validateRequest);
@@ -104,5 +112,19 @@ public class ClientFactory {
             return new HttpBmsClient(http, system.getBaseUrl(), system.getApiKey());
         }
         return bms;
+    }
+
+    public SrmClient srm(CtSystem system) {
+        if ("HTTP".equalsIgnoreCase(system.getMode())) {
+            return new HttpSrmClient(http, system.getBaseUrl(), system.getUsername(), system.getPassword());
+        }
+        return srm;
+    }
+
+    public SapClient sap(CtSystem system) {
+        if ("HTTP".equalsIgnoreCase(system.getMode())) {
+            return new HttpSapClient(http, system.getBaseUrl(), system.getUsername(), system.getPassword());
+        }
+        return sap;
     }
 }

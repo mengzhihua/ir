@@ -11,6 +11,10 @@ import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSystemMapper;
 import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.OrderSnapshotMapper;
+import com.ir.snapshot.InventorySnapshot;
+import com.ir.snapshot.InventorySnapshotMapper;
+import com.ir.snapshot.PurchaseSnapshot;
+import com.ir.snapshot.PurchaseSnapshotMapper;
 import com.ir.snapshot.ShipmentSnapshot;
 import com.ir.snapshot.ShipmentSnapshotMapper;
 import com.ir.snapshot.WmsOrderSnapshot;
@@ -21,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -34,6 +39,8 @@ public class ActionService {
     private final OrderSnapshotMapper orderMapper;
     private final WmsOrderSnapshotMapper wmsMapper;
     private final ShipmentSnapshotMapper shipmentMapper;
+    private final InventorySnapshotMapper inventoryMapper;
+    private final PurchaseSnapshotMapper purchaseMapper;
     private final ClientFactory clients;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
@@ -44,6 +51,8 @@ public class ActionService {
             OrderSnapshotMapper orderMapper,
             WmsOrderSnapshotMapper wmsMapper,
             ShipmentSnapshotMapper shipmentMapper,
+            InventorySnapshotMapper inventoryMapper,
+            PurchaseSnapshotMapper purchaseMapper,
             ClientFactory clients,
             CodeGenerator codes,
             ObjectMapper objectMapper) {
@@ -53,6 +62,8 @@ public class ActionService {
         this.wmsMapper = wmsMapper;
         this.shipmentMapper = shipmentMapper;
         this.clients = clients;
+        this.inventoryMapper = inventoryMapper;
+        this.purchaseMapper = purchaseMapper;
         this.codes = codes;
         this.objectMapper = objectMapper;
     }
@@ -60,11 +71,6 @@ public class ActionService {
     @Transactional
     public CtAction createAndExecute(Map<String, Object> request) {
         CtAction action = create(request);
-        if ("SRM".equals(action.getTargetSystem())) {
-            action.setResult("SRM 未接入，已生成采购建议");
-            actionMapper.updateById(action);
-            return action;
-        }
         try {
             execute(action, read(action.getParamsJson()));
         } catch (Exception ex) {
@@ -115,16 +121,25 @@ public class ActionService {
             command.setType(action.getType());
             command.setTargetKey(action.getTargetKey());
             command.setParams(params);
+            if (system == null || !Boolean.TRUE.equals(system.getEnabled())) {
+                throw new IllegalStateException(action.getTargetSystem() + " 未接入或已停用");
+            }
+            String result = "指令执行成功";
             if ("OMS".equals(action.getTargetSystem())) {
                 clients.oms(system).execute(command);
             } else if ("WMS".equals(action.getTargetSystem())) {
                 clients.wms(system).execute(command);
+            } else if ("SRM".equals(action.getTargetSystem())) {
+                Map<String, Object> reply = clients.srm(system).execute(command);
+                if (reply != null && !reply.isEmpty()) {
+                    result = write(reply);
+                }
             } else {
                 clients.tms(system).execute(command);
             }
             mutateSnapshot(action, params);
             action.setStatus("SUCCESS");
-            action.setResult("指令执行成功");
+            action.setResult(result);
         } catch (Exception ex) {
             action.setStatus("FAILED");
             action.setResult(ex.getMessage());
@@ -183,7 +198,10 @@ public class ActionService {
                 type("TMS_SWITCH_CARRIER", "TMS", field("waybillId", "运单号", true),
                         field("carrierCode", "承运商编码", true)),
                 type("SRM_PURCHASE_SUGGEST", "SRM", field("sku", "SKU", true),
-                        field("qty", "建议数量", true)));
+                        field("qty", "建议数量", true), field("plantCode", "工厂", false),
+                        field("reason", "原因", false)),
+                type("SRM_EXPEDITE_PO", "SRM", field("poCode", "采购订单号", true),
+                        field("reason", "原因", false)));
     }
 
     private void mutateSnapshot(CtAction action, Map<String, Object> params) {
@@ -207,6 +225,30 @@ public class ActionService {
             if (order != null) {
                 order.setStatus("ALLOCATED");
                 wmsMapper.updateById(order);
+            }
+        } else if ("WMS_REPLENISH".equals(action.getType())) {
+            String sku = params.get("sku") == null ? null : String.valueOf(params.get("sku"));
+            String warehouse = params.get("warehouseCode") == null
+                    ? action.getTargetKey() : String.valueOf(params.get("warehouseCode"));
+            if (sku != null && params.get("qty") != null) {
+                InventorySnapshot item = inventoryMapper.selectOne(new LambdaQueryWrapper<InventorySnapshot>()
+                        .eq(InventorySnapshot::getSourceSystem, "WMS")
+                        .eq(InventorySnapshot::getWarehouseCode, warehouse)
+                        .eq(InventorySnapshot::getSku, sku));
+                if (item != null) {
+                    BigDecimal qty = decimal(params.get("qty"));
+                    item.setQtyOnHand(item.getQtyOnHand().add(qty));
+                    item.setQtyAvailable(item.getQtyAvailable().add(qty));
+                    inventoryMapper.updateById(item);
+                }
+            }
+        } else if ("SRM_EXPEDITE_PO".equals(action.getType())) {
+            PurchaseSnapshot po = purchaseMapper.selectOne(new LambdaQueryWrapper<PurchaseSnapshot>()
+                    .eq(PurchaseSnapshot::getDocType, "PO")
+                    .eq(PurchaseSnapshot::getCode, action.getTargetKey()));
+            if (po != null) {
+                po.setExpectedDate(LocalDate.now().plusDays(1));
+                purchaseMapper.updateById(po);
             }
         } else if ("TMS_SWITCH_CARRIER".equals(action.getType())) {
             ShipmentSnapshot shipment = shipmentMapper.selectOne(

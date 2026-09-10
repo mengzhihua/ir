@@ -5,6 +5,15 @@ const cdpUrl = process.env.CDP_URL || 'http://localhost:29229'
 const routes = [
   ['/dashboard', null],
   ['/trace', async (page) => page.getByRole('button', { name: '详情' }).first().click()],
+  ['/objective', null],
+  [
+    '/balance',
+    async (page) => {
+      await page.getByRole('button', { name: '立即平衡' }).click()
+      await page.getByRole('dialog').waitFor({ state: 'visible', timeout: 15000 })
+    }
+  ],
+  ['/supply', null],
   ['/alert', null],
   ['/rule', null],
   ['/action', null],
@@ -73,8 +82,7 @@ async function assertPage(page, route) {
     const hasEmpty = await table.locator('.el-table__empty-text').count()
     const rows = await table.locator('.el-table__body-wrapper tbody tr').count()
     const requiresData =
-      (route === '/sandbox' &&
-        (await table.locator('.sandbox-sku-table').count()) > 0) ||
+      (route === '/sandbox' && (await table.locator('.sandbox-sku-table').count()) > 0) ||
       route === '/replenish'
     if ((hasEmpty === 0 || requiresData) && rows === 0) {
       throw new Error(`第 ${index + 1} 个表格没有数据行`)

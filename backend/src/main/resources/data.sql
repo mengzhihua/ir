@@ -12,7 +12,10 @@ KEY (code)
 VALUES ('BMS', '计费系统', 'http://localhost:8084', 'API_KEY', NULL, NULL, NULL, 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('SRM', '供应商管理系统（预留）', NULL, 'NONE', NULL, NULL, NULL, 'MOCK', FALSE);
+VALUES ('SRM', '供应商管理系统', 'http://localhost:8081', 'BEARER', 'admin', 'admin123', NULL, 'MOCK', TRUE);
+MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+KEY (code)
+VALUES ('SAP', 'SAP 复刻系统', 'http://localhost:8085', 'BEARER', 'admin', 'admin123', NULL, 'MOCK', TRUE);
 
 MERGE INTO ct_user (username, password, real_name, role, enabled)
 KEY (username)
@@ -52,3 +55,26 @@ VALUES ('EXCEPTION_SHIPMENT', '运输异常', 'TMS_DELAY', '{"exception":true}',
 MERGE INTO ct_cost_target ("month", cost_type, target_amount)
 KEY ("month", cost_type)
 VALUES (FORMATDATETIME(CURRENT_DATE, 'yyyy-MM'), NULL, 100000.00);
+
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
+VALUES ('ASN_DELAY', '供应商到货延误', 'ASN_DELAY', '{"days":0}', 'HIGH', TRUE, 'SRM_EXPEDITE_PO');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
+VALUES ('SUPPLIER_RISK', '供应商绩效风险', 'SUPPLIER_RISK', '{"minScore":85}', 'MEDIUM', TRUE, NULL);
+
+MERGE INTO ct_objective (code, name, category, metric, direction, target_value, weight, unit, enabled)
+KEY (code)
+VALUES ('COST_PER_ORDER', '单均履约成本', 'COST', 'costPerOrder30d', 'MIN', 25.0, 30, 'CNY', TRUE);
+MERGE INTO ct_objective (code, name, category, metric, direction, target_value, weight, unit, enabled)
+KEY (code)
+VALUES ('OTIF', '准时足量交付率', 'SERVICE', 'otif30d', 'MAX', 0.95, 25, '%', TRUE);
+MERGE INTO ct_objective (code, name, category, metric, direction, target_value, weight, unit, enabled)
+KEY (code)
+VALUES ('NPS', '客户 NPS 估算', 'SERVICE', 'npsEstimate', 'MAX', 50, 25, 'pt', TRUE);
+MERGE INTO ct_objective (code, name, category, metric, direction, target_value, weight, unit, enabled)
+KEY (code)
+VALUES ('STOCKOUT_RATE', '缺货 SKU 占比', 'INVENTORY', 'stockoutRate', 'MIN', 0.05, 10, '%', TRUE);
+MERGE INTO ct_objective (code, name, category, metric, direction, target_value, weight, unit, enabled)
+KEY (code)
+VALUES ('SUPPLIER_OTD', '供应商准时到货率', 'SUPPLY', 'supplierOnTimeRate', 'MAX', 0.92, 10, '%', TRUE);

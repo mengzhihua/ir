@@ -29,6 +29,15 @@ json "$BASE/api/integration/system" | jq -e '.code==0 and (.data|length)>=5' >/d
 json -X POST "$BASE/api/integration/system/OMS/health" | jq -e '.code==0 and .data.ok==true' >/dev/null
 json -X POST "$BASE/api/integration/sync" -H 'Content-Type: application/json' -d '{}' | jq -e '.code==0' >/dev/null
 json "$BASE/api/integration/sync-log/page" | jq -e '.code==0 and .data.total>0' >/dev/null
+json -X POST "$BASE/api/integration/sync/SRM" | jq -e '.code==0 and .data.purchaseOrders>0' >/dev/null
+json -X POST "$BASE/api/integration/sync/SAP" | jq -e '.code==0 and .data.stock>0' >/dev/null
+json "$BASE/api/objective" | jq -e '.code==0 and (.data|length)>=5' >/dev/null
+json "$BASE/api/objective/scoreboard" | jq -e '.code==0 and (.data.score|numbers) and (.data.metrics.npsEstimate|numbers)' >/dev/null
+json "$BASE/api/balance/overview" | jq -e '.code==0 and (.data.strategies|length)>=6' >/dev/null
+json -X POST "$BASE/api/balance/run" | jq -e '.code==0 and .data.run.status=="DONE"' >/dev/null
+json "$BASE/api/balance/decision/page" | jq -e '.code==0 and (.data.records|type=="array")' >/dev/null
+json "$BASE/api/supply/overview" | jq -e '.code==0 and (.data.suppliers|length)>0' >/dev/null
+json "$BASE/api/supply/purchase/page?docType=ASN" | jq -e '.code==0 and .data.total>0' >/dev/null
 json "$BASE/api/system/user" | jq -e '.code==0 and (.data.records|length)>=3 and .data.total>=3' >/dev/null
 json "$BASE/api/system/op-log/page" | jq -e '.code==0 and (.data.records|type=="array")' >/dev/null
 echo "smoke ok: baseline=$BASELINE scenario=$SCENARIO"

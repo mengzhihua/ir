@@ -32,3 +32,12 @@ ir:
   cost:
     handling-per-order: ${IR_COST_HANDLING_PER_ORDER:1.5}
     packaging-per-order: ${IR_COST_PACKAGING_PER_ORDER:0.8}
+  balance:
+    mode: ${IR_BALANCE_MODE:AUTO}
+    schedule-enabled: ${IR_BALANCE_SCHEDULE:true}
+    cron: ${IR_BALANCE_CRON:0 10/30 * * * ?}
+    max-decisions-per-run: ${IR_BALANCE_MAX_DECISIONS:20}
+    max-auto-execute-per-run: ${IR_BALANCE_MAX_AUTO:10}
+    auto-purchase-amount-limit: ${IR_BALANCE_PURCHASE_LIMIT:20000}
+    cooldown-hours: ${IR_BALANCE_COOLDOWN_HOURS:24}
+    service-guard-attainment: ${IR_BALANCE_SERVICE_GUARD:0.9}

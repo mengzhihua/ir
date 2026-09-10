@@ -105,12 +105,14 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { towerApi } from '../api'
+import { balanceApi, objectiveApi, towerApi } from '../api'
 import Chart from '../components/Chart.vue'
 import { formatDate, formatMoney, formatNumber, percent } from '../utils/format'
 import { labelOf, severityLabels, systemModeLabels, tagTypes } from '../utils/labels'
 
 const loading = ref(false)
+const board = reactive({ score: 0, metrics: {} })
+const balance = reactive({})
 const overview = reactive({
   kpi: {},
   funnel: {},
@@ -134,7 +136,10 @@ const cards = computed(() => [
     label: '平均时效',
     value: `${formatNumber(overview.kpi.avgLeadTimeHours, 1)}小时`,
     color: '#909399'
-  }
+  },
+  { label: 'NPS估算', value: formatNumber(board.metrics.npsEstimate, 1), color: '#67c23a' },
+  { label: '目标达成分', value: formatNumber(board.score, 1), color: '#409eff' },
+  { label: '待审批决策', value: formatNumber(balance.pendingDecisions, 0), color: '#e6a23c' }
 ])
 
 const costOption = computed(() => {
@@ -190,6 +195,8 @@ async function load() {
   loading.value = true
   try {
     Object.assign(overview, await towerApi.overview())
+    Object.assign(board, await objectiveApi.scoreboard())
+    Object.assign(balance, await balanceApi.overview())
   } finally {
     loading.value = false
   }

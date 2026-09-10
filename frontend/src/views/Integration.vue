@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h2>系统集成</h2>
-        <p class="subtitle">统一管理OMS、WMS、TMS、BMS连接与同步</p>
+        <p class="subtitle">统一管理OMS、WMS、TMS、BMS、SRM、SAP连接与同步</p>
       </div>
       <el-button @click="load">刷新</el-button>
     </div>
@@ -12,8 +12,8 @@
         ><template #header
           ><div class="card-head">
             <strong>{{ system.name || system.systemName || system.code }}</strong
-            ><el-tag :type="system.code === 'SRM' ? 'info' : 'success'">{{
-              system.code === 'SRM' ? '预留' : labelOf(system.mode, systemModeLabels)
+            ><el-tag :type="system.enabled === false ? 'info' : 'success'">{{
+              system.enabled === false ? '停用' : labelOf(system.mode, systemModeLabels)
             }}</el-tag>
           </div></template
         ><el-descriptions :column="1" size="small"
@@ -28,18 +28,11 @@
           }}</el-descriptions-item></el-descriptions
         >
         <div class="card-actions">
-          <el-radio-group
-            v-model="system.mode"
-            :disabled="system.code === 'SRM' || !canWrite()"
-            @change="saveMode(system)"
+          <el-radio-group v-model="system.mode" :disabled="!canWrite()" @change="saveMode(system)"
             ><el-radio-button value="MOCK" /><el-radio-button value="HTTP" /></el-radio-group
           ><el-button size="small" @click="edit(system)">编辑</el-button
           ><el-button size="small" @click="health(system)">健康检查</el-button
-          ><el-button
-            size="small"
-            type="primary"
-            :disabled="system.code === 'SRM' || !canWrite()"
-            @click="sync(system)"
+          ><el-button size="small" type="primary" :disabled="!canWrite()" @click="sync(system)"
             >立即同步</el-button
           >
         </div></el-card

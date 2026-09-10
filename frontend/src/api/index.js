@@ -71,3 +71,26 @@ export const systemApi = {
   deleteUser: (id) => http.delete(`/system/user/${id}`),
   opLogs: (params) => http.get('/system/op-log/page', { params })
 }
+export const objectiveApi = {
+  list: () => http.get('/objective'),
+  save: (data) => http.post('/objective', data),
+  remove: (id) => http.delete(`/objective/${id}`),
+  scoreboard: () => http.get('/objective/scoreboard'),
+  metrics: () => http.get('/objective/metrics')
+}
+export const balanceApi = {
+  overview: () => http.get('/balance/overview'),
+  run: () => http.post('/balance/run'),
+  runs: (params) => http.get('/balance/run/page', { params }),
+  runDetail: (id) => http.get(`/balance/run/${id}`),
+  decisions: (params) => http.get('/balance/decision/page', { params }),
+  approve: (id) => http.post(`/balance/decision/${id}/approve`),
+  reject: (id, reason) => http.post(`/balance/decision/${id}/reject`, { reason }),
+  config: () => http.get('/balance/config'),
+  saveConfig: (data) => http.post('/balance/config', data)
+}
+export const supplyApi = {
+  overview: () => http.get('/supply/overview'),
+  page: (params) => http.get('/supply/purchase/page', { params }),
+  sap: () => http.get('/supply/sap')
+}
