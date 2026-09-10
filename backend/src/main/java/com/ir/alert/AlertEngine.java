@@ -14,7 +14,11 @@ import com.ir.snapshot.CostRecordMapper;
 import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.OrderSnapshotMapper;
 import com.ir.snapshot.ShipmentSnapshot;
+import com.ir.snapshot.PurchaseSnapshot;
+import com.ir.snapshot.PurchaseSnapshotMapper;
 import com.ir.snapshot.ShipmentSnapshotMapper;
+import com.ir.snapshot.SupplierScore;
+import com.ir.snapshot.SupplierScoreMapper;
 import com.ir.snapshot.WmsOrderSnapshot;
 import com.ir.snapshot.WmsOrderSnapshotMapper;
 import com.ir.common.CodeGenerator;
@@ -23,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,6 +46,8 @@ public class AlertEngine {
     private final ObjectMapper objectMapper;
     private final CostRecordMapper costMapper;
     private final ForecastService forecastService;
+    private final PurchaseSnapshotMapper purchaseMapper;
+    private final SupplierScoreMapper supplierScoreMapper;
 
     public AlertEngine(
             CtRuleMapper ruleMapper,
@@ -53,7 +60,11 @@ public class AlertEngine {
             CodeGenerator codes,
             ObjectMapper objectMapper,
             CostRecordMapper costMapper,
-            ForecastService forecastService) {
+            ForecastService forecastService,
+            PurchaseSnapshotMapper purchaseMapper,
+            SupplierScoreMapper supplierScoreMapper) {
+        this.purchaseMapper = purchaseMapper;
+        this.supplierScoreMapper = supplierScoreMapper;
         this.ruleMapper = ruleMapper;
         this.alertMapper = alertMapper;
         this.orderMapper = orderMapper;
@@ -86,6 +97,10 @@ public class AlertEngine {
                 evaluateCost(rule, params);
             } else if ("FORECAST_STOCKOUT".equals(rule.getType())) {
                 evaluateForecast(rule, params);
+            } else if ("ASN_DELAY".equals(rule.getType())) {
+                evaluateAsn(rule, params);
+            } else if ("SUPPLIER_RISK".equals(rule.getType())) {
+                evaluateSuppliers(rule, params);
             }
         }
         return all();
@@ -252,8 +267,37 @@ public class AlertEngine {
         }
     }
 
+    private void evaluateAsn(CtRule rule, Map<String, Object> params) {
+        int days = params.get("days") == null ? 0 : Integer.parseInt(String.valueOf(params.get("days")));
+        LocalDate deadline = LocalDate.now().minusDays(days);
+        for (PurchaseSnapshot asn : purchaseMapper.selectList(new LambdaQueryWrapper<PurchaseSnapshot>()
+                .eq(PurchaseSnapshot::getDocType, "ASN")
+                .notIn(PurchaseSnapshot::getStatus, "RECEIVED", "CANCELLED"))) {
+            boolean late = "DELAYED".equals(asn.getStatus())
+                    || (asn.getExpectedDate() != null && asn.getExpectedDate().isBefore(deadline));
+            if (late) {
+                add(rule, "PO", asn.getRefCode() == null ? asn.getCode() : asn.getRefCode(), asn.getPlantCode(),
+                        "供应商到货延误", "ASN " + asn.getCode() + " 供应商 " + asn.getSupplierCode()
+                                + " 预计 " + asn.getExpectedDate() + " 到货,仍未收货");
+            }
+        }
+    }
+
+    private void evaluateSuppliers(CtRule rule, Map<String, Object> params) {
+        BigDecimal minScore = params.get("minScore") == null
+                ? BigDecimal.valueOf(85) : new BigDecimal(String.valueOf(params.get("minScore")));
+        for (SupplierScore score : supplierScoreMapper.selectList(null)) {
+            if (score.getAvgScore() != null && score.getAvgScore().compareTo(minScore) < 0) {
+                add(rule, "SUPPLIER", score.getSupplierCode(), null,
+                        "供应商绩效风险", "供应商 " + score.getSupplierCode() + " " + score.getPeriod()
+                                + " 综合得分 " + score.getAvgScore() + " 低于 " + minScore);
+            }
+        }
+    }
+
     private void evaluateInventory(CtRule rule) {
-        for (InventorySnapshot inventory : inventoryMapper.selectList(null)) {
+        for (InventorySnapshot inventory : inventoryMapper.selectList(new LambdaQueryWrapper<InventorySnapshot>()
+                .ne(InventorySnapshot::getSourceSystem, "SAP"))) {
             if (inventory.getQtyAvailable().compareTo(inventory.getSafetyQty()) < 0) {
                 add(rule, "SKU", inventory.getSku(), inventory.getWarehouseCode(),
                         "低库存", "可用库存低于安全库存");

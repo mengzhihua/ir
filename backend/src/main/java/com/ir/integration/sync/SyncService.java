@@ -73,6 +73,10 @@ public class SyncService {
             ok = clients.wms(system).health();
         } else if ("TMS".equals(code)) {
             ok = clients.tms(system).health();
+        } else if ("SRM".equals(code)) {
+            ok = clients.srm(system).health();
+        } else if ("SAP".equals(code)) {
+            ok = clients.sap(system).health();
         } else {
             ok = clients.bms(system).health();
         }

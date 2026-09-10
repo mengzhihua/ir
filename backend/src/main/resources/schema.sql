@@ -222,6 +222,109 @@ CREATE TABLE IF NOT EXISTS ct_cost_target (
     UNIQUE("month", cost_type)
 );
 
+CREATE TABLE IF NOT EXISTS ct_purchase_snapshot (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    doc_type VARCHAR(16) NOT NULL,
+    code VARCHAR(64) NOT NULL,
+    ref_code VARCHAR(64),
+    supplier_code VARCHAR(64),
+    plant_code VARCHAR(32),
+    sku VARCHAR(64),
+    status VARCHAR(32),
+    qty DECIMAL(18,2),
+    received_qty DECIMAL(18,2),
+    amount DECIMAL(18,2),
+    expected_date DATE,
+    received_at TIMESTAMP,
+    synced_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    UNIQUE(doc_type, code)
+);
+
+CREATE TABLE IF NOT EXISTS ct_supplier_score (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_code VARCHAR(64) NOT NULL,
+    period VARCHAR(7) NOT NULL,
+    receipt_count INT,
+    on_time_rate DECIMAL(8,4),
+    qty_accuracy DECIMAL(8,4),
+    quality_rate DECIMAL(8,4),
+    avg_score DECIMAL(8,2),
+    grade VARCHAR(8),
+    synced_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    UNIQUE(supplier_code, period)
+);
+
+CREATE TABLE IF NOT EXISTS ct_finance_snapshot (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    metric VARCHAR(32) NOT NULL,
+    dimension VARCHAR(64) NOT NULL,
+    amount DECIMAL(18,2),
+    item_count INT,
+    synced_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    UNIQUE(metric, dimension)
+);
+
+CREATE TABLE IF NOT EXISTS ct_objective (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    category VARCHAR(32) NOT NULL,
+    metric VARCHAR(64) NOT NULL,
+    direction VARCHAR(8) NOT NULL,
+    target_value DECIMAL(18,4) NOT NULL,
+    weight DECIMAL(8,2) NOT NULL,
+    unit VARCHAR(16),
+    enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ct_balance_run (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    run_no VARCHAR(64) NOT NULL UNIQUE,
+    trigger_type VARCHAR(16) NOT NULL,
+    mode VARCHAR(16) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    score_before DECIMAL(8,2),
+    score_after DECIMAL(8,2),
+    decision_count INT,
+    executed_count INT,
+    pending_count INT,
+    summary_json CLOB,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ct_balance_decision (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    run_id BIGINT NOT NULL,
+    strategy VARCHAR(64) NOT NULL,
+    objective_code VARCHAR(64),
+    target_system VARCHAR(32) NOT NULL,
+    action_type VARCHAR(64) NOT NULL,
+    target_key VARCHAR(128),
+    params_json CLOB,
+    expected_cost_delta DECIMAL(18,2),
+    expected_nps_delta DECIMAL(8,2),
+    risk_level VARCHAR(16),
+    approval_required BOOLEAN,
+    status VARCHAR(16) NOT NULL,
+    action_id BIGINT,
+    reason VARCHAR(500),
+    decided_by VARCHAR(64),
+    decided_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS ct_user (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(64) NOT NULL UNIQUE,

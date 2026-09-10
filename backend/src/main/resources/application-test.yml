@@ -8,3 +8,5 @@ spring:
 ir:
   sync:
     enabled: false
+  balance:
+    schedule-enabled: false

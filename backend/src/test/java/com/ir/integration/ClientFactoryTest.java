@@ -6,6 +6,8 @@ import com.ir.integration.client.IntegrationException;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mock.MockBmsClient;
 import com.ir.integration.mock.MockOmsClient;
+import com.ir.integration.mock.MockSapClient;
+import com.ir.integration.mock.MockSrmClient;
 import com.ir.integration.mock.MockTmsClient;
 import com.ir.integration.mock.MockWmsClient;
 import com.sun.net.httpserver.HttpExchange;
@@ -52,6 +54,8 @@ class ClientFactoryTest {
                     mock(MockWmsClient.class),
                     mock(MockTmsClient.class),
                     mock(MockBmsClient.class),
+                    mock(MockSrmClient.class),
+                    mock(MockSapClient.class),
                     new BaseUrlValidator(true));
             CtSystem system = new CtSystem();
             system.setMode("HTTP");
@@ -73,6 +77,8 @@ class ClientFactoryTest {
                 mock(MockWmsClient.class),
                 mock(MockTmsClient.class),
                 mock(MockBmsClient.class),
+                mock(MockSrmClient.class),
+                mock(MockSapClient.class),
                 new BaseUrlValidator(false));
         CtSystem system = new CtSystem();
         system.setMode("HTTP");

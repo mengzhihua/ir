@@ -33,10 +33,19 @@ final class HttpSupport {
     }
 
     static Map<String, Object> postMap(RestTemplate http, String url, Object body, HttpHeaders headers) {
+        return exchange(http, HttpMethod.POST, url, body, headers);
+    }
+
+    static Map<String, Object> putMap(RestTemplate http, String url, Object body, HttpHeaders headers) {
+        return exchange(http, HttpMethod.PUT, url, body, headers);
+    }
+
+    private static Map<String, Object> exchange(RestTemplate http, HttpMethod method, String url,
+                                                Object body, HttpHeaders headers) {
         try {
             ResponseEntity<Map<String, Object>> response = http.exchange(
                     url,
-                    HttpMethod.POST,
+                    method,
                     new HttpEntity<>(body, headers),
                     new ParameterizedTypeReference<Map<String, Object>>() {
                     });

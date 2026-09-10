@@ -5,6 +5,8 @@ import com.ir.integration.client.BmsClient;
 import com.ir.integration.client.ClientFactory;
 import com.ir.integration.client.IntegrationException;
 import com.ir.integration.client.OmsClient;
+import com.ir.integration.client.SapClient;
+import com.ir.integration.client.SrmClient;
 import com.ir.integration.client.TmsClient;
 import com.ir.integration.client.WmsClient;
 import com.ir.integration.entity.CtSyncLog;
@@ -13,6 +15,12 @@ import com.ir.integration.mapper.CtSyncLogMapper;
 import com.ir.integration.mapper.CtSystemMapper;
 import com.ir.snapshot.CostRecord;
 import com.ir.snapshot.CostRecordMapper;
+import com.ir.snapshot.FinanceSnapshot;
+import com.ir.snapshot.FinanceSnapshotMapper;
+import com.ir.snapshot.PurchaseSnapshot;
+import com.ir.snapshot.PurchaseSnapshotMapper;
+import com.ir.snapshot.SupplierScore;
+import com.ir.snapshot.SupplierScoreMapper;
 import com.ir.snapshot.InventorySnapshot;
 import com.ir.snapshot.InventorySnapshotMapper;
 import com.ir.snapshot.OrderSnapshot;
@@ -43,6 +51,9 @@ public class SystemSyncWorker {
     private final InventorySnapshotMapper inventoryMapper;
     private final SalesDailyMapper salesMapper;
     private final CostRecordMapper costMapper;
+    private final PurchaseSnapshotMapper purchaseMapper;
+    private final SupplierScoreMapper supplierScoreMapper;
+    private final FinanceSnapshotMapper financeMapper;
     private final ClientFactory clients;
 
     public SystemSyncWorker(
@@ -54,7 +65,13 @@ public class SystemSyncWorker {
             InventorySnapshotMapper inventoryMapper,
             SalesDailyMapper salesMapper,
             CostRecordMapper costMapper,
+            PurchaseSnapshotMapper purchaseMapper,
+            SupplierScoreMapper supplierScoreMapper,
+            FinanceSnapshotMapper financeMapper,
             ClientFactory clients) {
+        this.purchaseMapper = purchaseMapper;
+        this.supplierScoreMapper = supplierScoreMapper;
+        this.financeMapper = financeMapper;
         this.systemMapper = systemMapper;
         this.syncLogMapper = syncLogMapper;
         this.orderMapper = orderMapper;
@@ -92,6 +109,15 @@ public class SystemSyncWorker {
             LocalDate to = LocalDate.now();
             result.put("costs", persistCosts(
                     client.fetchCosts(to.minusDays(90), to), "BMS"));
+        } else if ("SRM".equals(code)) {
+            SrmClient client = clients.srm(system);
+            result.put("purchaseOrders", persistPurchases(client.fetchPurchaseOrders()));
+            result.put("asns", persistPurchases(client.fetchAsns()));
+            result.put("supplierScores", persistSupplierScores(client.fetchSupplierScores()));
+        } else if ("SAP".equals(code)) {
+            SapClient client = clients.sap(system);
+            result.put("stock", persistInventory(client.fetchStock()));
+            result.put("finance", persistFinance(client.fetchFinance()));
         }
         system.setLastHealthAt(LocalDateTime.now());
         system.setLastHealthOk(true);
@@ -194,6 +220,57 @@ public class SystemSyncWorker {
             }
         }
         saveLog("OMS", "ORDER", "SUCCESS", rows.size(), "日销量同步完成");
+        return rows.size();
+    }
+
+    private int persistPurchases(List<PurchaseSnapshot> rows) {
+        for (PurchaseSnapshot row : rows) {
+            PurchaseSnapshot existing = purchaseMapper.selectOne(
+                    new LambdaQueryWrapper<PurchaseSnapshot>()
+                            .eq(PurchaseSnapshot::getDocType, row.getDocType())
+                            .eq(PurchaseSnapshot::getCode, row.getCode()));
+            row.setSyncedAt(LocalDateTime.now());
+            if (existing == null) {
+                purchaseMapper.insert(row);
+            } else {
+                row.setId(existing.getId());
+                purchaseMapper.updateById(row);
+            }
+        }
+        return rows.size();
+    }
+
+    private int persistSupplierScores(List<SupplierScore> rows) {
+        for (SupplierScore row : rows) {
+            SupplierScore existing = supplierScoreMapper.selectOne(
+                    new LambdaQueryWrapper<SupplierScore>()
+                            .eq(SupplierScore::getSupplierCode, row.getSupplierCode())
+                            .eq(SupplierScore::getPeriod, row.getPeriod()));
+            row.setSyncedAt(LocalDateTime.now());
+            if (existing == null) {
+                supplierScoreMapper.insert(row);
+            } else {
+                row.setId(existing.getId());
+                supplierScoreMapper.updateById(row);
+            }
+        }
+        return rows.size();
+    }
+
+    private int persistFinance(List<FinanceSnapshot> rows) {
+        for (FinanceSnapshot row : rows) {
+            FinanceSnapshot existing = financeMapper.selectOne(
+                    new LambdaQueryWrapper<FinanceSnapshot>()
+                            .eq(FinanceSnapshot::getMetric, row.getMetric())
+                            .eq(FinanceSnapshot::getDimension, row.getDimension()));
+            row.setSyncedAt(LocalDateTime.now());
+            if (existing == null) {
+                financeMapper.insert(row);
+            } else {
+                row.setId(existing.getId());
+                financeMapper.updateById(row);
+            }
+        }
         return rows.size();
     }
 

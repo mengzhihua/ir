@@ -6,6 +6,7 @@ import com.ir.sandbox.SandboxService;
 import com.ir.snapshot.CostRecordMapper;
 import com.ir.snapshot.InventorySnapshotMapper;
 import com.ir.snapshot.OrderSnapshotMapper;
+import com.ir.snapshot.PurchaseSnapshotMapper;
 import com.ir.snapshot.SalesDailyMapper;
 import com.ir.snapshot.ShipmentSnapshotMapper;
 import com.ir.snapshot.WmsOrderSnapshotMapper;
@@ -31,6 +32,7 @@ public class IrApplication implements CommandLineRunner {
     private final InventorySnapshotMapper inventoryMapper;
     private final SalesDailyMapper salesMapper;
     private final CostRecordMapper costMapper;
+    private final PurchaseSnapshotMapper purchaseMapper;
     private final UserStore users;
 
     public IrApplication(
@@ -43,7 +45,9 @@ public class IrApplication implements CommandLineRunner {
             InventorySnapshotMapper inventoryMapper,
             SalesDailyMapper salesMapper,
             CostRecordMapper costMapper,
+            PurchaseSnapshotMapper purchaseMapper,
             UserStore users) {
+        this.purchaseMapper = purchaseMapper;
         this.syncService = syncService;
         this.alertEngine = alertEngine;
         this.sandboxService = sandboxService;
@@ -64,6 +68,9 @@ public class IrApplication implements CommandLineRunner {
     public void run(String... args) {
         if (emptySnapshots()) {
             syncService.syncAll();
+        } else if (purchaseMapper.selectCount(null) == 0) {
+            syncService.sync("SRM");
+            syncService.sync("SAP");
         }
         alertEngine.evaluate();
         sandboxService.ensureBaseline();
