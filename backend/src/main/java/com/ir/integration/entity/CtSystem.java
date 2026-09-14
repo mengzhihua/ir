@@ -26,4 +26,5 @@ public class CtSystem extends BaseEntity {
     private LocalDateTime lastHealthAt;
     private Boolean lastHealthOk;
     private String lastError;
+    private LocalDateTime lastSyncAt;
 }

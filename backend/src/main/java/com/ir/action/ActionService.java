@@ -1,6 +1,7 @@
 package com.ir.action;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -113,6 +114,7 @@ public class ActionService {
     }
 
     private void execute(CtAction action, Map<String, Object> params) {
+        InventorySnapshot reserved = null;
         try {
             CtSystem system = systemMapper.selectOne(
                     new LambdaQueryWrapper<CtSystem>()
@@ -125,6 +127,7 @@ public class ActionService {
                 throw new IllegalStateException(action.getTargetSystem() + " 未接入或已停用");
             }
             validate(action, params);
+            reserved = reserveTransferSource(action, params);
             String result = "指令执行成功";
             if ("OMS".equals(action.getTargetSystem())) {
                 clients.oms(system).execute(command);
@@ -142,6 +145,9 @@ public class ActionService {
             action.setStatus("SUCCESS");
             action.setResult(result);
         } catch (Exception ex) {
+            if (reserved != null) {
+                adjustInventory(reserved.getId(), decimal(params.get("qty")));
+            }
             action.setStatus("FAILED");
             action.setResult(ex.getMessage());
         }
@@ -207,16 +213,43 @@ public class ActionService {
 
     private void validate(CtAction action, Map<String, Object> params) {
         if ("WMS_REPLENISH".equals(action.getType()) && params.get("fromWarehouseCode") != null) {
-            InventorySnapshot source = transferSource(params);
-            BigDecimal qty = decimal(params.get("qty"));
-            if (source == null || source.getQtyAvailable().compareTo(qty) < 0) {
-                throw new IllegalStateException("来源仓 " + params.get("fromWarehouseCode")
-                        + " 可用库存不足,无法调拨 " + qty + " 件 " + params.get("sku"));
+            if (decimal(params.get("qty")).compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalStateException("调拨缺少有效数量 qty");
             }
         } else if ("SRM_PURCHASE_SUGGEST".equals(action.getType())
                 && decimal(params.get("qty")).compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("采购建议缺少有效数量 qty");
         }
+    }
+
+    /**
+     * 调拨前原子预占来源仓库存:条件更新 qty_available >= qty,更新行数不为 1 则库存不足,
+     * 避免并发调拨重复使用同一份库存;外部调用失败时由调用方回补.
+     */
+    private InventorySnapshot reserveTransferSource(CtAction action, Map<String, Object> params) {
+        if (!"WMS_REPLENISH".equals(action.getType()) || params.get("fromWarehouseCode") == null) {
+            return null;
+        }
+        InventorySnapshot source = transferSource(params);
+        BigDecimal qty = decimal(params.get("qty"));
+        int updated = source == null ? 0 : inventoryMapper.update(null,
+                new LambdaUpdateWrapper<InventorySnapshot>()
+                        .eq(InventorySnapshot::getId, source.getId())
+                        .ge(InventorySnapshot::getQtyAvailable, qty)
+                        .setSql("qty_available = qty_available - " + qty.toPlainString())
+                        .setSql("qty_on_hand = qty_on_hand - " + qty.toPlainString()));
+        if (updated != 1) {
+            throw new IllegalStateException("来源仓 " + params.get("fromWarehouseCode")
+                    + " 可用库存不足,无法调拨 " + qty + " 件 " + params.get("sku"));
+        }
+        return source;
+    }
+
+    private void adjustInventory(Long id, BigDecimal delta) {
+        inventoryMapper.update(null, new LambdaUpdateWrapper<InventorySnapshot>()
+                .eq(InventorySnapshot::getId, id)
+                .setSql("qty_available = qty_available + " + delta.toPlainString())
+                .setSql("qty_on_hand = qty_on_hand + " + delta.toPlainString()));
     }
 
     private InventorySnapshot transferSource(Map<String, Object> params) {
@@ -254,21 +287,12 @@ public class ActionService {
                     ? action.getTargetKey() : String.valueOf(params.get("warehouseCode"));
             if (sku != null && params.get("qty") != null) {
                 BigDecimal qty = decimal(params.get("qty"));
-                InventorySnapshot source = params.get("fromWarehouseCode") == null
-                        ? null : transferSource(params);
                 InventorySnapshot item = inventoryMapper.selectOne(new LambdaQueryWrapper<InventorySnapshot>()
                         .eq(InventorySnapshot::getSourceSystem, "WMS")
                         .eq(InventorySnapshot::getWarehouseCode, warehouse)
                         .eq(InventorySnapshot::getSku, sku));
                 if (item != null) {
-                    item.setQtyOnHand(item.getQtyOnHand().add(qty));
-                    item.setQtyAvailable(item.getQtyAvailable().add(qty));
-                    inventoryMapper.updateById(item);
-                    if (source != null) {
-                        source.setQtyOnHand(source.getQtyOnHand().subtract(qty));
-                        source.setQtyAvailable(source.getQtyAvailable().subtract(qty));
-                        inventoryMapper.updateById(source);
-                    }
+                    adjustInventory(item.getId(), qty);
                 }
             }
         } else if ("SRM_EXPEDITE_PO".equals(action.getType())) {
