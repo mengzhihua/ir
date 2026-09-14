@@ -30,8 +30,9 @@
         <div class="card-actions">
           <el-radio-group v-model="system.mode" :disabled="!canWrite()" @change="saveMode(system)"
             ><el-radio-button value="MOCK" /><el-radio-button value="HTTP" /></el-radio-group
-          ><el-button size="small" @click="edit(system)">编辑</el-button
-          ><el-button size="small" @click="health(system)">健康检查</el-button
+          ><el-button size="small" :disabled="!canWrite()" @click="edit(system)">编辑</el-button
+          ><el-button size="small" :disabled="!canWrite()" @click="health(system)"
+            >健康检查</el-button
           ><el-button size="small" type="primary" :disabled="!canWrite()" @click="sync(system)"
             >立即同步</el-button
           >

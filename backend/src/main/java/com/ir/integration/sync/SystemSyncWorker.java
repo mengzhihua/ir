@@ -111,14 +111,24 @@ public class SystemSyncWorker {
                     client.fetchCosts(to.minusDays(90), to), "BMS"));
         } else if ("SRM".equals(code)) {
             SrmClient client = clients.srm(system);
-            result.put("purchaseOrders", persistPurchases(client.fetchPurchaseOrders()));
-            result.put("asns", persistPurchases(client.fetchAsns()));
-            result.put("supplierScores", persistSupplierScores(client.fetchSupplierScores()));
+            int purchaseOrders = persistPurchases(client.fetchPurchaseOrders());
+            int asns = persistPurchases(client.fetchAsns());
+            int scores = persistSupplierScores(client.fetchSupplierScores());
+            result.put("purchaseOrders", purchaseOrders);
+            result.put("asns", asns);
+            result.put("supplierScores", scores);
+            saveLog("SRM", "PURCHASE", "SUCCESS", purchaseOrders + asns, "采购订单/ASN 同步完成");
+            saveLog("SRM", "SUPPLIER_SCORE", "SUCCESS", scores, "供应商评分同步完成");
         } else if ("SAP".equals(code)) {
             SapClient client = clients.sap(system);
-            result.put("stock", persistInventory(client.fetchStock()));
-            result.put("finance", persistFinance(client.fetchFinance()));
+            int stock = persistInventory(client.fetchStock());
+            int finance = persistFinance(client.fetchFinance());
+            result.put("stock", stock);
+            result.put("finance", finance);
+            saveLog("SAP", "STOCK", "SUCCESS", stock, "SAP 库存同步完成");
+            saveLog("SAP", "FINANCE", "SUCCESS", finance, "SAP 财务指标同步完成");
         }
+        system.setLastSyncAt(LocalDateTime.now());
         system.setLastHealthAt(LocalDateTime.now());
         system.setLastHealthOk(true);
         system.setLastError(null);
@@ -193,7 +203,9 @@ public class SystemSyncWorker {
                 inventoryMapper.updateById(row);
             }
         }
-        saveLog("WMS", "INVENTORY", "SUCCESS", rows.size(), "库存快照同步完成");
+        if (rows.isEmpty() || !"SAP".equals(rows.get(0).getSourceSystem())) {
+            saveLog("WMS", "INVENTORY", "SUCCESS", rows.size(), "库存快照同步完成");
+        }
         return rows.size();
     }
 

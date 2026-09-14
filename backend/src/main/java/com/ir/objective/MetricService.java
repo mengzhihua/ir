@@ -74,7 +74,9 @@ public class MetricService {
         List<ShipmentSnapshot> shipmentRows = shipments.selectList(new LambdaQueryWrapper<ShipmentSnapshot>()
                 .and(w -> w.ge(ShipmentSnapshot::getPlannedArriveTime, fromTime)
                         .or().ge(ShipmentSnapshot::getActualArriveTime, fromTime)
-                        .or().isNull(ShipmentSnapshot::getPlannedArriveTime)));
+                        .or(n -> n.isNull(ShipmentSnapshot::getPlannedArriveTime)
+                                .isNull(ShipmentSnapshot::getActualArriveTime)
+                                .ge(ShipmentSnapshot::getSyncedAt, fromTime))));
 
         BigDecimal totalCost = BigDecimal.ZERO;
         for (CostRecord cost : costs.selectList(new LambdaQueryWrapper<CostRecord>()

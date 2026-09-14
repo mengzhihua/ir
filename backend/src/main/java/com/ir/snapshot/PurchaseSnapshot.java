@@ -16,6 +16,8 @@ import java.util.List;
 @EqualsAndHashCode(callSuper = true)
 @TableName("ct_purchase_snapshot")
 public class PurchaseSnapshot extends BaseEntity {
+    public static final int SKU_MAX_LENGTH = 1024;
+
     private String docType;
     private String code;
     private String refCode;

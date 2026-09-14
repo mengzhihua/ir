@@ -327,6 +327,8 @@ async function runNow() {
     )
     await load()
     showRunDetail(result)
+  } catch {
+    // 业务错误已由 request.js 统一提示
   } finally {
     running.value = false
   }
@@ -341,32 +343,61 @@ async function showRun(row) {
   showRunDetail(await balanceApi.runDetail(row.id))
 }
 async function approve(row) {
-  const result = await balanceApi.approve(row.id)
-  if (result.status === 'EXECUTED') {
-    ElMessage.success('已执行')
-  } else {
-    ElMessage.error('执行失败,详见决策依据')
+  try {
+    const result = await balanceApi.approve(row.id)
+    if (result.status === 'EXECUTED') {
+      ElMessage.success('已执行')
+    } else {
+      ElMessage.error('执行失败,详见决策依据')
+    }
+  } catch {
+    // 业务错误已由 request.js 统一提示
   }
   load()
 }
 async function approveBatch() {
-  await ElMessageBox.confirm(`确认通过并执行 ${selectedPending.value.length} 条决策吗？`, '确认')
-  for (const row of selectedPending.value) {
-    await balanceApi.approve(row.id)
+  try {
+    await ElMessageBox.confirm(`确认通过并执行 ${selectedPending.value.length} 条决策吗？`, '确认')
+  } catch {
+    return
   }
-  ElMessage.success('批量处理完成')
+  let done = 0
+  for (const row of selectedPending.value) {
+    try {
+      await balanceApi.approve(row.id)
+      done += 1
+    } catch {
+      // 单条失败继续处理其余决策
+    }
+  }
+  ElMessage.success(`批量处理完成:成功 ${done}/${selectedPending.value.length} 条`)
   load()
 }
 async function reject(row) {
-  const { value } = await ElMessageBox.prompt('请输入拒绝原因(可选)', '拒绝决策', {
-    inputPlaceholder: '例如:人工已处理'
-  })
-  await balanceApi.reject(row.id, value)
-  ElMessage.success('已拒绝')
+  let value
+  try {
+    value = (
+      await ElMessageBox.prompt('请输入拒绝原因(可选)', '拒绝决策', {
+        inputPlaceholder: '例如:人工已处理'
+      })
+    ).value
+  } catch {
+    return
+  }
+  try {
+    await balanceApi.reject(row.id, value)
+    ElMessage.success('已拒绝')
+  } catch {
+    // 业务错误已由 request.js 统一提示
+  }
   load()
 }
 async function saveConfig() {
-  Object.assign(config, await balanceApi.saveConfig(configForm))
+  try {
+    Object.assign(config, await balanceApi.saveConfig(configForm))
+  } catch {
+    return
+  }
   configVisible.value = false
   ElMessage.success('配置已保存')
 }

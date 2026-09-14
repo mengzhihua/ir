@@ -12,9 +12,11 @@ CREATE TABLE IF NOT EXISTS ct_system (
     last_health_at TIMESTAMP,
     last_health_ok BOOLEAN,
     last_error VARCHAR(500),
+    last_sync_at TIMESTAMP,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
+ALTER TABLE ct_system ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS ct_sync_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -229,7 +231,7 @@ CREATE TABLE IF NOT EXISTS ct_purchase_snapshot (
     ref_code VARCHAR(64),
     supplier_code VARCHAR(64),
     plant_code VARCHAR(32),
-    sku VARCHAR(64),
+    sku VARCHAR(1024),
     status VARCHAR(32),
     qty DECIMAL(18,2),
     received_qty DECIMAL(18,2),
@@ -241,6 +243,7 @@ CREATE TABLE IF NOT EXISTS ct_purchase_snapshot (
     updated_at TIMESTAMP,
     UNIQUE(doc_type, code)
 );
+ALTER TABLE ct_purchase_snapshot ALTER COLUMN sku SET DATA TYPE VARCHAR(1024);
 
 CREATE TABLE IF NOT EXISTS ct_supplier_score (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

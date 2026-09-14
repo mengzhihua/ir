@@ -176,6 +176,23 @@ public class HttpSrmClient implements SrmClient {
         }
     }
 
+    /** 拼接结果受列宽限制(VARCHAR(1024)),超出部分丢弃完整 sku 而非截断半个编码. */
+    static String joinSkus(List<String> skus) {
+        StringBuilder sb = new StringBuilder();
+        for (String sku : skus) {
+            int next = sb.length() + sku.length() + (sb.length() == 0 ? 0 : 1);
+            if (next > PurchaseSnapshot.SKU_MAX_LENGTH) {
+                break;
+            }
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(sku);
+        }
+        return sb.length() == 0 ? skus.get(0).substring(0,
+                Math.min(skus.get(0).length(), PurchaseSnapshot.SKU_MAX_LENGTH)) : sb.toString();
+    }
+
     /** 多行单据按整单聚合:sku 逗号拼接,数量/已收数量汇总. */
     private static void fillLines(PurchaseSnapshot doc, Map<String, Object> row) {
         Object lines = row.get("lines");
@@ -195,7 +212,7 @@ public class HttpSrmClient implements SrmClient {
                 qty = qty.add(decimal(line, "qty"));
                 received = received.add(decimal(line, "receivedQty"));
             }
-            doc.setSku(skus.isEmpty() ? null : String.join(",", skus));
+            doc.setSku(skus.isEmpty() ? null : joinSkus(skus));
             if (doc.getQty() == null) {
                 doc.setQty(qty);
             }
