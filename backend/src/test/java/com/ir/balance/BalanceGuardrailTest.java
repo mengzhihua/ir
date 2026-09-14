@@ -48,6 +48,12 @@ class BalanceGuardrailTest {
         mvc.perform(post("/api/balance/config").header("Authorization", "Bearer " + admin)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"cooldownHours\":12}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.cooldownHours").value(12));
+        mvc.perform(post("/api/balance/config").header("Authorization", "Bearer " + admin)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"SUGGEST\",\"cooldownHours\":0}"))
+                .andExpect(jsonPath("$.code").value(1));
+        mvc.perform(get("/api/balance/config").header("Authorization", "Bearer " + admin))
+                .andExpect(jsonPath("$.data.mode").value("AUTO"))
+                .andExpect(jsonPath("$.data.cooldownHours").value(12));
         String planner = planner(admin);
         mvc.perform(post("/api/balance/config").header("Authorization", "Bearer " + planner)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"AUTO\"}"))

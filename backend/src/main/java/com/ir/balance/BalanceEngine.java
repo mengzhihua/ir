@@ -274,37 +274,39 @@ public class BalanceEngine {
         return config;
     }
 
-    public BalanceConfig updateConfig(Map<String, Object> patch) {
+    /** 先全部校验再一次性写入,避免校验失败时配置被部分修改. */
+    public synchronized BalanceConfig updateConfig(Map<String, Object> patch) {
+        String mode = config.getMode();
         if (patch.get("mode") != null) {
-            String mode = String.valueOf(patch.get("mode")).toUpperCase();
+            mode = String.valueOf(patch.get("mode")).toUpperCase();
             if (!Arrays.asList("OFF", "SUGGEST", "AUTO").contains(mode)) {
                 throw new BizException("mode 仅支持 OFF/SUGGEST/AUTO");
             }
-            config.setMode(mode);
         }
-        if (patch.get("scheduleEnabled") != null) {
-            config.setScheduleEnabled(Boolean.parseBoolean(String.valueOf(patch.get("scheduleEnabled"))));
-        }
-        if (patch.get("maxDecisionsPerRun") != null) {
-            config.setMaxDecisionsPerRun(intRange(patch.get("maxDecisionsPerRun"), "maxDecisionsPerRun", 1, 200));
-        }
-        if (patch.get("maxAutoExecutePerRun") != null) {
-            config.setMaxAutoExecutePerRun(intRange(patch.get("maxAutoExecutePerRun"), "maxAutoExecutePerRun", 0, 100));
-        }
-        if (patch.get("autoPurchaseAmountLimit") != null) {
-            config.setAutoPurchaseAmountLimit(decimalRange(patch.get("autoPurchaseAmountLimit"),
-                    "autoPurchaseAmountLimit", BigDecimal.ZERO, new BigDecimal("10000000")));
-        }
-        if (patch.get("cooldownHours") != null) {
-            config.setCooldownHours(intRange(patch.get("cooldownHours"), "cooldownHours", 1, 720));
-        }
-        if (patch.get("serviceGuardAttainment") != null) {
-            config.setServiceGuardAttainment(decimalRange(patch.get("serviceGuardAttainment"),
-                    "serviceGuardAttainment", BigDecimal.ZERO, BigDecimal.ONE));
-        }
-        if (config.getMaxAutoExecutePerRun() > config.getMaxDecisionsPerRun()) {
+        boolean scheduleEnabled = patch.get("scheduleEnabled") == null ? config.isScheduleEnabled()
+                : Boolean.parseBoolean(String.valueOf(patch.get("scheduleEnabled")));
+        int maxDecisions = patch.get("maxDecisionsPerRun") == null ? config.getMaxDecisionsPerRun()
+                : intRange(patch.get("maxDecisionsPerRun"), "maxDecisionsPerRun", 1, 200);
+        int maxAuto = patch.get("maxAutoExecutePerRun") == null ? config.getMaxAutoExecutePerRun()
+                : intRange(patch.get("maxAutoExecutePerRun"), "maxAutoExecutePerRun", 0, 100);
+        BigDecimal purchaseLimit = patch.get("autoPurchaseAmountLimit") == null ? config.getAutoPurchaseAmountLimit()
+                : decimalRange(patch.get("autoPurchaseAmountLimit"),
+                "autoPurchaseAmountLimit", BigDecimal.ZERO, new BigDecimal("10000000"));
+        int cooldown = patch.get("cooldownHours") == null ? config.getCooldownHours()
+                : intRange(patch.get("cooldownHours"), "cooldownHours", 1, 720);
+        BigDecimal guard = patch.get("serviceGuardAttainment") == null ? config.getServiceGuardAttainment()
+                : decimalRange(patch.get("serviceGuardAttainment"),
+                "serviceGuardAttainment", BigDecimal.ZERO, BigDecimal.ONE);
+        if (maxAuto > maxDecisions) {
             throw new BizException("maxAutoExecutePerRun 不能大于 maxDecisionsPerRun");
         }
+        config.setMode(mode);
+        config.setScheduleEnabled(scheduleEnabled);
+        config.setMaxDecisionsPerRun(maxDecisions);
+        config.setMaxAutoExecutePerRun(maxAuto);
+        config.setAutoPurchaseAmountLimit(purchaseLimit);
+        config.setCooldownHours(cooldown);
+        config.setServiceGuardAttainment(guard);
         return config;
     }
 
