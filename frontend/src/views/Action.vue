@@ -17,7 +17,9 @@
       ><el-select v-model="filters.status" clearable placeholder="状态" @change="search"
         ><el-option label="待执行" value="PENDING" /><el-option
           label="成功"
-          value="SUCCESS" /><el-option label="失败" value="FAILED" /></el-select
+          value="SUCCESS" /><el-option label="失败" value="FAILED" /><el-option
+          label="待对账"
+          value="UNKNOWN" /></el-select
       ><el-input
         v-model="filters.targetKey"
         clearable
