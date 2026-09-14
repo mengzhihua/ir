@@ -58,6 +58,15 @@ final class HttpSupport {
         }
     }
 
+    /** 登录等辅助请求失败意味着业务指令尚未发出,一律视为确定未受理. */
+    static Map<String, Object> loginPost(RestTemplate http, String url, Object body) {
+        try {
+            return postMap(http, url, body, new HttpHeaders());
+        } catch (IntegrationException ex) {
+            throw new IntegrationException(ex.getMessage(), ex.getCause(), false);
+        }
+    }
+
     /** 连接未建立可确定未受理;其余传输层异常(如读超时)视为结果未知. */
     static boolean outcomeUnknown(Throwable ex) {
         if (!(ex instanceof ResourceAccessException)) {

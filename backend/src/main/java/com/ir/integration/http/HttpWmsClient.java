@@ -122,8 +122,8 @@ public class HttpWmsClient implements WmsClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("username", username);
         body.put("password", password);
-        Map<String, Object> response = HttpSupport.postMap(
-                http, baseUrl + "/api/auth/login", body, new HttpHeaders());
+        Map<String, Object> response = HttpSupport.loginPost(
+                http, baseUrl + "/api/auth/login", body);
         Object data = response.get("data");
         if (data instanceof Map) {
             token = HttpSupport.string((Map<String, Object>) data, "token", "accessToken");

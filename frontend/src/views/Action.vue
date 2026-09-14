@@ -19,7 +19,7 @@
           label="成功"
           value="SUCCESS" /><el-option label="失败" value="FAILED" /><el-option
           label="待对账"
-          value="UNKNOWN" /></el-select
+          value="UNKNOWN" /><el-option label="已重试" value="RETRIED" /></el-select
       ><el-input
         v-model="filters.targetKey"
         clearable

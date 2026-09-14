@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ir.common.BizException;
 import com.ir.common.CodeGenerator;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.ClientFactory;
@@ -37,6 +38,7 @@ import java.util.Map;
 @Service
 public class ActionService {
     static final String IDEMPOTENCY_KEY = "idempotencyKey";
+    static final String RETRY_OF = "retryOf";
     private final CtActionMapper actionMapper;
     private final CtSystemMapper systemMapper;
     private final OrderSnapshotMapper orderMapper;
@@ -73,7 +75,11 @@ public class ActionService {
 
     @Transactional
     public CtAction createAndExecute(Map<String, Object> request) {
-        CtAction action = create(request);
+        return createAndExecute(request, null);
+    }
+
+    private CtAction createAndExecute(Map<String, Object> request, String idempotencyKey) {
+        CtAction action = create(request, idempotencyKey);
         try {
             execute(action, read(action.getParamsJson()));
         } catch (Exception ex) {
@@ -87,10 +93,11 @@ public class ActionService {
 
     @Transactional
     public CtAction createPending(Map<String, Object> request) {
-        return create(request);
+        return create(request, null);
     }
 
-    private CtAction create(Map<String, Object> request) {
+    /** 幂等键只由服务端分配(新动作=动作号,重试=原动作键),忽略请求中携带的键. */
+    private CtAction create(Map<String, Object> request, String idempotencyKey) {
         String type = String.valueOf(request.get("type"));
         String targetKey = String.valueOf(request.get("targetKey"));
         Map<String, Object> params = request.get("params") instanceof Map
@@ -101,9 +108,8 @@ public class ActionService {
 
         CtAction action = new CtAction();
         action.setActionNo(codes.next("ACT"));
-        if (params.get(IDEMPOTENCY_KEY) == null) {
-            params.put(IDEMPOTENCY_KEY, action.getActionNo());
-        }
+        params.put(IDEMPOTENCY_KEY,
+                idempotencyKey == null ? action.getActionNo() : idempotencyKey);
         action.setType(type);
         action.setTargetKey(targetKey);
         action.setTargetSystem(systemFor(type));
@@ -175,17 +181,31 @@ public class ActionService {
         actionMapper.updateById(action);
     }
 
+    /** 重试:原动作 FAILED→RETRIED 原子抢占,一个幂等键的本地落账只允许发生一次. */
+    @Transactional
     public CtAction retry(Long id) {
         CtAction original = actionMapper.selectById(id);
         if (original == null) {
             return null;
         }
+        int claimed = actionMapper.update(null, new LambdaUpdateWrapper<CtAction>()
+                .eq(CtAction::getId, id)
+                .eq(CtAction::getStatus, "FAILED")
+                .set(CtAction::getStatus, "RETRIED"));
+        if (claimed == 0) {
+            throw new BizException("仅 FAILED 状态的动作可重试,且每个动作只能重试一次(当前 "
+                    + original.getStatus() + ")");
+        }
+        Map<String, Object> params = read(original.getParamsJson());
+        Object key = params.get(IDEMPOTENCY_KEY);
+        params.put(RETRY_OF, original.getActionNo());
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("type", original.getType());
         request.put("targetKey", original.getTargetKey());
-        request.put("params", read(original.getParamsJson()));
+        request.put("params", params);
         request.put("alertId", original.getAlertId());
-        return createAndExecute(request);
+        return createAndExecute(request,
+                key == null ? original.getActionNo() : String.valueOf(key));
     }
 
     public Page<CtAction> page(
