@@ -2,6 +2,8 @@ package com.ir.integration;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ir.integration.entity.CtSyncLog;
+import com.ir.integration.mapper.CtSyncLogMapper;
 import com.ir.snapshot.InventorySnapshot;
 import com.ir.snapshot.InventorySnapshotMapper;
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,7 @@ class SyncFeedbackAndTransferTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired InventorySnapshotMapper inventoryMapper;
+    @Autowired CtSyncLogMapper syncLogMapper;
 
     private String token() throws Exception {
         String body = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
@@ -51,6 +54,31 @@ class SyncFeedbackAndTransferTest {
         mvc.perform(get("/api/integration/system").header("Authorization", "Bearer " + t))
                 .andExpect(jsonPath("$.data[?(@.code=='SRM')].lastSyncAt", hasItem(org.hamcrest.Matchers.notNullValue())))
                 .andExpect(jsonPath("$.data[?(@.code=='SAP')].lastSyncAt", hasItem(org.hamcrest.Matchers.notNullValue())));
+    }
+
+    @Test
+    void sapSyncDoesNotWriteWmsInventoryLog() throws Exception {
+        String t = token();
+        Long before = syncLogMapper.selectCount(new LambdaQueryWrapper<CtSyncLog>()
+                .eq(CtSyncLog::getSystemCode, "WMS").eq(CtSyncLog::getDataType, "INVENTORY"));
+        mvc.perform(post("/api/integration/sync/SAP").header("Authorization", "Bearer " + t))
+                .andExpect(jsonPath("$.data.ok").value(true));
+        Long after = syncLogMapper.selectCount(new LambdaQueryWrapper<CtSyncLog>()
+                .eq(CtSyncLog::getSystemCode, "WMS").eq(CtSyncLog::getDataType, "INVENTORY"));
+        assertEquals(before, after);
+    }
+
+    @Test
+    void unsupportedSystemSyncFails() throws Exception {
+        String t = token();
+        mvc.perform(post("/api/integration/system").header("Authorization", "Bearer " + t)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"code\":\"ERP2\",\"name\":\"ERP2\",\"mode\":\"MOCK\",\"enabled\":true}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/integration/sync/ERP2").header("Authorization", "Bearer " + t))
+                .andExpect(jsonPath("$.data.ok").value(false));
+        mvc.perform(get("/api/integration/system").header("Authorization", "Bearer " + t))
+                .andExpect(jsonPath("$.data[?(@.code=='ERP2' && @.lastSyncAt)]").isEmpty());
     }
 
     @Test

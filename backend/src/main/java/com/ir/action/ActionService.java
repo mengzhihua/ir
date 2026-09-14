@@ -115,6 +115,7 @@ public class ActionService {
 
     private void execute(CtAction action, Map<String, Object> params) {
         InventorySnapshot reserved = null;
+        boolean dispatched = false;
         try {
             CtSystem system = systemMapper.selectOne(
                     new LambdaQueryWrapper<CtSystem>()
@@ -123,6 +124,7 @@ public class ActionService {
             command.setType(action.getType());
             command.setTargetKey(action.getTargetKey());
             command.setParams(params);
+            command.setIdempotencyKey(action.getActionNo());
             if (system == null || !Boolean.TRUE.equals(system.getEnabled())) {
                 throw new IllegalStateException(action.getTargetSystem() + " 未接入或已停用");
             }
@@ -141,11 +143,16 @@ public class ActionService {
             } else {
                 clients.tms(system).execute(command);
             }
-            mutateSnapshot(action, params);
+            dispatched = true;
+            try {
+                mutateSnapshot(action, params);
+                action.setResult(result);
+            } catch (RuntimeException ex) {
+                action.setResult(result + ";本地快照更新失败,待对账: " + ex.getMessage());
+            }
             action.setStatus("SUCCESS");
-            action.setResult(result);
         } catch (Exception ex) {
-            if (reserved != null) {
+            if (reserved != null && !dispatched) {
                 adjustInventory(reserved.getId(), decimal(params.get("qty")));
             }
             action.setStatus("FAILED");

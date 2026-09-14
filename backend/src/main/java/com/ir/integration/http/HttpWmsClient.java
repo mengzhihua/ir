@@ -81,8 +81,12 @@ public class HttpWmsClient implements WmsClient {
             HttpSupport.postMap(http, baseUrl + "/api/outbound/order/"
                     + command.getTargetKey() + "/allocate", command.getParams(), headers());
         } else if ("WMS_REPLENISH".equals(command.getType())) {
+            Map<String, Object> body = new LinkedHashMap<>(command.getParams());
+            if (command.getIdempotencyKey() != null) {
+                body.put("requestNo", command.getIdempotencyKey());
+            }
             HttpSupport.postMap(http, baseUrl + "/api/inventory/replenish/generate",
-                    command.getParams(), headers());
+                    body, headers());
         }
     }
 

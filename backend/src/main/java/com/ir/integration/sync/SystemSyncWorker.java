@@ -94,12 +94,12 @@ public class SystemSyncWorker {
         if ("OMS".equals(code)) {
             OmsClient client = clients.oms(system);
             result.put("orders", persistOrders(client.fetchOrders()));
-            result.put("inventory", persistInventory(client.fetchInventory()));
+            result.put("inventory", persistInventory(client.fetchInventory(), "OMS"));
             result.put("sales", persistSales(client.fetchDailySales(90)));
         } else if ("WMS".equals(code)) {
             WmsClient client = clients.wms(system);
             result.put("outbound", persistWmsOrders(client.fetchOutbound()));
-            result.put("inventory", persistInventory(client.fetchInventorySummary()));
+            result.put("inventory", persistInventory(client.fetchInventorySummary(), "WMS"));
         } else if ("TMS".equals(code)) {
             TmsClient client = clients.tms(system);
             result.put("shipments", persistShipments(client.fetchWaybills()));
@@ -121,12 +121,14 @@ public class SystemSyncWorker {
             saveLog("SRM", "SUPPLIER_SCORE", "SUCCESS", scores, "供应商评分同步完成");
         } else if ("SAP".equals(code)) {
             SapClient client = clients.sap(system);
-            int stock = persistInventory(client.fetchStock());
+            int stock = persistInventory(client.fetchStock(), null);
             int finance = persistFinance(client.fetchFinance());
             result.put("stock", stock);
             result.put("finance", finance);
             saveLog("SAP", "STOCK", "SUCCESS", stock, "SAP 库存同步完成");
             saveLog("SAP", "FINANCE", "SUCCESS", finance, "SAP 财务指标同步完成");
+        } else {
+            throw new IntegrationException("不支持同步的系统: " + code);
         }
         system.setLastSyncAt(LocalDateTime.now());
         system.setLastHealthAt(LocalDateTime.now());
@@ -188,7 +190,8 @@ public class SystemSyncWorker {
         return rows.size();
     }
 
-    private int persistInventory(List<InventorySnapshot> rows) {
+    /** logSystem 为 null 时由调用方自行记录日志. */
+    private int persistInventory(List<InventorySnapshot> rows, String logSystem) {
         for (InventorySnapshot row : rows) {
             InventorySnapshot existing = inventoryMapper.selectOne(
                     new LambdaQueryWrapper<InventorySnapshot>()
@@ -203,8 +206,8 @@ public class SystemSyncWorker {
                 inventoryMapper.updateById(row);
             }
         }
-        if (rows.isEmpty() || !"SAP".equals(rows.get(0).getSourceSystem())) {
-            saveLog("WMS", "INVENTORY", "SUCCESS", rows.size(), "库存快照同步完成");
+        if (logSystem != null) {
+            saveLog(logSystem, "INVENTORY", "SUCCESS", rows.size(), "库存快照同步完成");
         }
         return rows.size();
     }
