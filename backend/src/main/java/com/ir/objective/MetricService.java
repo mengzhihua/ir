@@ -24,6 +24,7 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,8 +68,13 @@ public class MetricService {
     public Map<String, Object> metrics() {
         Map<String, Object> result = new LinkedHashMap<>();
         LocalDate from = LocalDate.now().minusDays(29);
-        List<OrderSnapshot> orderRows = orders.selectList(null);
-        List<ShipmentSnapshot> shipmentRows = shipments.selectList(null);
+        LocalDateTime fromTime = from.atStartOfDay();
+        List<OrderSnapshot> orderRows = orders.selectList(new LambdaQueryWrapper<OrderSnapshot>()
+                .ge(OrderSnapshot::getOrderTime, fromTime));
+        List<ShipmentSnapshot> shipmentRows = shipments.selectList(new LambdaQueryWrapper<ShipmentSnapshot>()
+                .and(w -> w.ge(ShipmentSnapshot::getPlannedArriveTime, fromTime)
+                        .or().ge(ShipmentSnapshot::getActualArriveTime, fromTime)
+                        .or().isNull(ShipmentSnapshot::getPlannedArriveTime)));
 
         BigDecimal totalCost = BigDecimal.ZERO;
         for (CostRecord cost : costs.selectList(new LambdaQueryWrapper<CostRecord>()
@@ -88,7 +94,8 @@ public class MetricService {
                 leadCount++;
             }
         }
-        result.put("orderCount", orderRows.size());
+        result.put("orderCount", orders.selectCount(null));
+        result.put("orderCount30d", orderRows.size());
         result.put("totalCost30d", totalCost);
         result.put("costPerOrder30d", ratio(totalCost, orderRows.size(), 2));
         result.put("cancelRate", ratio(BigDecimal.valueOf(cancelled), orderRows.size(), 4));
@@ -198,7 +205,12 @@ public class MetricService {
         long openPo = purchases.selectCount(new LambdaQueryWrapper<PurchaseSnapshot>()
                 .eq(PurchaseSnapshot::getDocType, "PO")
                 .notIn(PurchaseSnapshot::getStatus, "CLOSED", "CANCELLED"));
-        List<SupplierScore> scores = supplierScores.selectList(null);
+        Map<String, SupplierScore> latest = new LinkedHashMap<>();
+        for (SupplierScore score : supplierScores.selectList(new LambdaQueryWrapper<SupplierScore>()
+                .orderByDesc(SupplierScore::getPeriod))) {
+            latest.putIfAbsent(score.getSupplierCode(), score);
+        }
+        List<SupplierScore> scores = new ArrayList<>(latest.values());
         BigDecimal scoreTotal = BigDecimal.ZERO;
         BigDecimal onTimeTotal = BigDecimal.ZERO;
         for (SupplierScore score : scores) {

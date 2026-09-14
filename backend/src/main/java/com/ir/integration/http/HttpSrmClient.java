@@ -8,7 +8,10 @@ import com.ir.snapshot.SupplierScore;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -102,9 +105,14 @@ public class HttpSrmClient implements SrmClient {
                 ? Collections.emptyMap() : command.getParams();
         Map<String, Object> result = new LinkedHashMap<>();
         if ("SRM_PURCHASE_SUGGEST".equals(command.getType())) {
+            BigDecimal qty = params.get("qty") == null ? BigDecimal.ZERO
+                    : new BigDecimal(String.valueOf(params.get("qty")));
+            if (qty.signum() <= 0) {
+                throw new IntegrationException("SRM 采购申请缺少有效数量 qty");
+            }
             Map<String, Object> line = new LinkedHashMap<>();
             line.put("materialCode", params.getOrDefault("sku", command.getTargetKey()));
-            line.put("qty", params.get("qty"));
+            line.put("qty", qty);
             line.put("requiredDate", params.getOrDefault(
                     "requiredDate", LocalDate.now().plusDays(7).toString()));
             Map<String, Object> body = new LinkedHashMap<>();
@@ -151,7 +159,7 @@ public class HttpSrmClient implements SrmClient {
     }
 
     private Map<String, Object> findPurchaseOrder(String code) {
-        String url = baseUrl + "/api/purchase/order/page?page=1&size=20&keyword=" + code;
+        String url = baseUrl + "/api/purchase/order/page?page=1&size=20&keyword=" + encode(code);
         for (Map<String, Object> row : HttpSupport.rows(HttpSupport.getMap(http, url, headers()))) {
             if (code.equals(HttpSupport.string(row, "code"))) {
                 return row;
@@ -160,19 +168,39 @@ public class HttpSrmClient implements SrmClient {
         throw new IntegrationException("SRM 采购订单不存在: " + code);
     }
 
+    private static String encode(String value) {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException ex) {
+            throw new IntegrationException("URL 编码失败: " + value);
+        }
+    }
+
+    /** 多行单据按整单聚合:sku 逗号拼接,数量/已收数量汇总. */
     private static void fillLines(PurchaseSnapshot doc, Map<String, Object> row) {
         Object lines = row.get("lines");
         if (lines instanceof List && !((List<?>) lines).isEmpty()) {
-            Object first = ((List<?>) lines).get(0);
-            if (first instanceof Map) {
-                Map<String, Object> line = (Map<String, Object>) first;
-                doc.setSku(HttpSupport.string(line, "materialCode", "sku"));
-                if (doc.getQty() == null) {
-                    doc.setQty(decimal(line, "qty"));
+            List<String> skus = new ArrayList<>();
+            BigDecimal qty = BigDecimal.ZERO;
+            BigDecimal received = BigDecimal.ZERO;
+            for (Object item : (List<?>) lines) {
+                if (!(item instanceof Map)) {
+                    continue;
                 }
-                if (doc.getReceivedQty() == null) {
-                    doc.setReceivedQty(decimal(line, "receivedQty"));
+                Map<String, Object> line = (Map<String, Object>) item;
+                String sku = HttpSupport.string(line, "materialCode", "sku");
+                if (sku != null && !skus.contains(sku)) {
+                    skus.add(sku);
                 }
+                qty = qty.add(decimal(line, "qty"));
+                received = received.add(decimal(line, "receivedQty"));
+            }
+            doc.setSku(skus.isEmpty() ? null : String.join(",", skus));
+            if (doc.getQty() == null) {
+                doc.setQty(qty);
+            }
+            if (doc.getReceivedQty() == null) {
+                doc.setReceivedQty(received);
             }
         }
         if (doc.getQty() == null) {

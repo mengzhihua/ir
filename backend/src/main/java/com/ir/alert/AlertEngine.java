@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -154,10 +155,48 @@ public class AlertEngine {
         request.put("type", alert.getSuggestedAction());
         request.put("targetKey", alert.getTargetKey());
         request.put("alertId", id);
+        Map<String, Object> params = suggestedParams(alert);
+        if (!params.isEmpty()) {
+            request.put("params", params);
+        }
         CtAction action = actions.createAndExecute(request);
         alert.setActionId(action.getId());
         alertMapper.updateById(alert);
         return action;
+    }
+
+    /** 为库存类告警的采购/补货建议补齐 SKU 与建议数量(补到 2 倍安全库存). */
+    private Map<String, Object> suggestedParams(CtAlert alert) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        String type = alert.getSuggestedAction();
+        if (!"SRM_PURCHASE_SUGGEST".equals(type) && !"WMS_REPLENISH".equals(type)) {
+            return params;
+        }
+        String key = alert.getTargetKey() == null ? "" : alert.getTargetKey();
+        String sku = key.contains("/") ? key.substring(0, key.indexOf('/')) : key;
+        String warehouse = alert.getWarehouseCode() != null ? alert.getWarehouseCode()
+                : key.contains("/") ? key.substring(key.indexOf('/') + 1) : null;
+        LambdaQueryWrapper<InventorySnapshot> query = new LambdaQueryWrapper<InventorySnapshot>()
+                .ne(InventorySnapshot::getSourceSystem, "SAP")
+                .eq(InventorySnapshot::getSku, sku);
+        if (warehouse != null) {
+            query.eq(InventorySnapshot::getWarehouseCode, warehouse);
+        }
+        BigDecimal qty = BigDecimal.ONE;
+        for (InventorySnapshot inventory : inventoryMapper.selectList(query)) {
+            BigDecimal gap = inventory.getSafetyQty().multiply(BigDecimal.valueOf(2))
+                    .subtract(inventory.getQtyAvailable());
+            if (gap.compareTo(qty) > 0) {
+                qty = gap;
+            }
+        }
+        params.put("sku", sku);
+        params.put("qty", qty.setScale(0, RoundingMode.CEILING));
+        if (warehouse != null) {
+            params.put("SRM_PURCHASE_SUGGEST".equals(type) ? "plantCode" : "warehouseCode", warehouse);
+        }
+        params.put("reason", alert.getTitle() + ": " + alert.getDetail());
+        return params;
     }
 
     private void evaluateOrders(CtRule rule, Map<String, Object> params, LocalDateTime now) {

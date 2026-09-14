@@ -124,6 +124,7 @@ public class ActionService {
             if (system == null || !Boolean.TRUE.equals(system.getEnabled())) {
                 throw new IllegalStateException(action.getTargetSystem() + " 未接入或已停用");
             }
+            validate(action, params);
             String result = "指令执行成功";
             if ("OMS".equals(action.getTargetSystem())) {
                 clients.oms(system).execute(command);
@@ -204,6 +205,27 @@ public class ActionService {
                         field("reason", "原因", false)));
     }
 
+    private void validate(CtAction action, Map<String, Object> params) {
+        if ("WMS_REPLENISH".equals(action.getType()) && params.get("fromWarehouseCode") != null) {
+            InventorySnapshot source = transferSource(params);
+            BigDecimal qty = decimal(params.get("qty"));
+            if (source == null || source.getQtyAvailable().compareTo(qty) < 0) {
+                throw new IllegalStateException("来源仓 " + params.get("fromWarehouseCode")
+                        + " 可用库存不足,无法调拨 " + qty + " 件 " + params.get("sku"));
+            }
+        } else if ("SRM_PURCHASE_SUGGEST".equals(action.getType())
+                && decimal(params.get("qty")).compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("采购建议缺少有效数量 qty");
+        }
+    }
+
+    private InventorySnapshot transferSource(Map<String, Object> params) {
+        return inventoryMapper.selectOne(new LambdaQueryWrapper<InventorySnapshot>()
+                .eq(InventorySnapshot::getSourceSystem, "WMS")
+                .eq(InventorySnapshot::getWarehouseCode, String.valueOf(params.get("fromWarehouseCode")))
+                .eq(InventorySnapshot::getSku, String.valueOf(params.get("sku"))));
+    }
+
     private void mutateSnapshot(CtAction action, Map<String, Object> params) {
         if ("OMS_REROUTE_WAREHOUSE".equals(action.getType())) {
             OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
@@ -231,15 +253,22 @@ public class ActionService {
             String warehouse = params.get("warehouseCode") == null
                     ? action.getTargetKey() : String.valueOf(params.get("warehouseCode"));
             if (sku != null && params.get("qty") != null) {
+                BigDecimal qty = decimal(params.get("qty"));
+                InventorySnapshot source = params.get("fromWarehouseCode") == null
+                        ? null : transferSource(params);
                 InventorySnapshot item = inventoryMapper.selectOne(new LambdaQueryWrapper<InventorySnapshot>()
                         .eq(InventorySnapshot::getSourceSystem, "WMS")
                         .eq(InventorySnapshot::getWarehouseCode, warehouse)
                         .eq(InventorySnapshot::getSku, sku));
                 if (item != null) {
-                    BigDecimal qty = decimal(params.get("qty"));
                     item.setQtyOnHand(item.getQtyOnHand().add(qty));
                     item.setQtyAvailable(item.getQtyAvailable().add(qty));
                     inventoryMapper.updateById(item);
+                    if (source != null) {
+                        source.setQtyOnHand(source.getQtyOnHand().subtract(qty));
+                        source.setQtyAvailable(source.getQtyAvailable().subtract(qty));
+                        inventoryMapper.updateById(source);
+                    }
                 }
             }
         } else if ("SRM_EXPEDITE_PO".equals(action.getType())) {

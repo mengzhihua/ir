@@ -1,6 +1,7 @@
 package com.ir.balance;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.action.ActionService;
@@ -104,6 +105,9 @@ public class BalanceEngine {
     @Transactional
     public synchronized CtBalanceRun run(String triggerType) {
         String mode = config.getMode() == null ? "AUTO" : config.getMode().toUpperCase();
+        if ("OFF".equals(mode)) {
+            throw new BizException("自动平衡已关闭(OFF),请先切换为 SUGGEST 或 AUTO");
+        }
         CtBalanceRun run = new CtBalanceRun();
         run.setRunNo(codes.next("BAL"));
         run.setTriggerType(triggerType);
@@ -147,9 +151,10 @@ public class BalanceEngine {
             CtBalanceDecision row = toEntity(run.getId(), d);
             byStrategy.merge(d.getStrategy(), 1, Integer::sum);
             boolean auto = "AUTO".equals(mode) && !d.isApprovalRequired()
-                    && !"HIGH".equals(d.getRiskLevel()) && autoBudget > 0;
+                    && "LOW".equals(d.getRiskLevel()) && autoBudget > 0;
             if (auto) {
                 autoBudget--;
+                row.setStatus("EXECUTING");
                 decisionMapper.insert(row);
                 execute(row, "system");
                 if ("EXECUTED".equals(row.getStatus())) {
@@ -187,14 +192,20 @@ public class BalanceEngine {
 
     @Transactional
     public CtBalanceDecision approve(Long id) {
-        CtBalanceDecision row = pending(id);
+        CtBalanceDecision preview = decisionMapper.selectById(id);
+        User user = CurrentUser.get();
+        if (preview != null && "HIGH".equals(preview.getRiskLevel())
+                && user != null && !User.ADMIN.equals(user.getRole())) {
+            throw new BizException("高风险决策仅管理员可审批");
+        }
+        CtBalanceDecision row = claim(id, "EXECUTING");
         execute(row, operator());
         return row;
     }
 
     @Transactional
     public CtBalanceDecision reject(Long id, String reason) {
-        CtBalanceDecision row = pending(id);
+        CtBalanceDecision row = claim(id, "REJECTED");
         row.setStatus("REJECTED");
         row.setDecidedBy(operator());
         row.setDecidedAt(LocalDateTime.now());
@@ -275,21 +286,52 @@ public class BalanceEngine {
             config.setScheduleEnabled(Boolean.parseBoolean(String.valueOf(patch.get("scheduleEnabled"))));
         }
         if (patch.get("maxDecisionsPerRun") != null) {
-            config.setMaxDecisionsPerRun(Integer.parseInt(String.valueOf(patch.get("maxDecisionsPerRun"))));
+            config.setMaxDecisionsPerRun(intRange(patch.get("maxDecisionsPerRun"), "maxDecisionsPerRun", 1, 200));
         }
         if (patch.get("maxAutoExecutePerRun") != null) {
-            config.setMaxAutoExecutePerRun(Integer.parseInt(String.valueOf(patch.get("maxAutoExecutePerRun"))));
+            config.setMaxAutoExecutePerRun(intRange(patch.get("maxAutoExecutePerRun"), "maxAutoExecutePerRun", 0, 100));
         }
         if (patch.get("autoPurchaseAmountLimit") != null) {
-            config.setAutoPurchaseAmountLimit(new BigDecimal(String.valueOf(patch.get("autoPurchaseAmountLimit"))));
+            config.setAutoPurchaseAmountLimit(decimalRange(patch.get("autoPurchaseAmountLimit"),
+                    "autoPurchaseAmountLimit", BigDecimal.ZERO, new BigDecimal("10000000")));
         }
         if (patch.get("cooldownHours") != null) {
-            config.setCooldownHours(Integer.parseInt(String.valueOf(patch.get("cooldownHours"))));
+            config.setCooldownHours(intRange(patch.get("cooldownHours"), "cooldownHours", 1, 720));
         }
         if (patch.get("serviceGuardAttainment") != null) {
-            config.setServiceGuardAttainment(new BigDecimal(String.valueOf(patch.get("serviceGuardAttainment"))));
+            config.setServiceGuardAttainment(decimalRange(patch.get("serviceGuardAttainment"),
+                    "serviceGuardAttainment", BigDecimal.ZERO, BigDecimal.ONE));
+        }
+        if (config.getMaxAutoExecutePerRun() > config.getMaxDecisionsPerRun()) {
+            throw new BizException("maxAutoExecutePerRun 不能大于 maxDecisionsPerRun");
         }
         return config;
+    }
+
+    private static int intRange(Object raw, String name, int min, int max) {
+        int value;
+        try {
+            value = Integer.parseInt(String.valueOf(raw));
+        } catch (NumberFormatException ex) {
+            throw new BizException(name + " 必须为整数");
+        }
+        if (value < min || value > max) {
+            throw new BizException(name + " 需在 " + min + "~" + max + " 之间");
+        }
+        return value;
+    }
+
+    private static BigDecimal decimalRange(Object raw, String name, BigDecimal min, BigDecimal max) {
+        BigDecimal value;
+        try {
+            value = new BigDecimal(String.valueOf(raw));
+        } catch (NumberFormatException ex) {
+            throw new BizException(name + " 必须为数字");
+        }
+        if (value.compareTo(min) < 0 || value.compareTo(max) > 0) {
+            throw new BizException(name + " 需在 " + min + "~" + max + " 之间");
+        }
+        return value;
     }
 
     private void execute(CtBalanceDecision row, String operator) {
@@ -321,14 +363,20 @@ public class BalanceEngine {
         decisionMapper.updateById(row);
     }
 
-    private CtBalanceDecision pending(Long id) {
+    /** 以条件更新原子地把 PENDING 决策迁移到目标状态,防止并发重复审批. */
+    private CtBalanceDecision claim(Long id, String nextStatus) {
         CtBalanceDecision row = decisionMapper.selectById(id);
         if (row == null) {
             throw new BizException("决策不存在");
         }
-        if (!"PENDING".equals(row.getStatus())) {
-            throw new BizException("决策已处理: " + row.getStatus());
+        int updated = decisionMapper.update(null, new LambdaUpdateWrapper<CtBalanceDecision>()
+                .eq(CtBalanceDecision::getId, id)
+                .eq(CtBalanceDecision::getStatus, "PENDING")
+                .set(CtBalanceDecision::getStatus, nextStatus));
+        if (updated != 1) {
+            throw new BizException("决策已处理: " + decisionMapper.selectById(id).getStatus());
         }
+        row.setStatus(nextStatus);
         return row;
     }
 

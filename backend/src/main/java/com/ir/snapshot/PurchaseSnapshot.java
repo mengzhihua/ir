@@ -8,6 +8,9 @@ import lombok.EqualsAndHashCode;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -26,4 +29,15 @@ public class PurchaseSnapshot extends BaseEntity {
     private LocalDate expectedDate;
     private LocalDateTime receivedAt;
     private LocalDateTime syncedAt;
+
+    /** 多行单据的 sku 以逗号拼接存储,此处拆分为列表. */
+    public List<String> skuList() {
+        return sku == null || sku.isEmpty() ? Collections.<String>emptyList() : Arrays.asList(sku.split(","));
+    }
+
+    /** 单行单据的 sku;多行时返回首行. */
+    public String primarySku() {
+        List<String> list = skuList();
+        return list.isEmpty() ? null : list.get(0);
+    }
 }
