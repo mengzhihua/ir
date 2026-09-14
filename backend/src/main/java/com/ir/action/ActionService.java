@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.common.CodeGenerator;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.ClientFactory;
+import com.ir.integration.client.IntegrationException;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSystemMapper;
 import com.ir.snapshot.OrderSnapshot;
@@ -35,6 +36,7 @@ import java.util.Map;
 
 @Service
 public class ActionService {
+    static final String IDEMPOTENCY_KEY = "idempotencyKey";
     private final CtActionMapper actionMapper;
     private final CtSystemMapper systemMapper;
     private final OrderSnapshotMapper orderMapper;
@@ -99,6 +101,9 @@ public class ActionService {
 
         CtAction action = new CtAction();
         action.setActionNo(codes.next("ACT"));
+        if (params.get(IDEMPOTENCY_KEY) == null) {
+            params.put(IDEMPOTENCY_KEY, action.getActionNo());
+        }
         action.setType(type);
         action.setTargetKey(targetKey);
         action.setTargetSystem(systemFor(type));
@@ -124,7 +129,7 @@ public class ActionService {
             command.setType(action.getType());
             command.setTargetKey(action.getTargetKey());
             command.setParams(params);
-            command.setIdempotencyKey(action.getActionNo());
+            command.setIdempotencyKey(String.valueOf(params.get(IDEMPOTENCY_KEY)));
             if (system == null || !Boolean.TRUE.equals(system.getEnabled())) {
                 throw new IllegalStateException(action.getTargetSystem() + " 未接入或已停用");
             }
@@ -152,11 +157,19 @@ public class ActionService {
             }
             action.setStatus("SUCCESS");
         } catch (Exception ex) {
-            if (reserved != null && !dispatched) {
-                adjustInventory(reserved.getId(), decimal(params.get("qty")));
+            boolean unknown = !dispatched && ex instanceof IntegrationException
+                    && ((IntegrationException) ex).isOutcomeUnknown();
+            if (unknown) {
+                action.setStatus("UNKNOWN");
+                action.setResult("远端结果未知,已保留预占,待对账(幂等键 "
+                        + params.get(IDEMPOTENCY_KEY) + "): " + ex.getMessage());
+            } else {
+                if (reserved != null && !dispatched) {
+                    adjustInventory(reserved.getId(), decimal(params.get("qty")));
+                }
+                action.setStatus("FAILED");
+                action.setResult(ex.getMessage());
             }
-            action.setStatus("FAILED");
-            action.setResult(ex.getMessage());
         }
         action.setExecutedAt(LocalDateTime.now());
         actionMapper.updateById(action);
