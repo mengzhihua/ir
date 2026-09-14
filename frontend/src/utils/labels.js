@@ -26,7 +26,8 @@ export const actionStatusLabels = {
   PENDING: '待执行',
   SUCCESS: '成功',
   FAILED: '失败',
-  UNKNOWN: '待对账'
+  UNKNOWN: '待对账',
+  RETRIED: '已重试'
 }
 
 export const severityLabels = {
@@ -66,7 +67,8 @@ export const tagTypes = {
     PENDING: 'warning',
     SUCCESS: 'success',
     FAILED: 'danger',
-    UNKNOWN: 'info'
+    UNKNOWN: 'info',
+    RETRIED: 'info'
   },
   severity: {
     HIGH: 'danger',

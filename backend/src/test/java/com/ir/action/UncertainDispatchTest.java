@@ -33,6 +33,7 @@ class UncertainDispatchTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired InventorySnapshotMapper inventoryMapper;
+    @Autowired CtActionMapper actionMapper;
     @SpyBean MockWmsClient wms;
 
     private String token() throws Exception {
@@ -65,16 +66,48 @@ class UncertainDispatchTest {
 
         doThrow(new IntegrationException("connection refused", new java.net.ConnectException(), false))
                 .when(wms).execute(any(ActionCommand.class));
-        mvc.perform(post("/api/action").header("Authorization", "Bearer " + t)
-                .contentType(MediaType.APPLICATION_JSON).content(BODY))
-                .andExpect(jsonPath("$.data.status").value("FAILED"));
+        String failed = mvc.perform(post("/api/action").header("Authorization", "Bearer " + t)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(BODY.replace("\"sku\"", "\"idempotencyKey\":\"client-chosen\",\"sku\"")))
+                .andExpect(jsonPath("$.data.status").value("FAILED"))
+                .andReturn().getResponse().getContentAsString();
         assertEquals(from.subtract(BigDecimal.valueOf(3)).setScale(2), available("WH-SH", "SKU002"));
+        long failedId = mapper.readTree(failed).get("data").get("id").asLong();
+        String failedNo = mapper.readTree(failed).get("data").get("actionNo").asText();
+        assertEquals(failedNo, mapper.readTree(failed).get("data").get("params")
+                .get(ActionService.IDEMPOTENCY_KEY).asText());
+
+        mvc.perform(post("/api/action/" + id + "/retry").header("Authorization", "Bearer " + t))
+                .andExpect(jsonPath("$.code").value(1));
 
         doNothing().when(wms).execute(any(ActionCommand.class));
-        String retried = mvc.perform(post("/api/action/" + id + "/retry").header("Authorization", "Bearer " + t))
+        String retried = mvc.perform(post("/api/action/" + failedId + "/retry")
+                .header("Authorization", "Bearer " + t))
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"))
                 .andReturn().getResponse().getContentAsString();
-        assertEquals(actionNo, mapper.readTree(retried).get("data").get("params")
+        assertEquals(failedNo, mapper.readTree(retried).get("data").get("params")
+                .get(ActionService.IDEMPOTENCY_KEY).asText());
+        assertEquals(failedNo, mapper.readTree(retried).get("data").get("params")
+                .get(ActionService.RETRY_OF).asText());
+        assertEquals("RETRIED", actionMapper.selectById(failedId).getStatus());
+        BigDecimal afterRetry = available("WH-SH", "SKU002");
+
+        mvc.perform(post("/api/action/" + failedId + "/retry").header("Authorization", "Bearer " + t))
+                .andExpect(jsonPath("$.code").value(1));
+        assertEquals(afterRetry, available("WH-SH", "SKU002"));
+
+        CtAction legacy = actionMapper.selectById(failedId);
+        legacy.setId(null);
+        legacy.setActionNo("ACT-LEGACY-1");
+        legacy.setStatus("FAILED");
+        legacy.setParams("{\"sku\":\"SKU002\",\"qty\":1,\"warehouseCode\":\"WH-BJ\","
+                + "\"fromWarehouseCode\":\"WH-SH\"}");
+        actionMapper.insert(legacy);
+        String legacyRetried = mvc.perform(post("/api/action/" + legacy.getId() + "/retry")
+                .header("Authorization", "Bearer " + t))
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andReturn().getResponse().getContentAsString();
+        assertEquals("ACT-LEGACY-1", mapper.readTree(legacyRetried).get("data").get("params")
                 .get(ActionService.IDEMPOTENCY_KEY).asText());
     }
 
