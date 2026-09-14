@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -129,7 +130,7 @@ public class StrategyCatalog {
             }
             boolean late = "DELAYED".equals(asn.getStatus())
                     || (asn.getExpectedDate() != null && asn.getExpectedDate().isBefore(today));
-            if (!late || !lowSkus.contains(asn.getSku())) {
+            if (!late || Collections.disjoint(lowSkus, asn.skuList())) {
                 continue;
             }
             Decision d = new Decision();
@@ -359,8 +360,8 @@ public class StrategyCatalog {
         BigDecimal total = BigDecimal.ZERO;
         int count = 0;
         for (PurchaseSnapshot po : ctx.getPurchases()) {
-            if ("PO".equals(po.getDocType()) && sku.equals(po.getSku()) && po.getAmount() != null
-                    && po.getQty() != null && po.getQty().signum() > 0) {
+            if ("PO".equals(po.getDocType()) && po.skuList().size() == 1 && sku.equals(po.getSku())
+                    && po.getAmount() != null && po.getQty() != null && po.getQty().signum() > 0) {
                 total = total.add(po.getAmount().divide(po.getQty(), 2, RoundingMode.HALF_UP));
                 count++;
             }
