@@ -15,6 +15,12 @@ export const scenarioKindLabels = {
   BASELINE: '基线'
 }
 
+export const scenarioStatusLabels = {
+  RUN: '已运行',
+  DRAFT: '草稿',
+  FAILED: '失败'
+}
+
 export const alertStatusLabels = {
   OPEN: '待处理',
   ACKED: '已确认',
