@@ -1,18 +1,18 @@
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('OMS', '订单管理系统', 'http://localhost:8081', 'BEARER', 'admin', 'admin123', NULL, 'MOCK', TRUE);
+VALUES ('OMS', '订单管理系统', 'http://localhost:8081', 'BEARER', 'admin', 'admin123', 'oms-open-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('WMS', '仓储管理系统', 'http://localhost:8083', 'BEARER', 'admin', 'admin123', NULL, 'MOCK', TRUE);
+VALUES ('WMS', '仓储管理系统', 'http://localhost:8083', 'BEARER', 'admin', 'admin123', 'wms-open-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
 VALUES ('TMS', '运输管理系统', 'http://localhost:8082', 'NONE', NULL, NULL, NULL, 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('BMS', '计费系统', 'http://localhost:8084', 'API_KEY', NULL, NULL, NULL, 'MOCK', TRUE);
+VALUES ('BMS', '计费系统', 'http://localhost:8084', 'API_KEY', NULL, NULL, 'bms-open-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('SRM', '供应商管理系统（预留）', NULL, 'NONE', NULL, NULL, NULL, 'MOCK', FALSE);
+VALUES ('SRM', '供应商管理系统', 'http://localhost:8085', 'API_KEY', NULL, NULL, 'srm-wms-key', 'MOCK', TRUE);
 
 MERGE INTO ct_user (username, password, real_name, role, enabled)
 KEY (username)

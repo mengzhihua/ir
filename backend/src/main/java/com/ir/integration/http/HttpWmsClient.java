@@ -21,12 +21,23 @@ public class HttpWmsClient implements WmsClient {
     private final String username;
     private final String password;
     private volatile String token;
+    private final String apiKey;
 
     public HttpWmsClient(RestTemplate http, String baseUrl, String username, String password) {
+        this(http, baseUrl, username, password, null);
+    }
+
+    public HttpWmsClient(
+            RestTemplate http,
+            String baseUrl,
+            String username,
+            String password,
+            String apiKey) {
         this.http = http;
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.username = username;
         this.password = password;
+        this.apiKey = apiKey;
     }
 
     @Override
@@ -76,6 +87,14 @@ public class HttpWmsClient implements WmsClient {
 
     @Override
     public void execute(ActionCommand command) {
+        if (apiKey != null && !apiKey.trim().isEmpty()) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("type", command.getType());
+            body.put("targetKey", command.getTargetKey());
+            body.put("params", command.getParams());
+            HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            return;
+        }
         if ("WMS_ALLOCATE".equals(command.getType())) {
             HttpSupport.postMap(http, baseUrl + "/api/outbound/order/"
                     + command.getTargetKey() + "/allocate", command.getParams(), headers());

@@ -51,7 +51,10 @@ const metrics = computed(() => {
     ['总成本', 'totalCost'],
     ['服务水平', 'serviceLevel'],
     ['缺货件数', 'stockoutUnits'],
-    ['平均时效', 'avgLeadDays']
+    ['平均时效', 'avgLeadDays'],
+    ['成本分', 'costScore'],
+    ['效率分', 'efficiencyScore'],
+    ['综合分', 'balanceScore']
   ]
   return definitions.map(([metric, key]) => ({
     metric,
@@ -61,7 +64,9 @@ const metrics = computed(() => {
   }))
 })
 function formatMetric(metric, value) {
-  return metric === '总成本' ? formatMoney(value) : Number(value || 0).toFixed(2)
+  if (metric === '总成本') return formatMoney(value)
+  if (metric === '服务水平') return percent(value)
+  return Number(value || 0).toFixed(4)
 }
 const chartOption = computed(() => ({
   tooltip: { trigger: 'axis' },

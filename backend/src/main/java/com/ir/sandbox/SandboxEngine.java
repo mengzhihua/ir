@@ -387,9 +387,12 @@ public class SandboxEngine {
             BaselineData baseline) {
         Map<String, BigDecimal> stock = new LinkedHashMap<>();
         for (InventorySnapshot item : baseline.getInventory()) {
-            stock.put(key(item.getWarehouseCode(), item.getSku()),
-                    item.getQtyAvailable().multiply(
-                            params.getInitialInventoryMultiplier()));
+            String warehouse = com.ir.common.WarehouseCodes.toOms(item.getWarehouseCode());
+            String stockKey = key(warehouse, item.getSku());
+            BigDecimal qty = item.getQtyAvailable() == null
+                    ? BigDecimal.ZERO
+                    : item.getQtyAvailable().multiply(params.getInitialInventoryMultiplier());
+            stock.put(stockKey, stock.getOrDefault(stockKey, BigDecimal.ZERO).add(qty));
         }
         return stock;
     }

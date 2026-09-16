@@ -21,6 +21,11 @@ SCENARIO_NAME="2倍需求-$(date +%H%M%S)"
 SCENARIO="$(json -X POST "$BASE/api/sandbox/scenario" -H 'Content-Type: application/json' -d "{\"name\":\"$SCENARIO_NAME\",\"params\":{\"demandMultiplier\":2,\"allocationStrategy\":\"SINGLE_WAREHOUSE\",\"singleWarehouse\":\"WH-SH\"}}" | jq -r '.data.id')"
 json -X POST "$BASE/api/sandbox/scenario/$SCENARIO/run" | jq -e '.code==0' >/dev/null
 json "$BASE/api/sandbox/compare?ids=$BASELINE,$SCENARIO" | jq -e '.code==0 and (.data|length)>=2' >/dev/null
+AUTO="$(json -X POST "$BASE/api/sandbox/auto/run" | jq -r '.data.recommended.id')"
+test -n "$AUTO" && test "$AUTO" != "null"
+json "$BASE/api/sandbox/auto/latest" | jq -e '.code==0 and .data.recommended.id!=null' >/dev/null
+json -X POST "$BASE/api/sandbox/scenario/$AUTO/apply?execute=false" | jq -e '.code==0 and (.data|type=="array")' >/dev/null
+json "$BASE/api/tower/overview" | jq -e '.code==0 and .data.recommendation.id!=null' >/dev/null
 json "$BASE/api/cost/summary?days=30" | jq -e '.code==0 and (.data.total|numbers) and (.data.byType|length)>0' >/dev/null
 json "$BASE/api/cost/page" | jq -e '.code==0 and (.data.records|length)>0 and .data.total>0' >/dev/null
 json "$BASE/api/cost/saving" | jq -e '.code==0' >/dev/null

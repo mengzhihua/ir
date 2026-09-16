@@ -9,10 +9,10 @@ export const orderStatusLabels = {
   CANCELLED: '已取消'
 }
 
-export const scenarioStatusLabels = {
-  RUN: '已运行',
-  DRAFT: '草稿',
-  FAILED: '失败'
+export const scenarioKindLabels = {
+  MANUAL: '人工沙盘',
+  AUTO: '系统自动',
+  BASELINE: '基线'
 }
 
 export const alertStatusLabels = {
