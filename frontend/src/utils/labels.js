@@ -30,6 +30,7 @@ export const alertStatusLabels = {
 
 export const actionStatusLabels = {
   PENDING: '待执行',
+  RUNNING: '执行中',
   SUCCESS: '成功',
   FAILED: '失败',
   SUPERSEDED: '已作废'
@@ -70,6 +71,7 @@ export const tagTypes = {
   },
   actionStatus: {
     PENDING: 'warning',
+    RUNNING: 'primary',
     SUCCESS: 'success',
     FAILED: 'danger',
     SUPERSEDED: 'info'

@@ -50,9 +50,10 @@ public class ForecastController {
     @GetMapping("/replenish")
     public R<List<Map<String, Object>>> replenish(
             @RequestParam(required = false) String warehouseCode,
+            @RequestParam(required = false) String sku,
             @RequestParam(defaultValue = "14") int horizon,
             @RequestParam(defaultValue = "3") int serviceDays) {
-        return R.ok(service.replenish(warehouseCode, horizon, serviceDays));
+        return R.ok(service.replenish(warehouseCode, sku, horizon, serviceDays));
     }
 
     @PostMapping("/replenish/to-action")

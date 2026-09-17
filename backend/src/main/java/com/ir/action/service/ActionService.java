@@ -1,6 +1,7 @@
 package com.ir.action.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -72,10 +73,7 @@ public class ActionService {
         CtAction existing = findPending(type, targetKey);
         Map<String, Object> params = paramsOf(request);
         if (existing != null) {
-            existing.setParams(write(params));
-            if (request.get("alertId") != null) {
-                existing.setAlertId(Long.valueOf(String.valueOf(request.get("alertId"))));
-            }
+            refreshPending(existing, request, params);
             try {
                 execute(existing, params);
             } catch (Exception ex) {
@@ -105,11 +103,7 @@ public class ActionService {
         supersedeRelatedPending(type, targetKey, null);
         CtAction existing = findPending(type, targetKey);
         if (existing != null) {
-            existing.setParams(write(paramsOf(request)));
-            existing.setExpectedSaving(decimal(request.get("expectedSaving")));
-            if (request.get("alertId") != null) {
-                existing.setAlertId(Long.valueOf(String.valueOf(request.get("alertId"))));
-            }
+            refreshPending(existing, request, paramsOf(request));
             actionMapper.updateById(existing);
             return existing;
         }
@@ -118,10 +112,14 @@ public class ActionService {
 
     @Transactional
     public CtAction executePending(Long id) {
-        CtAction action = actionMapper.selectById(id);
-        if (action == null || !"PENDING".equals(action.getStatus())) {
-            return action;
+        int claimed = actionMapper.update(null, new LambdaUpdateWrapper<CtAction>()
+                .eq(CtAction::getId, id)
+                .eq(CtAction::getStatus, "PENDING")
+                .set(CtAction::getStatus, "RUNNING"));
+        if (claimed == 0) {
+            return actionMapper.selectById(id);
         }
+        CtAction action = actionMapper.selectById(id);
         execute(action, read(action.getParamsJson()));
         return actionMapper.selectById(action.getId());
     }
@@ -354,6 +352,17 @@ public class ActionService {
                 new TypeReference<Map<String, Object>>() {
                 })
                 : new LinkedHashMap<>();
+    }
+
+    private void refreshPending(
+            CtAction existing,
+            Map<String, Object> request,
+            Map<String, Object> params) {
+        existing.setParams(write(params));
+        existing.setExpectedSaving(decimal(request.get("expectedSaving")));
+        if (request.get("alertId") != null) {
+            existing.setAlertId(Long.valueOf(String.valueOf(request.get("alertId"))));
+        }
     }
 
     private CtAction findPending(String type, String targetKey) {

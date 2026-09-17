@@ -39,6 +39,22 @@ class ActionQueueTest {
 
         CtAction executed = actions.executePending(cheap.getId());
         assertEquals("SUCCESS", executed.getStatus());
+        CtAction againExecute = actions.executePending(cheap.getId());
+        assertEquals("SUCCESS", againExecute.getStatus());
+        assertEquals(executed.getExecutedAt(), againExecute.getExecutedAt());
+    }
+
+    @Test
+    void reusingPendingRefreshesExpectedSaving() {
+        Map<String, Object> first = pending("OMS_HOLD", "SO-SAVE-1", null);
+        first.put("expectedSaving", 10);
+        CtAction created = actions.createPending(first);
+        Map<String, Object> again = pending("OMS_HOLD", "SO-SAVE-1", null);
+        again.put("expectedSaving", 25);
+        CtAction reused = actions.createAndExecute(again);
+        assertEquals(created.getId(), reused.getId());
+        assertEquals(0, new BigDecimal("25").compareTo(reused.getExpectedSaving()));
+        assertEquals("SUCCESS", reused.getStatus());
     }
 
     @Test

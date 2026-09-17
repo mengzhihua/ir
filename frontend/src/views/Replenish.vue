@@ -15,7 +15,7 @@
         ><el-option label="WH-SH" value="WH-SH" /><el-option
           label="WH-BJ"
           value="WH-BJ" /><el-option label="WH-GZ" value="WH-GZ" /></el-select
-      ><el-button type="primary" @click="load">查询</el-button
+      ><el-button type="primary" @click="search">查询</el-button
       ><el-button v-if="canWrite() && selected.length" type="primary" @click="batchAction"
         >批量转指令</el-button
       >
@@ -25,11 +25,17 @@
         ><el-table-column type="selection" width="50" /><el-table-column
           prop="sku"
           label="SKU" /><el-table-column prop="warehouseCode" label="仓库" /><el-table-column
-          prop="stockoutDate"
-          label="预计缺货日期" /><el-table-column
-          prop="suggestedQty"
+          prop="available"
+          label="可用"
+          align="right" /><el-table-column
+          prop="inTransit"
+          label="采购在途"
+          align="right" /><el-table-column
+          prop="suggestQty"
           label="建议数量"
           align="right" /><el-table-column
+          prop="stockoutDate"
+          label="预计缺货日期" /><el-table-column
           prop="serviceDays"
           label="保障天数"
           align="right" /><el-table-column label="操作"
@@ -69,7 +75,6 @@ import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { forecastApi } from '../api'
 import { canWrite } from '../auth'
-import { pageResult } from '../utils/format'
 const filters = reactive({ sku: '', warehouseCode: '' })
 const pager = reactive({ current: 1, size: 20, total: 0 })
 const rows = ref([])
@@ -81,12 +86,18 @@ const currentRows = ref([])
 async function load() {
   loading.value = true
   try {
-    const page = pageResult(await forecastApi.replenish({ ...filters, ...pager }))
-    rows.value = page.records
-    pager.total = page.total
+    const data = await forecastApi.replenish({ ...filters })
+    const all = Array.isArray(data) ? data : data?.records || []
+    pager.total = all.length
+    const start = (pager.current - 1) * pager.size
+    rows.value = all.slice(start, start + pager.size)
   } finally {
     loading.value = false
   }
+}
+function search() {
+  pager.current = 1
+  load()
 }
 function toAction(row) {
   currentRows.value = [row]
@@ -97,10 +108,15 @@ function batchAction() {
   visible.value = true
 }
 async function submitAction() {
-  for (const row of currentRows.value)
-    await forecastApi.toAction({ ...row, type: actionType.value })
+  const payload = currentRows.value.map((row) => ({ ...row, type: actionType.value }))
+  const results = await forecastApi.toAction(payload)
   visible.value = false
-  ElMessage.success('已生成待执行指令')
+  const failed = (Array.isArray(results) ? results : []).filter((item) => item.status === 'FAILED')
+  if (failed.length) {
+    ElMessage.error(failed[0].result || '部分指令执行失败')
+  } else {
+    ElMessage.success('已下发补货指令')
+  }
 }
 load()
 </script>

@@ -10,25 +10,35 @@ import com.ir.common.CodeGenerator;
 import com.ir.forecast.engine.ForecastEngine;
 import com.ir.forecast.entity.CtForecast;
 import com.ir.forecast.mapper.CtForecastMapper;
+import com.ir.snapshot.entity.ExtSnapshot;
 import com.ir.snapshot.entity.InventorySnapshot;
 import com.ir.snapshot.entity.SalesDaily;
+import com.ir.snapshot.mapper.ExtSnapshotMapper;
 import com.ir.snapshot.mapper.InventorySnapshotMapper;
 import com.ir.snapshot.mapper.SalesDailyMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
 @Service
 public class ForecastService {
+    private static final Set<String> CLOSED_INBOUND = new HashSet<>(Arrays.asList(
+            "CANCELLED", "CANCELED", "CLOSED", "RECEIVED", "COMPLETED", "GR", "DONE", "REJECTED"));
+
     private final SalesDailyMapper salesMapper;
     private final InventorySnapshotMapper inventoryMapper;
+    private final ExtSnapshotMapper extMapper;
     private final CtForecastMapper forecastMapper;
     private final ForecastEngine engine;
     private final ActionService actions;
@@ -38,6 +48,7 @@ public class ForecastService {
     public ForecastService(
             SalesDailyMapper salesMapper,
             InventorySnapshotMapper inventoryMapper,
+            ExtSnapshotMapper extMapper,
             CtForecastMapper forecastMapper,
             ForecastEngine engine,
             ActionService actions,
@@ -45,6 +56,7 @@ public class ForecastService {
             ObjectMapper objectMapper) {
         this.salesMapper = salesMapper;
         this.inventoryMapper = inventoryMapper;
+        this.extMapper = extMapper;
         this.forecastMapper = forecastMapper;
         this.engine = engine;
         this.actions = actions;
@@ -102,14 +114,19 @@ public class ForecastService {
 
     public List<Map<String, Object>> replenish(
             String warehouseCode,
+            String sku,
             int horizon,
             int serviceDays) {
         List<Map<String, Object>> result = new ArrayList<>();
         LambdaQueryWrapper<InventorySnapshot> query = new LambdaQueryWrapper<>();
-        if (warehouseCode != null) {
+        if (warehouseCode != null && !warehouseCode.trim().isEmpty()) {
             query.eq(InventorySnapshot::getWarehouseCode, warehouseCode);
         }
+        if (sku != null && !sku.trim().isEmpty()) {
+            query.eq(InventorySnapshot::getSku, sku.trim());
+        }
         List<InventorySnapshot> inventory = inventoryMapper.selectList(query);
+        Map<String, BigDecimal> inbound = inboundBySku();
         for (InventorySnapshot item : inventory) {
             Map<String, Object> forecast = run(
                     item.getSku(), item.getWarehouseCode(), horizon, "AUTO");
@@ -121,17 +138,22 @@ public class ForecastService {
                     ? BigDecimal.ZERO
                     : demand.divide(BigDecimal.valueOf(horizon), 6, RoundingMode.HALF_UP);
             BigDecimal safety = daily.multiply(BigDecimal.valueOf(serviceDays));
-            BigDecimal suggest = demand.add(safety)
-                    .subtract(item.getQtyAvailable())
-                    .max(BigDecimal.ZERO);
+            BigDecimal inTransit = inbound.getOrDefault(item.getSku(), BigDecimal.ZERO);
+            BigDecimal available = item.getQtyAvailable() == null
+                    ? BigDecimal.ZERO
+                    : item.getQtyAvailable();
+            BigDecimal cover = available.add(inTransit);
+            BigDecimal suggest = demand.add(safety).subtract(cover).max(BigDecimal.ZERO);
             Map<String, Object> row = new LinkedHashMap<>(forecast);
             row.put("forecastDemand", demand);
             row.put("onHand", item.getQtyOnHand());
-            row.put("available", item.getQtyAvailable());
-            row.put("inTransit", BigDecimal.ZERO);
+            row.put("available", available);
+            row.put("inTransit", inTransit);
             row.put("safety", safety);
+            row.put("serviceDays", serviceDays);
             row.put("suggestQty", suggest);
-            row.put("stockoutDate", stockoutDate(item.getQtyAvailable(), daily));
+            row.put("suggestedQty", suggest);
+            row.put("stockoutDate", stockoutDate(cover, daily));
             result.add(row);
         }
         return result;
@@ -160,13 +182,67 @@ public class ForecastService {
     public List<CtAction> toActions(List<Map<String, Object>> rows) {
         List<CtAction> result = new ArrayList<>();
         for (Map<String, Object> row : rows) {
-            Map<String, Object> request = new LinkedHashMap<>();
-            request.put("type", "SRM_PURCHASE_SUGGEST");
-            request.put("targetKey", row.get("sku"));
-            request.put("params", row);
-            result.add(actions.createAndExecute(request));
+            result.add(actions.createAndExecute(toActionRequest(row)));
         }
         return result;
+    }
+
+    Map<String, BigDecimal> inboundBySku() {
+        Map<String, BigDecimal> po = new HashMap<>();
+        Map<String, BigDecimal> asn = new HashMap<>();
+        List<ExtSnapshot> rows = extMapper.selectList(new LambdaQueryWrapper<ExtSnapshot>()
+                .in(ExtSnapshot::getDataType, "PO", "ASN")
+                .in(ExtSnapshot::getSourceSystem, "SRM", "SAP"));
+        for (ExtSnapshot row : rows) {
+            if (row.getSku() == null || row.getSku().trim().isEmpty() || closedInbound(row.getStatus())) {
+                continue;
+            }
+            BigDecimal qty = row.getQty() == null ? BigDecimal.ZERO : row.getQty();
+            if ("ASN".equals(row.getDataType())) {
+                asn.merge(row.getSku(), qty, BigDecimal::add);
+            } else {
+                po.merge(row.getSku(), qty, BigDecimal::add);
+            }
+        }
+        Map<String, BigDecimal> inbound = new HashMap<>(po);
+        for (Map.Entry<String, BigDecimal> entry : asn.entrySet()) {
+            BigDecimal ordered = inbound.getOrDefault(entry.getKey(), BigDecimal.ZERO);
+            inbound.put(entry.getKey(), ordered.max(entry.getValue()));
+        }
+        return inbound;
+    }
+
+    private Map<String, Object> toActionRequest(Map<String, Object> row) {
+        String type = row.get("type") == null
+                ? "SRM_PURCHASE_SUGGEST"
+                : String.valueOf(row.get("type"));
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("type", type);
+        Object qty = row.get("qty") != null
+                ? row.get("qty")
+                : (row.get("suggestQty") != null ? row.get("suggestQty") : row.get("suggestedQty"));
+        if ("WMS_REPLENISH".equals(type)) {
+            request.put("targetKey", row.get("warehouseCode"));
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("warehouseCode", row.get("warehouseCode"));
+            params.put("sku", row.get("sku"));
+            if (qty != null) {
+                params.put("qty", qty);
+            }
+            request.put("params", params);
+        } else {
+            request.put("targetKey", row.get("sku"));
+            Map<String, Object> params = new LinkedHashMap<>(row);
+            if (qty != null) {
+                params.put("qty", qty);
+            }
+            request.put("params", params);
+        }
+        return request;
+    }
+
+    private boolean closedInbound(String status) {
+        return status != null && CLOSED_INBOUND.contains(status.trim().toUpperCase());
     }
 
     private LocalDate stockoutDate(BigDecimal available, BigDecimal daily) {

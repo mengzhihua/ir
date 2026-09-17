@@ -16,6 +16,8 @@
           :value="item.type" /></el-select
       ><el-select v-model="filters.status" clearable placeholder="状态" @change="search"
         ><el-option label="待执行" value="PENDING" /><el-option
+          label="执行中"
+          value="RUNNING" /><el-option
           label="成功"
           value="SUCCESS" /><el-option label="失败" value="FAILED" /><el-option
           label="已作废"
@@ -152,20 +154,39 @@ function openCreate() {
   visible.value = true
 }
 async function create() {
-  await actionApi.create({ ...form })
+  const result = await actionApi.create({ ...form })
   visible.value = false
-  ElMessage.success('指令已创建')
+  notifyAction(result, '指令已下发')
   load()
 }
 async function execute(row) {
-  await actionApi.execute(row.id)
-  ElMessage.success('已执行待办指令')
+  const result = await actionApi.execute(row.id)
+  notifyAction(result, '已执行待办指令')
   load()
 }
 async function retry(row) {
-  await actionApi.retry(row.id)
-  ElMessage.success('已提交重试')
+  const result = await actionApi.retry(row.id)
+  notifyAction(result, '已提交重试')
   load()
+}
+function notifyAction(result, successText) {
+  if (!result) {
+    ElMessage.error('指令不存在')
+    return
+  }
+  if (result.status === 'FAILED') {
+    ElMessage.error(result.result || '指令执行失败')
+    return
+  }
+  if (result.status === 'SUCCESS') {
+    ElMessage.success(successText)
+    return
+  }
+  if (result.status === 'RUNNING') {
+    ElMessage.info('指令正在执行')
+    return
+  }
+  ElMessage.warning(result.result || '指令当前不可执行')
 }
 loadTypes()
 load()
