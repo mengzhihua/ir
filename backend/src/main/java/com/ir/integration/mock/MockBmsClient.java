@@ -1,9 +1,8 @@
 package com.ir.integration.mock;
 
-import com.ir.integration.client.BmsClient;
-import com.ir.snapshot.CostRecord;
 import org.springframework.stereotype.Component;
-
+import com.ir.integration.client.BmsClient;
+import com.ir.snapshot.entity.CostRecord;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;

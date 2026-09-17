@@ -1,11 +1,10 @@
 package com.ir.integration.http;
 
-import com.ir.integration.client.BmsClient;
-import com.ir.integration.client.IntegrationException;
-import com.ir.snapshot.CostRecord;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestTemplate;
-
+import com.ir.integration.client.BmsClient;
+import com.ir.integration.client.IntegrationException;
+import com.ir.snapshot.entity.CostRecord;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;

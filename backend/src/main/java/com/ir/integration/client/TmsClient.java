@@ -1,7 +1,7 @@
 package com.ir.integration.client;
 
-import com.ir.snapshot.CostRecord;
-import com.ir.snapshot.ShipmentSnapshot;
+import com.ir.snapshot.entity.CostRecord;
+import com.ir.snapshot.entity.ShipmentSnapshot;
 import java.util.List;
 import java.util.Map;
 

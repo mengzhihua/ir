@@ -18,13 +18,16 @@ npm run dev
 
 ## 目录
 
+每个业务包内部按 `controller` / `service` / `engine` / `entity` / `mapper` 分层，不把 Web、业务、表对象平铺在同一目录。
+
 - `com.ir.integration`：OMS/TMS/WMS/BMS/SRM/SAP/BOM/INV/CRM/DMS/OA MOCK/HTTP 客户端与同步
-- `com.ir.snapshot`：统一快照与确定性演示数据
+- `com.ir.snapshot`：统一快照（`entity`）与 Mapper
 - `com.ir.tower` / `trace`：控制塔看板和全链路追踪
 - `com.ir.alert` / `action`：规则预警和跨系统协同指令
 - `com.ir.forecast`：MA、SES、Holt、Seasonal Naive、AUTO 预测和补货
 - `com.ir.sandbox`：人工沙盘与系统自动沙盘（成本/效率综合分）
 - `com.ir.cost`：成本汇总、明细和目标
+- `com.ir.system`：鉴权、审计、启动热身 `BootstrapService`
 
 ## 前端
 

@@ -1,12 +1,11 @@
 package com.ir.integration.mock;
 
+import org.springframework.stereotype.Component;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.OmsClient;
-import com.ir.snapshot.InventorySnapshot;
-import com.ir.snapshot.OrderSnapshot;
-import com.ir.snapshot.SalesPoint;
-import org.springframework.stereotype.Component;
-
+import com.ir.snapshot.entity.InventorySnapshot;
+import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.entity.SalesPoint;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
