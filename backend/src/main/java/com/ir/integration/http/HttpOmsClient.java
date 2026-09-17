@@ -58,6 +58,7 @@ public class HttpOmsClient implements OmsClient {
             order.setProvince(HttpSupport.string(row, "province"));
             order.setCity(HttpSupport.string(row, "city"));
             order.setStatus(HttpSupport.string(row, "status"));
+            order.setPriority(integer(row, "priority"));
             order.setPayAmount(decimal(row, "payAmount", "amount"));
             order.setFreight(decimal(row, "freight"));
             order.setQty(decimal(row, "qty", "totalQty"));
@@ -231,6 +232,23 @@ public class HttpOmsClient implements OmsClient {
             throw new IntegrationException("OMS 登录未返回 token");
         }
         return token;
+    }
+
+    private static Integer integer(Map<String, Object> row, String... names) {
+        for (String name : names) {
+            Object value = row.get(name);
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+            if (value != null && !String.valueOf(value).trim().isEmpty()) {
+                try {
+                    return Integer.parseInt(String.valueOf(value).trim());
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+        }
+        return null;
     }
 
     private static BigDecimal decimal(Map<String, Object> row, String... names) {

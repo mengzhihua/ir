@@ -54,6 +54,16 @@ public class MockOmsClient implements OmsClient {
                 order.setStatus("AUDITED");
             } else if ("OMS_AUTO_PROCESS".equals(command.getType())) {
                 order.setStatus("ALLOCATED");
+            } else if ("OMS_PRIORITIZE".equals(command.getType())) {
+                int priority = 10;
+                if (command.getParams() != null && command.getParams().get("priority") != null) {
+                    try {
+                        priority = Integer.parseInt(String.valueOf(command.getParams().get("priority")));
+                    } catch (NumberFormatException ignored) {
+                        priority = 10;
+                    }
+                }
+                order.setPriority(priority);
             } else if ("OMS_REROUTE_WAREHOUSE".equals(command.getType())
                     && command.getParams() != null
                     && command.getParams().get("warehouseCode") != null) {

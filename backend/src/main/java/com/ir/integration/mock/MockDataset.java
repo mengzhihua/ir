@@ -74,6 +74,8 @@ public class MockDataset {
         order.setPayAmount(BigDecimal.valueOf(80 + (index * 17) % 900));
         order.setFreight(BigDecimal.valueOf(6 + index % 4));
         order.setOrderTime(orderTime);
+        order.setStatus("CREATED");
+        order.setPriority(0);
         order.setPayTime(orderTime.plusHours(1));
 
         if (index % 43 == 0) {

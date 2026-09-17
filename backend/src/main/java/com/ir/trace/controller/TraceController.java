@@ -27,10 +27,11 @@ public class TraceController {
             @RequestParam(required = false) String warehouseCode,
             @RequestParam(required = false) String carrierCode,
             @RequestParam(required = false) Boolean stuck,
+            @RequestParam(required = false) Boolean rushed,
             @RequestParam(defaultValue = "1") long current,
             @RequestParam(defaultValue = "20") long size) {
         return R.ok(service.page(
-                keyword, status, warehouseCode, carrierCode, stuck,
+                keyword, status, warehouseCode, carrierCode, stuck, rushed,
                 current, size));
     }
 
