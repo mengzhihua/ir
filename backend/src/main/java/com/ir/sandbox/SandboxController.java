@@ -18,9 +18,11 @@ import java.util.Map;
 @RequestMapping("/api/sandbox")
 public class SandboxController {
     private final SandboxService service;
+    private final AutoSandboxService autoSandbox;
 
-    public SandboxController(SandboxService service) {
+    public SandboxController(SandboxService service, AutoSandboxService autoSandbox) {
         this.service = service;
+        this.autoSandbox = autoSandbox;
     }
 
     @PostMapping("/baseline")
@@ -45,9 +47,10 @@ public class SandboxController {
     public R<Page<CtScenario>> page(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String kind,
             @RequestParam(defaultValue = "1") long current,
             @RequestParam(defaultValue = "20") long size) {
-        return R.ok(service.page(name, status, current, size));
+        return R.ok(service.page(name, status, kind, current, size));
     }
 
     @GetMapping("/scenario/{id}")
@@ -66,8 +69,20 @@ public class SandboxController {
     }
 
     @PostMapping("/scenario/{id}/apply")
-    public R<List<CtAction>> apply(@PathVariable Long id) {
-        return R.ok(service.apply(id));
+    public R<List<CtAction>> apply(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "false") boolean execute) {
+        return R.ok(service.apply(id, execute));
+    }
+
+    @PostMapping("/auto/run")
+    public R<Map<String, Object>> autoRun() {
+        return R.ok(autoSandbox.run());
+    }
+
+    @GetMapping("/auto/latest")
+    public R<Map<String, Object>> autoLatest() {
+        return R.ok(autoSandbox.latest());
     }
 
     private ScenarioParams toParams(Object value) {

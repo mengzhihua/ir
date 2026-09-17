@@ -45,12 +45,20 @@ public class MockOmsClient implements OmsClient {
 
     @Override
     public void execute(ActionCommand command) {
-        if ("OMS_HOLD".equals(command.getType())
-                || "OMS_PRIORITIZE".equals(command.getType())) {
-            for (OrderSnapshot order : dataset.orders()) {
-                if (command.getTargetKey().equals(order.getOrderNo())) {
-                    order.setStatus("HOLD".equals(command.getType()) ? "HOLD" : order.getStatus());
-                }
+        for (OrderSnapshot order : dataset.orders()) {
+            if (!command.getTargetKey().equals(order.getOrderNo())) {
+                continue;
+            }
+            if ("OMS_HOLD".equals(command.getType())) {
+                order.setStatus("HOLD");
+            } else if ("OMS_UNHOLD".equals(command.getType())) {
+                order.setStatus("AUDITED");
+            } else if ("OMS_REROUTE_WAREHOUSE".equals(command.getType())
+                    && command.getParams() != null
+                    && command.getParams().get("warehouseCode") != null) {
+                order.setWarehouseCode(String.valueOf(command.getParams().get("warehouseCode")));
+            } else if ("OMS_CANCEL".equals(command.getType())) {
+                order.setStatus("CANCELLED");
             }
         }
     }

@@ -11,6 +11,7 @@ import org.springframework.web.client.RestTemplate;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -65,17 +66,11 @@ public class HttpTmsClient implements TmsClient {
 
     @Override
     public void execute(ActionCommand command) {
-        String suffix = "/api/waybill/" + command.getTargetKey();
-        if ("TMS_DISPATCH".equals(command.getType())) {
-            suffix += "/dispatch";
-        } else if ("TMS_SYNC_TRACK".equals(command.getType())) {
-            suffix += "/sync-track";
-        } else if ("TMS_SWITCH_CARRIER".equals(command.getType())) {
-            suffix += "/dispatch";
-        } else {
-            return;
-        }
-        HttpSupport.postMap(http, baseUrl + suffix, command.getParams(), new HttpHeaders());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", command.getType());
+        body.put("targetKey", command.getTargetKey());
+        body.put("params", command.getParams());
+        HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, new HttpHeaders());
     }
 
     @Override

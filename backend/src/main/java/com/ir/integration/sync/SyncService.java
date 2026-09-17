@@ -5,6 +5,8 @@ import com.ir.integration.client.BmsClient;
 import com.ir.integration.client.ClientFactory;
 import com.ir.integration.client.IntegrationException;
 import com.ir.integration.client.OmsClient;
+import com.ir.common.WarehouseCodes;
+import com.ir.integration.client.SrmClient;
 import com.ir.integration.client.TmsClient;
 import com.ir.integration.client.WmsClient;
 import com.ir.integration.entity.CtSyncLog;
@@ -107,6 +109,9 @@ public class SyncService {
                 LocalDate to = LocalDate.now();
                 result.put("costs", persistCosts(
                         client.fetchCosts(to.minusDays(90), to), "BMS"));
+            } else if ("SRM".equals(code)) {
+                SrmClient client = clients.srm(system);
+                result.put("health", client.health());
             }
             system.setLastHealthAt(LocalDateTime.now());
             system.setLastHealthOk(true);
@@ -144,6 +149,8 @@ public class SyncService {
             ok = clients.wms(system).health();
         } else if ("TMS".equals(code)) {
             ok = clients.tms(system).health();
+        } else if ("SRM".equals(code)) {
+            ok = clients.srm(system).health();
         } else {
             ok = clients.bms(system).health();
         }
@@ -167,6 +174,7 @@ public class SyncService {
             OrderSnapshot existing = orderMapper.selectOne(
                     new LambdaQueryWrapper<OrderSnapshot>()
                             .eq(OrderSnapshot::getOrderNo, row.getOrderNo()));
+            row.setWarehouseCode(WarehouseCodes.toOms(row.getWarehouseCode()));
             row.setSyncedAt(LocalDateTime.now());
             if (existing == null) {
                 orderMapper.insert(row);
@@ -184,6 +192,7 @@ public class SyncService {
             WmsOrderSnapshot existing = wmsOrderMapper.selectOne(
                     new LambdaQueryWrapper<WmsOrderSnapshot>()
                             .eq(WmsOrderSnapshot::getCode, row.getCode()));
+            row.setWarehouseCode(WarehouseCodes.toOms(row.getWarehouseCode()));
             row.setSyncedAt(LocalDateTime.now());
             if (existing == null) {
                 wmsOrderMapper.insert(row);
@@ -215,6 +224,7 @@ public class SyncService {
 
     private int persistInventory(List<InventorySnapshot> rows) {
         for (InventorySnapshot row : rows) {
+            row.setWarehouseCode(WarehouseCodes.toOms(row.getWarehouseCode()));
             InventorySnapshot existing = inventoryMapper.selectOne(
                     new LambdaQueryWrapper<InventorySnapshot>()
                             .eq(InventorySnapshot::getSourceSystem, row.getSourceSystem())
@@ -237,7 +247,7 @@ public class SyncService {
             SalesDaily row = new SalesDaily();
             row.setSalesDate(point.getSalesDate());
             row.setSku(point.getSku());
-            row.setWarehouseCode(point.getWarehouseCode());
+            row.setWarehouseCode(WarehouseCodes.toOms(point.getWarehouseCode()));
             row.setChannelCode(point.getChannelCode());
             row.setQty(point.getQty());
             row.setAmount(point.getAmount());
@@ -263,6 +273,7 @@ public class SyncService {
                 .eq(CostRecord::getSourceSystem, sourceSystem));
         for (CostRecord row : rows) {
             row.setSourceSystem(sourceSystem);
+            row.setWarehouseCode(WarehouseCodes.toOms(row.getWarehouseCode()));
             costMapper.insert(row);
         }
         saveLog(sourceSystem, "COST", "SUCCESS", rows.size(), "成本同步完成");

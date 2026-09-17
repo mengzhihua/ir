@@ -30,3 +30,10 @@ ir:
   cost:
     handling-per-order: ${IR_COST_HANDLING_PER_ORDER:1.5}
     packaging-per-order: ${IR_COST_PACKAGING_PER_ORDER:0.8}
+  sandbox:
+    auto-cron: ${IR_SANDBOX_AUTO_CRON:0 30 */6 * * ?}
+    auto-on-startup: ${IR_SANDBOX_AUTO_ON_STARTUP:true}
+    auto-enabled: ${IR_SANDBOX_AUTO_ENABLED:true}
+    auto-apply: ${IR_SANDBOX_AUTO_APPLY:false}
+    cost-weight: ${IR_SANDBOX_COST_WEIGHT:0.5}
+    efficiency-weight: ${IR_SANDBOX_EFFICIENCY_WEIGHT:0.5}

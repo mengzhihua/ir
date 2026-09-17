@@ -60,11 +60,6 @@ public class ActionService {
     @Transactional
     public CtAction createAndExecute(Map<String, Object> request) {
         CtAction action = create(request);
-        if ("SRM".equals(action.getTargetSystem())) {
-            action.setResult("SRM 未接入，已生成采购建议");
-            actionMapper.updateById(action);
-            return action;
-        }
         try {
             execute(action, read(action.getParamsJson()));
         } catch (Exception ex) {
@@ -119,8 +114,10 @@ public class ActionService {
                 clients.oms(system).execute(command);
             } else if ("WMS".equals(action.getTargetSystem())) {
                 clients.wms(system).execute(command);
-            } else {
+            } else if ("TMS".equals(action.getTargetSystem())) {
                 clients.tms(system).execute(command);
+            } else {
+                clients.srm(system).execute(command);
             }
             mutateSnapshot(action, params);
             action.setStatus("SUCCESS");

@@ -23,6 +23,8 @@ public class ScenarioParams {
     private BigDecimal stockoutPenaltyPerUnit = BigDecimal.valueOf(20);
     private int replenishLeadDays = 3;
     private BigDecimal initialInventoryMultiplier = BigDecimal.ONE;
+    private BigDecimal costWeight = BigDecimal.valueOf(0.5);
+    private BigDecimal efficiencyWeight = BigDecimal.valueOf(0.5);
 
     public ScenarioParams() {
         channelDemandMultiplier.put("TMALL", BigDecimal.ONE);
@@ -68,6 +70,10 @@ public class ScenarioParams {
                 initialInventoryMultiplier == null
                         ? BigDecimal.ONE
                         : initialInventoryMultiplier);
+        normalized.setCostWeight(costWeight == null
+                ? BigDecimal.valueOf(0.5) : costWeight);
+        normalized.setEfficiencyWeight(efficiencyWeight == null
+                ? BigDecimal.valueOf(0.5) : efficiencyWeight);
         if (channelDemandMultiplier != null
                 && !channelDemandMultiplier.isEmpty()) {
             normalized.setChannelDemandMultiplier(
