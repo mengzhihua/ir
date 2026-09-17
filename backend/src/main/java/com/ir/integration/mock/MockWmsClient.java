@@ -1,11 +1,10 @@
 package com.ir.integration.mock;
 
+import org.springframework.stereotype.Component;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.WmsClient;
-import com.ir.snapshot.InventorySnapshot;
-import com.ir.snapshot.WmsOrderSnapshot;
-import org.springframework.stereotype.Component;
-
+import com.ir.snapshot.entity.InventorySnapshot;
+import com.ir.snapshot.entity.WmsOrderSnapshot;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

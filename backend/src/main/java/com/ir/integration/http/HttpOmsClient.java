@@ -1,14 +1,13 @@
 package com.ir.integration.http;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.client.RestTemplate;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.IntegrationException;
 import com.ir.integration.client.OmsClient;
-import com.ir.snapshot.InventorySnapshot;
-import com.ir.snapshot.OrderSnapshot;
-import com.ir.snapshot.SalesPoint;
-import org.springframework.http.HttpHeaders;
-import org.springframework.web.client.RestTemplate;
-
+import com.ir.snapshot.entity.InventorySnapshot;
+import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.entity.SalesPoint;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;

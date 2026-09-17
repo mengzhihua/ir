@@ -1,6 +1,6 @@
 package com.ir.integration.client;
 
-import com.ir.snapshot.*;
+import com.ir.snapshot.entity.*;
 import java.util.List;
 import java.util.Map;
 

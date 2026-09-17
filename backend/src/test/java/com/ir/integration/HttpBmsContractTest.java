@@ -1,18 +1,16 @@
 package com.ir.integration;
 
-import com.ir.integration.client.ClientFactory;
-import com.ir.integration.entity.CtSystem;
-import com.ir.integration.mock.MockEcosystemClient;
-import com.ir.snapshot.CostRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
-
+import com.ir.integration.client.ClientFactory;
+import com.ir.integration.entity.CtSystem;
+import com.ir.integration.mock.MockEcosystemClient;
+import com.ir.snapshot.entity.CostRecord;
 import java.time.LocalDate;
 import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;

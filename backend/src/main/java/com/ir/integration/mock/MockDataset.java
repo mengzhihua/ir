@@ -1,14 +1,12 @@
 package com.ir.integration.mock;
 
-import com.ir.snapshot.CostRecord;
-import com.ir.snapshot.InventorySnapshot;
-import com.ir.snapshot.OrderSnapshot;
-import com.ir.snapshot.SalesPoint;
-import com.ir.snapshot.ShipmentSnapshot;
-import com.ir.snapshot.WmsOrderSnapshot;
 import org.springframework.stereotype.Component;
-
-import javax.annotation.PostConstruct;
+import com.ir.snapshot.entity.CostRecord;
+import com.ir.snapshot.entity.InventorySnapshot;
+import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.entity.SalesPoint;
+import com.ir.snapshot.entity.ShipmentSnapshot;
+import com.ir.snapshot.entity.WmsOrderSnapshot;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -17,6 +15,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import javax.annotation.PostConstruct;
 
 @Component
 public class MockDataset {

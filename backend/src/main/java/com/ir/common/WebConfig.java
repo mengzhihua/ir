@@ -1,12 +1,12 @@
 package com.ir.common;
 
-import com.ir.system.AuthInterceptor;
-import com.ir.system.OperationLogInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import com.ir.system.audit.OperationLogInterceptor;
+import com.ir.system.auth.AuthInterceptor;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {

@@ -1,7 +1,7 @@
 package com.ir.integration.client;
 
-import com.ir.snapshot.InventorySnapshot;
-import com.ir.snapshot.WmsOrderSnapshot;
+import com.ir.snapshot.entity.InventorySnapshot;
+import com.ir.snapshot.entity.WmsOrderSnapshot;
 import java.util.List;
 import java.util.Map;
 

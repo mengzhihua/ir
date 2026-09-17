@@ -1,11 +1,10 @@
 package com.ir.integration.mock;
 
+import org.springframework.stereotype.Component;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.TmsClient;
-import com.ir.snapshot.CostRecord;
-import com.ir.snapshot.ShipmentSnapshot;
-import org.springframework.stereotype.Component;
-
+import com.ir.snapshot.entity.CostRecord;
+import com.ir.snapshot.entity.ShipmentSnapshot;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

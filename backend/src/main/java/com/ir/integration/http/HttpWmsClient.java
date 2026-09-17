@@ -1,13 +1,12 @@
 package com.ir.integration.http;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.client.RestTemplate;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.IntegrationException;
 import com.ir.integration.client.WmsClient;
-import com.ir.snapshot.InventorySnapshot;
-import com.ir.snapshot.WmsOrderSnapshot;
-import org.springframework.http.HttpHeaders;
-import org.springframework.web.client.RestTemplate;
-
+import com.ir.snapshot.entity.InventorySnapshot;
+import com.ir.snapshot.entity.WmsOrderSnapshot;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

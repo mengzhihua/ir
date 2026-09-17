@@ -1,13 +1,12 @@
 package com.ir.integration.http;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.client.RestTemplate;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.IntegrationException;
 import com.ir.integration.client.TmsClient;
-import com.ir.snapshot.CostRecord;
-import com.ir.snapshot.ShipmentSnapshot;
-import org.springframework.http.HttpHeaders;
-import org.springframework.web.client.RestTemplate;
-
+import com.ir.snapshot.entity.CostRecord;
+import com.ir.snapshot.entity.ShipmentSnapshot;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;

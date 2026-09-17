@@ -1,37 +1,36 @@
 package com.ir.integration.sync;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import com.ir.common.WarehouseCodes;
 import com.ir.integration.client.BmsClient;
 import com.ir.integration.client.ClientFactory;
 import com.ir.integration.client.EcosystemClient;
 import com.ir.integration.client.IntegrationException;
 import com.ir.integration.client.OmsClient;
-import com.ir.common.WarehouseCodes;
 import com.ir.integration.client.TmsClient;
 import com.ir.integration.client.WmsClient;
 import com.ir.integration.entity.CtSyncLog;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSyncLogMapper;
 import com.ir.integration.mapper.CtSystemMapper;
-import com.ir.snapshot.CostRecord;
-import com.ir.snapshot.CostRecordMapper;
-import com.ir.snapshot.ExtSnapshot;
-import com.ir.snapshot.ExtSnapshotMapper;
-import com.ir.snapshot.InventorySnapshot;
-import com.ir.snapshot.InventorySnapshotMapper;
-import com.ir.snapshot.OrderSnapshot;
-import com.ir.snapshot.OrderSnapshotMapper;
-import com.ir.snapshot.SalesDaily;
-import com.ir.snapshot.SalesDailyMapper;
-import com.ir.snapshot.SalesPoint;
-import com.ir.snapshot.ShipmentSnapshot;
-import com.ir.snapshot.ShipmentSnapshotMapper;
-import com.ir.snapshot.WmsOrderSnapshot;
-import com.ir.snapshot.WmsOrderSnapshotMapper;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
+import com.ir.snapshot.entity.CostRecord;
+import com.ir.snapshot.entity.ExtSnapshot;
+import com.ir.snapshot.entity.InventorySnapshot;
+import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.entity.SalesDaily;
+import com.ir.snapshot.entity.SalesPoint;
+import com.ir.snapshot.entity.ShipmentSnapshot;
+import com.ir.snapshot.entity.WmsOrderSnapshot;
+import com.ir.snapshot.mapper.CostRecordMapper;
+import com.ir.snapshot.mapper.ExtSnapshotMapper;
+import com.ir.snapshot.mapper.InventorySnapshotMapper;
+import com.ir.snapshot.mapper.OrderSnapshotMapper;
+import com.ir.snapshot.mapper.SalesDailyMapper;
+import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
+import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -74,6 +73,15 @@ public class SyncService {
         this.costMapper = costMapper;
         this.extMapper = extMapper;
         this.clients = clients;
+    }
+
+    public boolean emptySnapshots() {
+        return orderMapper.selectCount(null) == 0
+                && wmsOrderMapper.selectCount(null) == 0
+                && shipmentMapper.selectCount(null) == 0
+                && inventoryMapper.selectCount(null) == 0
+                && salesMapper.selectCount(null) == 0
+                && costMapper.selectCount(null) == 0;
     }
 
     @Transactional
