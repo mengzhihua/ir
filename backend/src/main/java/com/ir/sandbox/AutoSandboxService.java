@@ -19,22 +19,21 @@ import java.util.Map;
 public class AutoSandboxService {
     private final SandboxService sandbox;
     private final CodeGenerator codes;
-
-    @Value("${ir.sandbox.cost-weight:0.5}")
-    private BigDecimal costWeight;
-
-    @Value("${ir.sandbox.efficiency-weight:0.5}")
-    private BigDecimal efficiencyWeight;
+    private final BalancePolicy policy;
 
     @Value("${ir.sandbox.auto-apply:false}")
     private boolean autoApply;
 
+    @Value("${ir.sandbox.auto-queue:true}")
+    private boolean autoQueue;
+
     @Value("${ir.sandbox.auto-enabled:true}")
     private boolean autoEnabled;
 
-    public AutoSandboxService(SandboxService sandbox, CodeGenerator codes) {
+    public AutoSandboxService(SandboxService sandbox, CodeGenerator codes, BalancePolicy policy) {
         this.sandbox = sandbox;
         this.codes = codes;
+        this.policy = policy;
     }
 
     public synchronized Map<String, Object> run() {
@@ -44,22 +43,23 @@ public class AutoSandboxService {
         for (Candidate candidate : candidates()) {
             rows.add(sandbox.persistAuto(candidate.name, candidate.params, runNo));
         }
-        sandbox.rescore(rows, costWeight, efficiencyWeight);
+        sandbox.rescore(rows, policy.costWeight(), policy.efficiencyWeight());
         CtScenario recommended = pickRecommended(rows);
         sandbox.markRecommended(rows, recommended == null ? null : recommended.getId());
 
         List<CtAction> actions = new ArrayList<>();
-        if (autoApply && recommended != null) {
-            actions.addAll(sandbox.apply(recommended.getId(), false));
+        if (recommended != null && (autoApply || autoQueue)) {
+            actions.addAll(sandbox.apply(recommended.getId(), autoApply));
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("runNo", runNo);
-        result.put("costWeight", costWeight);
-        result.put("efficiencyWeight", efficiencyWeight);
+        result.putAll(policy.snapshot());
         result.put("recommended", recommended);
         result.put("scenarios", rows);
         result.put("actions", actions);
+        result.put("autoQueue", autoQueue);
+        result.put("autoApply", autoApply);
         return result;
     }
 
@@ -67,8 +67,7 @@ public class AutoSandboxService {
         String runNo = sandbox.latestAutoRunNo();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("runNo", runNo);
-        result.put("costWeight", costWeight);
-        result.put("efficiencyWeight", efficiencyWeight);
+        result.putAll(policy.snapshot());
         if (runNo == null) {
             result.put("recommended", null);
             result.put("scenarios", new ArrayList<CtScenario>());

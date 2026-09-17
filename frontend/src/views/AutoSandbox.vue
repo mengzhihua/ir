@@ -3,7 +3,13 @@
     <div class="page-title">
       <div>
         <h2>系统自动沙盘</h2>
-        <p class="subtitle">按成本与效率策略网格批量推演，自动标出综合最优方案</p>
+        <p class="subtitle">
+          按成本与效率策略网格批量推演，自动标出综合最优方案
+          <template v-if="latest.stance">
+            · 当前立场 {{ stanceLabel }}（成本 {{ Number(latest.costWeight || 0).toFixed(2) }} /
+            效率 {{ Number(latest.efficiencyWeight || 0).toFixed(2) }}）
+          </template>
+        </p>
       </div>
       <el-button v-if="canWrite()" type="primary" :loading="running" @click="run">立即推演</el-button>
     </div>
@@ -128,6 +134,11 @@ const recommended = ref(null)
 const selected = ref(null)
 const actionDialog = ref(false)
 const pendingActions = ref([])
+const stanceLabel = computed(() => {
+  if (latest.value.stance === 'COST') return '成本优先'
+  if (latest.value.stance === 'EFFICIENCY') return '效率优先'
+  return '均衡'
+})
 
 const typeOption = computed(() => ({
   tooltip: {},

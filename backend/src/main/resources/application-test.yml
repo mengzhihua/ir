@@ -12,3 +12,4 @@ ir:
     auto-on-startup: false
     auto-enabled: false
     auto-apply: false
+    auto-queue: false

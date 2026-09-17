@@ -78,4 +78,43 @@ class IrIntegrationTest {
                 .andExpect(jsonPath("$.data.ecosystem.SAP").isMap())
                 .andExpect(jsonPath("$.data.kpi.sapLowStock").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
     }
+
+    @Test void policyUpdateChangesStanceAndOverview() throws Exception {
+        String t = token();
+        try {
+            mvc.perform(put("/api/sandbox/policy").header("Authorization", "Bearer " + t)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"costWeight\":0.8,\"efficiencyWeight\":0.2,\"reevaluate\":true}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(0))
+                    .andExpect(jsonPath("$.data.stance").value("COST"));
+            mvc.perform(get("/api/sandbox/policy").header("Authorization", "Bearer " + t))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.stance").value("COST"));
+            mvc.perform(get("/api/tower/overview").header("Authorization", "Bearer " + t))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.policy.stance").value("COST"))
+                    .andExpect(jsonPath("$.data.kpi.pendingActions").isNumber())
+                    .andExpect(jsonPath("$.data.kpi.carrierMix").isMap());
+            String alerts = mvc.perform(get("/api/alert/page?type=ORDER_STUCK&status=OPEN&size=50")
+                            .header("Authorization", "Bearer " + t))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            boolean foundHold = false;
+            for (JsonNode row : mapper.readTree(alerts).get("data").get("records")) {
+                if ("OMS_STUCK".equals(row.path("ruleCode").asText())) {
+                    org.junit.jupiter.api.Assertions.assertEquals("OMS_HOLD",
+                            row.path("suggestedAction").asText());
+                    foundHold = true;
+                }
+            }
+            org.junit.jupiter.api.Assertions.assertTrue(foundHold);
+        } finally {
+            mvc.perform(put("/api/sandbox/policy").header("Authorization", "Bearer " + t)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"costWeight\":0.5,\"efficiencyWeight\":0.5}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.stance").value("BALANCED"));
+        }
+    }
 }

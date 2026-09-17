@@ -57,6 +57,7 @@
           ></el-table-column
         >
         <el-table-column prop="targetKey" label="对象" width="170" />
+        <el-table-column prop="suggestedAction" label="建议动作" width="180" />
         <el-table-column prop="status" label="状态" width="100"
           ><template #default="{ row }"
             ><el-tag :type="tagTypes.alertStatus[row.status]">{{

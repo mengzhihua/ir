@@ -112,4 +112,38 @@ class AlertEngineTest {
         assertEquals(delay.getTargetKey(), action.getTargetKey());
         assertEquals("SUCCESS", action.getStatus());
     }
+
+    @Test
+    void stuckOrderSuggestsPrioritizeWhenBalanced() {
+        alertEngine.evaluate();
+        CtAlert stuck = alertMapper.selectList(null).stream()
+                .filter(a -> "OMS_STUCK".equals(a.getRuleCode()))
+                .findFirst().orElse(null);
+        org.junit.jupiter.api.Assertions.assertNotNull(stuck);
+        assertEquals("OMS_PRIORITIZE", stuck.getSuggestedAction());
+        CtAction action = alertEngine.executeSuggested(stuck.getId());
+        org.junit.jupiter.api.Assertions.assertNotNull(action);
+        assertEquals("OMS_PRIORITIZE", action.getType());
+        assertEquals("SUCCESS", action.getStatus());
+    }
+
+    @Test
+    void lowStockBalancedFansOutPurchaseAndReplenish() {
+        alertEngine.evaluate();
+        CtAlert low = alertMapper.selectList(null).stream()
+                .filter(a -> "LOW_STOCK".equals(a.getRuleCode()))
+                .findFirst().orElse(null);
+        org.junit.jupiter.api.Assertions.assertNotNull(low);
+        CtAction primary = alertEngine.executeSuggested(low.getId());
+        org.junit.jupiter.api.Assertions.assertNotNull(primary);
+        assertEquals("SRM_PURCHASE_SUGGEST", primary.getType());
+        Set<String> types = new HashSet<>();
+        actionMapper.selectList(null).forEach(row -> {
+            if (low.getId().equals(row.getAlertId())) {
+                types.add(row.getType());
+            }
+        });
+        assertTrue(types.contains("SRM_PURCHASE_SUGGEST"));
+        assertTrue(types.contains("WMS_REPLENISH"));
+    }
 }
