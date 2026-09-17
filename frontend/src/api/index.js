@@ -45,7 +45,10 @@ export const sandboxApi = {
   get: (id) => http.get(`/sandbox/scenario/${id}`),
   compare: (ids) => http.get('/sandbox/compare', { params: { ids: ids.join(',') } }),
   defaults: (id) => (id ? http.get(`/sandbox/scenario/${id}`) : http.get('/sandbox/defaults')),
-  apply: (id) => http.post(`/sandbox/scenario/${id}/apply`)
+  apply: (id, execute = false) =>
+    http.post(`/sandbox/scenario/${id}/apply`, {}, { params: { execute } }),
+  autoRun: () => http.post('/sandbox/auto/run', {}, { timeout: 120000 }),
+  autoLatest: () => http.get('/sandbox/auto/latest')
 }
 export const costApi = {
   summary: (days = 30) => http.get('/cost/summary', { params: { days } }),

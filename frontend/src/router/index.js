@@ -37,9 +37,15 @@ export const menus = [
   },
   {
     path: '/sandbox',
-    name: '沙盘模拟',
+    name: '人工沙盘',
     icon: 'DataAnalysis',
     component: () => import('../views/Sandbox.vue')
+  },
+  {
+    path: '/sandbox/auto',
+    name: '系统自动沙盘',
+    icon: 'Cpu',
+    component: () => import('../views/AutoSandbox.vue')
   },
   {
     path: '/compare',

@@ -25,6 +25,14 @@ public class CtScenario extends BaseEntity {
     private String status;
     private BigDecimal totalCost;
     private BigDecimal serviceLevel;
+    private BigDecimal avgLeadDays;
+    private BigDecimal stockoutUnits;
+    private BigDecimal costScore;
+    private BigDecimal efficiencyScore;
+    private BigDecimal balanceScore;
+    private String kind;
+    private Boolean recommended;
+    private String runNo;
 
     @JsonProperty("params")
     @JsonRawValue

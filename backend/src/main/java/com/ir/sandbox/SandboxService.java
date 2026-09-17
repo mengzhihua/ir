@@ -11,6 +11,8 @@ import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.OrderSnapshotMapper;
 import com.ir.snapshot.SalesDaily;
 import com.ir.snapshot.SalesDailyMapper;
+import com.ir.snapshot.ShipmentSnapshot;
+import com.ir.snapshot.ShipmentSnapshotMapper;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -27,6 +29,7 @@ public class SandboxService {
     private final InventorySnapshotMapper inventoryMapper;
     private final SalesDailyMapper salesMapper;
     private final OrderSnapshotMapper orderMapper;
+    private final ShipmentSnapshotMapper shipmentMapper;
     private final SandboxEngine engine;
     private final ActionService actions;
     private final CodeGenerator codes;
@@ -37,6 +40,7 @@ public class SandboxService {
             InventorySnapshotMapper inventoryMapper,
             SalesDailyMapper salesMapper,
             OrderSnapshotMapper orderMapper,
+            ShipmentSnapshotMapper shipmentMapper,
             SandboxEngine engine,
             ActionService actions,
             CodeGenerator codes,
@@ -45,6 +49,7 @@ public class SandboxService {
         this.inventoryMapper = inventoryMapper;
         this.salesMapper = salesMapper;
         this.orderMapper = orderMapper;
+        this.shipmentMapper = shipmentMapper;
         this.engine = engine;
         this.actions = actions;
         this.codes = codes;
@@ -58,7 +63,7 @@ public class SandboxService {
                         .orderByAsc(CtScenario::getId)
                         .last("LIMIT 1"));
         return existing == null
-                ? createAndRun("基线场景", new ScenarioParams(), true)
+                ? persist("基线场景", new ScenarioParams(), true, "BASELINE", null, false, null)
                 : existing;
     }
 
@@ -67,9 +72,11 @@ public class SandboxService {
     }
 
     public CtScenario create(String name, ScenarioParams params) {
-        return saveScenario(name,
-                params == null ? new ScenarioParams() : params.normalized(),
-                false, false);
+        return persist(name, params, false, "MANUAL", null, false, null);
+    }
+
+    public CtScenario persistAuto(String name, ScenarioParams params, String runNo) {
+        return persist(name, params, false, "AUTO", runNo, false, null);
     }
 
     public CtScenario run(Long id) {
@@ -78,9 +85,10 @@ public class SandboxService {
             return null;
         }
         ScenarioParams params = read(scenario.getParamsJson(), ScenarioParams.class);
-        params = params.normalized();
-        return saveScenario(scenario.getName(), params,
-                Boolean.TRUE.equals(scenario.getBaseline()), true, scenario);
+        String kind = scenario.getKind() == null ? "MANUAL" : scenario.getKind();
+        return persist(scenario.getName(), params,
+                Boolean.TRUE.equals(scenario.getBaseline()),
+                kind, scenario.getRunNo(), true, scenario);
     }
 
     public CtScenario get(Long id) {
@@ -90,6 +98,7 @@ public class SandboxService {
     public Page<CtScenario> page(
             String name,
             String status,
+            String kind,
             long current,
             long size) {
         LambdaQueryWrapper<CtScenario> query = new LambdaQueryWrapper<>();
@@ -98,6 +107,11 @@ public class SandboxService {
         }
         if (status != null && !status.trim().isEmpty()) {
             query.eq(CtScenario::getStatus, status);
+        }
+        if ("MANUAL".equalsIgnoreCase(kind)) {
+            query.in(CtScenario::getKind, "MANUAL", "BASELINE");
+        } else if (kind != null && !kind.trim().isEmpty()) {
+            query.eq(CtScenario::getKind, kind.trim());
         }
         query.orderByDesc(CtScenario::getCreatedAt);
         return scenarioMapper.selectPage(new Page<>(current, size), query);
@@ -131,98 +145,273 @@ public class SandboxService {
     }
 
     public List<CtAction> apply(Long id) {
+        return apply(id, false);
+    }
+
+    public List<CtAction> apply(Long id, boolean execute) {
         CtScenario scenario = get(id);
         if (scenario == null) {
             return new ArrayList<>();
         }
-        ScenarioParams params = read(scenario.getParamsJson(), ScenarioParams.class);
-        ScenarioParams baseParams = read(baseline().getParamsJson(),
-                ScenarioParams.class);
-        BaselineData baselineData = baselineData();
+        ScenarioParams params = read(scenario.getParamsJson(), ScenarioParams.class).normalized();
+        ScenarioParams baseParams = read(baseline().getParamsJson(), ScenarioParams.class).normalized();
         List<CtAction> result = new ArrayList<>();
-        if ("SINGLE_WAREHOUSE".equals(params.getAllocationStrategy())
-                || "LOWEST_COST".equals(params.getAllocationStrategy())) {
-            String targetWarehouse = params.getSingleWarehouse() == null
-                    ? "WH-SH" : params.getSingleWarehouse();
-            for (String sku : baselineData.getDemandBySku().keySet()) {
-                String current = baselineData.getSkuWarehouse().get(sku);
-                if (targetWarehouse.equals(current)) {
+        BigDecimal expected = expectedSaving(baseline(), scenario);
+
+        String targetWarehouse = preferredWarehouse(params);
+        if (targetWarehouse != null) {
+            for (OrderSnapshot order : pendingOrders()) {
+                if (targetWarehouse.equals(order.getWarehouseCode())) {
                     continue;
                 }
-                Map<String, Object> request = new LinkedHashMap<>();
-                request.put("type", "OMS_REROUTE_WAREHOUSE");
-                request.put("targetKey", sku);
-                Map<String, Object> actionParams = new LinkedHashMap<>();
-                actionParams.put("sku", sku);
-                actionParams.put("warehouseCode", targetWarehouse);
-                request.put("params", actionParams);
-                result.add(actions.createPending(request));
+                result.add(dispatch("OMS_REROUTE_WAREHOUSE", order.getOrderNo(),
+                        map("warehouseCode", targetWarehouse, "sku", firstSku()),
+                        expected, execute));
             }
         }
-        if (!params.getCarrierMix().equals(baseParams.getCarrierMix())) {
-            for (String carrier : params.getCarrierMix().keySet()) {
-                Map<String, Object> request = new LinkedHashMap<>();
-                request.put("type", "TMS_SWITCH_CARRIER");
-                request.put("targetKey", carrier);
-                request.put("params", params.getCarrierMix());
-                result.add(actions.createPending(request));
+
+        String targetCarrier = dominantCarrier(params.getCarrierMix());
+        String baseCarrier = dominantCarrier(baseParams.getCarrierMix());
+        if (targetCarrier != null && !targetCarrier.equals(baseCarrier)) {
+            for (ShipmentSnapshot shipment : openShipments()) {
+                if (targetCarrier.equals(shipment.getCarrierCode())) {
+                    continue;
+                }
+                result.add(dispatch("TMS_SWITCH_CARRIER", shipment.getWaybillCode(),
+                        map("carrierCode", targetCarrier), expected, execute));
             }
         }
+
         Map<String, Object> scenarioResult = result(scenario);
-        Object stockout = scenarioResult.get("stockoutUnits");
-        if (stockout != null && new BigDecimal(String.valueOf(stockout))
-                .signum() > 0) {
-            for (String sku : baselineData.getDemandBySku().keySet()) {
-                Map<String, Object> request = new LinkedHashMap<>();
-                request.put("type", "SRM_PURCHASE_SUGGEST");
-                request.put("targetKey", sku);
-                request.put("params", Collections.singletonMap("sku", sku));
-                result.add(actions.createPending(request));
+        Object summaries = scenarioResult.get("perSkuSummary");
+        if (summaries instanceof List) {
+            for (Object row : (List<?>) summaries) {
+                if (!(row instanceof Map)) {
+                    continue;
+                }
+                Map<?, ?> summary = (Map<?, ?>) row;
+                BigDecimal stockout = decimal(summary.get("stockout"));
+                if (stockout.signum() <= 0) {
+                    continue;
+                }
+                String sku = String.valueOf(summary.get("sku"));
+                result.add(dispatch("SRM_PURCHASE_SUGGEST", sku,
+                        map("sku", sku, "qty", stockout, "suggestQty", stockout),
+                        expected, execute));
             }
         }
         return result;
     }
 
-    private CtScenario createAndRun(
-            String name,
-            ScenarioParams params,
-            boolean baseline) {
-        return saveScenario(name, params, baseline, false);
+    public BaselineData currentBaselineData() {
+        return baselineData();
     }
 
-    private CtScenario saveScenario(
+    public void markRecommended(List<CtScenario> rows, Long recommendedId) {
+        for (CtScenario row : rows) {
+            row.setRecommended(row.getId() != null && row.getId().equals(recommendedId));
+            scenarioMapper.updateById(row);
+        }
+    }
+
+    public void rescore(List<CtScenario> rows, BigDecimal costWeight, BigDecimal efficiencyWeight) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        List<BalanceScorer.Card> cards = new ArrayList<>();
+        for (CtScenario row : rows) {
+            cards.add(card(row));
+        }
+        BalanceScorer.score(cards, costWeight, efficiencyWeight);
+        for (int i = 0; i < rows.size(); i++) {
+            CtScenario row = rows.get(i);
+            BalanceScorer.Card scored = cards.get(i);
+            row.setCostScore(scored.getCostScore());
+            row.setEfficiencyScore(scored.getEfficiencyScore());
+            row.setBalanceScore(scored.getBalanceScore());
+            mergeScoresIntoResult(row);
+            scenarioMapper.updateById(row);
+        }
+    }
+
+    public String latestAutoRunNo() {
+        CtScenario row = scenarioMapper.selectOne(new LambdaQueryWrapper<CtScenario>()
+                .eq(CtScenario::getKind, "AUTO")
+                .isNotNull(CtScenario::getRunNo)
+                .orderByDesc(CtScenario::getId)
+                .last("LIMIT 1"));
+        return row == null ? null : row.getRunNo();
+    }
+
+    public List<CtScenario> listByRunNo(String runNo) {
+        if (runNo == null || runNo.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        return scenarioMapper.selectList(new LambdaQueryWrapper<CtScenario>()
+                .eq(CtScenario::getRunNo, runNo)
+                .orderByDesc(CtScenario::getBalanceScore)
+                .orderByAsc(CtScenario::getId));
+    }
+
+    public CtScenario latestRecommendedAuto() {
+        return scenarioMapper.selectOne(new LambdaQueryWrapper<CtScenario>()
+                .eq(CtScenario::getKind, "AUTO")
+                .eq(CtScenario::getRecommended, true)
+                .orderByDesc(CtScenario::getId)
+                .last("LIMIT 1"));
+    }
+
+    private CtScenario persist(
             String name,
             ScenarioParams params,
             boolean baseline,
-            boolean update) {
-        return saveScenario(name, params, baseline, update, null);
-    }
-
-    private CtScenario saveScenario(
-            String name,
-            ScenarioParams params,
-            boolean baseline,
+            String kind,
+            String runNo,
             boolean update,
             CtScenario existing) {
         params = params == null ? new ScenarioParams() : params.normalized();
-        SandboxEngine.Result result = engine.run(params, baselineData());
+        SandboxEngine.Result engineResult = engine.run(params, baselineData());
         CtScenario scenario = existing == null ? new CtScenario() : existing;
         if (scenario.getScenarioNo() == null) {
             scenario.setScenarioNo(codes.next("SC"));
         }
         scenario.setName(name);
         scenario.setBaseline(baseline);
+        scenario.setKind(kind == null ? "MANUAL" : kind);
+        scenario.setRunNo(runNo);
+        scenario.setRecommended(Boolean.TRUE.equals(scenario.getRecommended()));
         scenario.setParamsJson(write(params));
-        scenario.setResultJson(write(result));
+        scenario.setResultJson(write(engineResult));
         scenario.setStatus("RUN");
-        scenario.setTotalCost(result.getTotalCost());
-        scenario.setServiceLevel(result.getServiceLevel());
+        scenario.setTotalCost(engineResult.getTotalCost());
+        scenario.setServiceLevel(engineResult.getServiceLevel());
+        scenario.setAvgLeadDays(engineResult.getAvgLeadDays());
+        scenario.setStockoutUnits(engineResult.getStockoutUnits());
+        scoreAgainstBaseline(scenario, params);
+        mergeScoresIntoResult(scenario);
         if (update) {
             scenarioMapper.updateById(scenario);
         } else {
             scenarioMapper.insert(scenario);
         }
         return scenario;
+    }
+
+    private void scoreAgainstBaseline(CtScenario scenario, ScenarioParams params) {
+        CtScenario base = scenarioMapper.selectOne(new LambdaQueryWrapper<CtScenario>()
+                .eq(CtScenario::getBaseline, true)
+                .orderByAsc(CtScenario::getId)
+                .last("LIMIT 1"));
+        List<BalanceScorer.Card> cards = new ArrayList<>();
+        BalanceScorer.Card current = card(scenario);
+        cards.add(current);
+        if (base != null && base.getId() != null && !base.getId().equals(scenario.getId())) {
+            cards.add(card(base));
+        }
+        BalanceScorer.score(cards, params.getCostWeight(), params.getEfficiencyWeight());
+        scenario.setCostScore(current.getCostScore());
+        scenario.setEfficiencyScore(current.getEfficiencyScore());
+        scenario.setBalanceScore(current.getBalanceScore());
+    }
+
+    private BalanceScorer.Card card(CtScenario scenario) {
+        BalanceScorer.Card card = new BalanceScorer.Card();
+        card.setTotalCost(nz(scenario.getTotalCost()));
+        card.setServiceLevel(nz(scenario.getServiceLevel()));
+        card.setAvgLeadDays(nz(scenario.getAvgLeadDays()));
+        card.setStockoutUnits(nz(scenario.getStockoutUnits()));
+        return card;
+    }
+
+    private CtAction dispatch(
+            String type,
+            String targetKey,
+            Map<String, Object> params,
+            BigDecimal expectedSaving,
+            boolean execute) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("type", type);
+        request.put("targetKey", targetKey);
+        request.put("params", params);
+        request.put("expectedSaving", expectedSaving);
+        return execute ? actions.createAndExecute(request) : actions.createPending(request);
+    }
+
+    private List<OrderSnapshot> pendingOrders() {
+        List<OrderSnapshot> result = new ArrayList<>();
+        for (OrderSnapshot order : orderMapper.selectList(null)) {
+            if (Arrays.asList("COMPLETED", "CANCELLED", "SHIPPED")
+                    .contains(order.getStatus())) {
+                continue;
+            }
+            result.add(order);
+        }
+        return result;
+    }
+
+    private List<ShipmentSnapshot> openShipments() {
+        List<ShipmentSnapshot> result = new ArrayList<>();
+        for (ShipmentSnapshot shipment : shipmentMapper.selectList(null)) {
+            if (Arrays.asList("DELIVERED", "CLOSED", "CANCELLED")
+                    .contains(shipment.getStatus())) {
+                continue;
+            }
+            result.add(shipment);
+        }
+        return result;
+    }
+
+    private String preferredWarehouse(ScenarioParams params) {
+        if ("SINGLE_WAREHOUSE".equals(params.getAllocationStrategy())) {
+            return params.getSingleWarehouse() == null ? "WH-SH" : params.getSingleWarehouse();
+        }
+        if ("LOWEST_COST".equals(params.getAllocationStrategy())) {
+            return "WH-SH";
+        }
+        return null;
+    }
+
+    private void mergeScoresIntoResult(CtScenario scenario) {
+        Map<String, Object> result = result(scenario);
+        result.put("costScore", scenario.getCostScore());
+        result.put("efficiencyScore", scenario.getEfficiencyScore());
+        result.put("balanceScore", scenario.getBalanceScore());
+        scenario.setResultJson(write(result));
+    }
+
+    private String dominantCarrier(Map<String, BigDecimal> mix) {
+        if (mix == null || mix.isEmpty()) {
+            return null;
+        }
+        String best = null;
+        BigDecimal bestWeight = BigDecimal.valueOf(-1);
+        for (Map.Entry<String, BigDecimal> entry : mix.entrySet()) {
+            BigDecimal weight = entry.getValue() == null ? BigDecimal.ZERO : entry.getValue();
+            if (weight.compareTo(bestWeight) > 0) {
+                best = entry.getKey();
+                bestWeight = weight;
+            }
+        }
+        return best;
+    }
+
+    private String firstSku() {
+        List<String> skus = new ArrayList<>(baselineData().getDemandBySku().keySet());
+        return skus.isEmpty() ? "SKU001" : skus.get(0);
+    }
+
+    private BigDecimal expectedSaving(CtScenario baseline, CtScenario scenario) {
+        BigDecimal base = nz(baseline.getTotalCost());
+        BigDecimal next = nz(scenario.getTotalCost());
+        return base.subtract(next).max(BigDecimal.ZERO);
+    }
+
+    private Map<String, Object> map(Object... values) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < values.length; i += 2) {
+            result.put(String.valueOf(values[i]), values[i + 1]);
+        }
+        return result;
     }
 
     private BaselineData baselineData() {
@@ -246,7 +435,8 @@ public class SandboxService {
         for (String sku : data.getDemandBySku().keySet()) {
             if (!data.getRegionShare().containsKey(sku)) {
                 data.getRegionShare().put(sku,
-                        new LinkedHashMap<>(data.getRegionShare().get("*")));
+                        new LinkedHashMap<>(data.getRegionShare().getOrDefault(
+                                "*", Collections.singletonMap("华东", BigDecimal.ONE))));
             }
         }
         return data;
@@ -313,10 +503,11 @@ public class SandboxService {
         Map<String, Object> delta = new LinkedHashMap<>();
         delta.put("totalCost", difference(scenario, baseline, "totalCost"));
         delta.put("serviceLevel", difference(scenario, baseline, "serviceLevel"));
-        delta.put("stockoutUnits", difference(scenario, baseline,
-                "stockoutUnits"));
-        delta.put("avgLeadDays", difference(scenario, baseline,
-                "avgLeadDays"));
+        delta.put("stockoutUnits", difference(scenario, baseline, "stockoutUnits"));
+        delta.put("avgLeadDays", difference(scenario, baseline, "avgLeadDays"));
+        delta.put("costScore", difference(scenario, baseline, "costScore"));
+        delta.put("efficiencyScore", difference(scenario, baseline, "efficiencyScore"));
+        delta.put("balanceScore", difference(scenario, baseline, "balanceScore"));
         return delta;
     }
 
@@ -324,10 +515,15 @@ public class SandboxService {
             Map<String, Object> left,
             Map<String, Object> right,
             String key) {
-        BigDecimal leftValue = new BigDecimal(String.valueOf(
-                left.getOrDefault(key, 0)));
-        BigDecimal rightValue = new BigDecimal(String.valueOf(
-                right.getOrDefault(key, 0)));
-        return leftValue.subtract(rightValue);
+        return decimal(left.getOrDefault(key, 0))
+                .subtract(decimal(right.getOrDefault(key, 0)));
+    }
+
+    private BigDecimal decimal(Object value) {
+        return value == null ? BigDecimal.ZERO : new BigDecimal(String.valueOf(value));
+    }
+
+    private BigDecimal nz(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

@@ -2,8 +2,8 @@
   <div class="page">
     <div class="page-title">
       <div>
-        <h2>沙盘模拟</h2>
-        <p class="subtitle">评估需求、仓配、承运和成本策略变化</p>
+        <h2>人工沙盘</h2>
+        <p class="subtitle">手工设定需求、仓配和承运策略，评估成本与效率后再下发协同指令</p>
       </div>
       <el-button v-if="canWrite()" type="primary" @click="openCreate">创建场景</el-button>
     </div>
@@ -26,6 +26,18 @@
             ><template #default="{ row }">{{
               formatMoney(row.totalCost)
             }}</template></el-table-column
+          ><el-table-column label="成本分" align="right" width="90"
+            ><template #default="{ row }">{{
+              formatNumber(row.costScore, 4)
+            }}</template></el-table-column
+          ><el-table-column label="效率分" align="right" width="90"
+            ><template #default="{ row }">{{
+              formatNumber(row.efficiencyScore, 4)
+            }}</template></el-table-column
+          ><el-table-column label="综合分" align="right" width="90"
+            ><template #default="{ row }">{{
+              formatNumber(row.balanceScore, 4)
+            }}</template></el-table-column
           ><el-table-column prop="createdAt" label="创建时间" min-width="160"
             ><template #default="{ row }">{{
               formatDate(row.createdAt)
@@ -34,11 +46,13 @@
             ><template #default="{ row }">{{
               percent(row.serviceLevel)
             }}</template></el-table-column
-          ><el-table-column label="操作" width="180"
+          ><el-table-column label="操作" width="240"
             ><template #default="{ row }"
               ><el-button v-if="canWrite()" link @click.stop="run(row)">运行</el-button
-              ><el-button v-if="canWrite()" link type="primary" @click.stop="apply(row)"
-                >应用到OTW</el-button
+              ><el-button v-if="canWrite()" link type="primary" @click.stop="apply(row, false)"
+                >生成指令</el-button
+              ><el-button v-if="canWrite()" link type="warning" @click.stop="apply(row, true)"
+                >立即执行</el-button
               ></template
             ></el-table-column
           ><template #empty><el-empty description="暂无沙盘场景" /></template
@@ -76,6 +90,18 @@
           <div class="stat">
             <div class="label">平均时效</div>
             <div class="value">{{ formatNumber(selected.avgLeadDays, 2) }}天</div>
+          </div>
+          <div class="stat">
+            <div class="label">成本分</div>
+            <div class="value">{{ formatNumber(selected.costScore, 4) }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">效率分</div>
+            <div class="value">{{ formatNumber(selected.efficiencyScore, 4) }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">综合分</div>
+            <div class="value">{{ formatNumber(selected.balanceScore, 4) }}</div>
           </div>
         </div>
         <div v-if="selected" class="grid-2">
@@ -133,6 +159,18 @@
               value="LOWEST_COST" /><el-option label="均衡分配" value="BALANCED" /><el-option
               label="单仓发货"
               value="SINGLE_WAREHOUSE" /></el-select></el-form-item
+        ><el-form-item label="成本权重"
+          ><el-input-number
+            v-model="form.params.costWeight"
+            :min="0"
+            :max="1"
+            :step="0.1" /></el-form-item
+        ><el-form-item label="效率权重"
+          ><el-input-number
+            v-model="form.params.efficiencyWeight"
+            :min="0"
+            :max="1"
+            :step="0.1" /></el-form-item
         ><el-form-item label="补货提前期"
           ><el-input-number v-model="form.params.replenishLeadDays" :min="0" /></el-form-item
         ><el-divider content-position="left">承运</el-divider
@@ -206,6 +244,8 @@ const form = reactive({
     demandMultiplier: 1,
     allocationStrategy: 'NEAREST',
     replenishLeadDays: 3,
+    costWeight: 0.5,
+    efficiencyWeight: 0.5,
     channelDemandMultiplier: {},
     carrierMix: {},
     carrierRate: {}
@@ -264,7 +304,7 @@ const carrierOption = computed(() => ({
 async function load() {
   loading.value = true
   try {
-    const page = pageResult(await sandboxApi.page({ ...pager }))
+    const page = pageResult(await sandboxApi.page({ ...pager, kind: 'MANUAL' }))
     rows.value = page.records
     pager.total = page.total
   } finally {
@@ -282,8 +322,8 @@ async function run(row) {
   await load()
   await select(row)
 }
-async function apply(row) {
-  const result = await sandboxApi.apply(row.id)
+async function apply(row, execute = false) {
+  const result = await sandboxApi.apply(row.id, execute)
   pendingActions.value = result?.records || result || []
   actionDialog.value = true
 }

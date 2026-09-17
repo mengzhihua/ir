@@ -5,6 +5,8 @@ import com.ir.alert.CtAlert;
 import com.ir.alert.CtAlertMapper;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSystemMapper;
+import com.ir.sandbox.CtScenario;
+import com.ir.sandbox.SandboxService;
 import com.ir.snapshot.CostRecord;
 import com.ir.snapshot.CostRecordMapper;
 import com.ir.snapshot.InventorySnapshot;
@@ -37,6 +39,7 @@ public class TowerService {
     private final CostRecordMapper costs;
     private final CtAlertMapper alerts;
     private final CtSystemMapper systems;
+    private final SandboxService sandbox;
 
     public TowerService(
             OrderSnapshotMapper orders,
@@ -45,7 +48,8 @@ public class TowerService {
             InventorySnapshotMapper inventory,
             CostRecordMapper costs,
             CtAlertMapper alerts,
-            CtSystemMapper systems) {
+            CtSystemMapper systems,
+            SandboxService sandbox) {
         this.orders = orders;
         this.wmsOrders = wmsOrders;
         this.shipments = shipments;
@@ -53,6 +57,7 @@ public class TowerService {
         this.costs = costs;
         this.alerts = alerts;
         this.systems = systems;
+        this.sandbox = sandbox;
     }
 
     public Map<String, Object> overview() {
@@ -89,7 +94,8 @@ public class TowerService {
         for (ShipmentSnapshot shipment : shipmentRows) {
             tms.put(shipment.getStatus(),
                     tms.getOrDefault(shipment.getStatus(), 0) + 1);
-            if ("IN_TRANSIT".equals(shipment.getStatus())) {
+            if (!Arrays.asList("DELIVERED", "CLOSED", "CANCELLED")
+                    .contains(shipment.getStatus())) {
                 inTransit++;
             }
             if (shipment.getPlannedArriveTime() != null
@@ -153,6 +159,21 @@ public class TowerService {
                 .orderByDesc(CtAlert::getCreatedAt)
                 .last("LIMIT 10")));
         result.put("systems", systems.selectList(null));
+        CtScenario recommendation = sandbox.latestRecommendedAuto();
+        if (recommendation != null) {
+            Map<String, Object> rec = new LinkedHashMap<>();
+            rec.put("id", recommendation.getId());
+            rec.put("name", recommendation.getName());
+            rec.put("runNo", recommendation.getRunNo());
+            rec.put("totalCost", recommendation.getTotalCost());
+            rec.put("serviceLevel", recommendation.getServiceLevel());
+            rec.put("avgLeadDays", recommendation.getAvgLeadDays());
+            rec.put("stockoutUnits", recommendation.getStockoutUnits());
+            rec.put("costScore", recommendation.getCostScore());
+            rec.put("efficiencyScore", recommendation.getEfficiencyScore());
+            rec.put("balanceScore", recommendation.getBalanceScore());
+            result.put("recommendation", rec);
+        }
         return result;
     }
 

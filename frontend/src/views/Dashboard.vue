@@ -77,6 +77,34 @@
           <template #empty><el-empty description="暂无开放预警" /></template>
         </el-table>
       </div>
+      <div class="panel">
+        <div class="panel-title">
+          <h3>自动沙盘推荐</h3>
+          <el-button link type="primary" @click="$router.push('/sandbox/auto')">去推演</el-button>
+        </div>
+        <div v-if="overview.recommendation" class="stats">
+          <div class="stat">
+            <div class="label">方案</div>
+            <div class="value">{{ overview.recommendation.name }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">综合分</div>
+            <div class="value">{{ formatNumber(overview.recommendation.balanceScore, 4) }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">成本 / 效率</div>
+            <div class="value">
+              {{ formatNumber(overview.recommendation.costScore, 4) }} /
+              {{ formatNumber(overview.recommendation.efficiencyScore, 4) }}
+            </div>
+          </div>
+          <div class="stat">
+            <div class="label">总成本</div>
+            <div class="value">{{ formatMoney(overview.recommendation.totalCost) }}</div>
+          </div>
+        </div>
+        <el-empty v-else description="尚未产生自动沙盘推荐" />
+      </div>
     </div>
     <div class="panel">
       <div class="panel-title">
@@ -117,7 +145,8 @@ const overview = reactive({
   costTrend: [],
   warehouseLoad: [],
   alertsTop: [],
-  systems: []
+  systems: [],
+  recommendation: null
 })
 
 const cards = computed(() => [
@@ -201,7 +230,7 @@ load()
 <style scoped>
 .health-list {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 14px;
 }
 

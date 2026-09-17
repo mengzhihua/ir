@@ -197,11 +197,19 @@ CREATE TABLE IF NOT EXISTS ct_scenario (
     scenario_no VARCHAR(80) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
     baseline BOOLEAN NOT NULL,
+    kind VARCHAR(16) NOT NULL DEFAULT 'MANUAL',
+    recommended BOOLEAN NOT NULL DEFAULT FALSE,
+    run_no VARCHAR(80),
     params_json CLOB,
     result_json CLOB,
     status VARCHAR(16) NOT NULL,
     total_cost DECIMAL(18,2),
     service_level DECIMAL(18,6),
+    avg_lead_days DECIMAL(18,6),
+    stockout_units DECIMAL(18,2),
+    cost_score DECIMAL(18,6),
+    efficiency_score DECIMAL(18,6),
+    balance_score DECIMAL(18,6),
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
@@ -238,3 +246,12 @@ CREATE TABLE IF NOT EXISTS ct_op_log (
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
+
+ALTER TABLE ct_scenario ADD COLUMN kind VARCHAR(16);
+ALTER TABLE ct_scenario ADD COLUMN recommended BOOLEAN;
+ALTER TABLE ct_scenario ADD COLUMN run_no VARCHAR(80);
+ALTER TABLE ct_scenario ADD COLUMN avg_lead_days DECIMAL(18,6);
+ALTER TABLE ct_scenario ADD COLUMN stockout_units DECIMAL(18,2);
+ALTER TABLE ct_scenario ADD COLUMN cost_score DECIMAL(18,6);
+ALTER TABLE ct_scenario ADD COLUMN efficiency_score DECIMAL(18,6);
+ALTER TABLE ct_scenario ADD COLUMN balance_score DECIMAL(18,6);

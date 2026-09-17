@@ -2,6 +2,7 @@ package com.ir;
 
 import com.ir.integration.sync.SyncService;
 import com.ir.alert.AlertEngine;
+import com.ir.sandbox.AutoSandboxService;
 import com.ir.sandbox.SandboxService;
 import com.ir.snapshot.CostRecordMapper;
 import com.ir.snapshot.InventorySnapshotMapper;
@@ -9,6 +10,7 @@ import com.ir.snapshot.OrderSnapshotMapper;
 import com.ir.snapshot.SalesDailyMapper;
 import com.ir.snapshot.ShipmentSnapshotMapper;
 import com.ir.snapshot.WmsOrderSnapshotMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -20,6 +22,7 @@ public class IrApplication implements CommandLineRunner {
     private final SyncService syncService;
     private final AlertEngine alertEngine;
     private final SandboxService sandboxService;
+    private final AutoSandboxService autoSandboxService;
     private final OrderSnapshotMapper orderMapper;
     private final WmsOrderSnapshotMapper wmsOrderMapper;
     private final ShipmentSnapshotMapper shipmentMapper;
@@ -27,10 +30,14 @@ public class IrApplication implements CommandLineRunner {
     private final SalesDailyMapper salesMapper;
     private final CostRecordMapper costMapper;
 
+    @Value("${ir.sandbox.auto-on-startup:true}")
+    private boolean autoOnStartup;
+
     public IrApplication(
             SyncService syncService,
             AlertEngine alertEngine,
             SandboxService sandboxService,
+            AutoSandboxService autoSandboxService,
             OrderSnapshotMapper orderMapper,
             WmsOrderSnapshotMapper wmsOrderMapper,
             ShipmentSnapshotMapper shipmentMapper,
@@ -40,6 +47,7 @@ public class IrApplication implements CommandLineRunner {
         this.syncService = syncService;
         this.alertEngine = alertEngine;
         this.sandboxService = sandboxService;
+        this.autoSandboxService = autoSandboxService;
         this.orderMapper = orderMapper;
         this.wmsOrderMapper = wmsOrderMapper;
         this.shipmentMapper = shipmentMapper;
@@ -59,6 +67,9 @@ public class IrApplication implements CommandLineRunner {
         }
         alertEngine.evaluate();
         sandboxService.ensureBaseline();
+        if (autoOnStartup) {
+            autoSandboxService.run();
+        }
     }
 
     private boolean emptySnapshots() {

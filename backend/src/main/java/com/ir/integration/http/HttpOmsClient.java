@@ -25,11 +25,23 @@ public class HttpOmsClient implements OmsClient {
     private final String password;
     private volatile String token;
 
+    private final String apiKey;
+
     public HttpOmsClient(RestTemplate http, String baseUrl, String username, String password) {
+        this(http, baseUrl, username, password, null);
+    }
+
+    public HttpOmsClient(
+            RestTemplate http,
+            String baseUrl,
+            String username,
+            String password,
+            String apiKey) {
         this.http = http;
         this.baseUrl = trim(baseUrl);
         this.username = username;
         this.password = password;
+        this.apiKey = apiKey;
     }
 
     @Override
@@ -99,6 +111,14 @@ public class HttpOmsClient implements OmsClient {
 
     @Override
     public void execute(ActionCommand command) {
+        if (apiKey != null && !apiKey.trim().isEmpty()) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("type", command.getType());
+            body.put("targetKey", command.getTargetKey());
+            body.put("params", command.getParams());
+            HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            return;
+        }
         String orderNo = command.getTargetKey();
         String path;
         if ("OMS_HOLD".equals(command.getType())) {
@@ -106,7 +126,7 @@ public class HttpOmsClient implements OmsClient {
         } else if ("OMS_UNHOLD".equals(command.getType())) {
             path = "/api/order/" + orderNo + "/unhold";
         } else if ("OMS_REROUTE_WAREHOUSE".equals(command.getType())) {
-            path = "/api/order/" + orderNo + "/allocate";
+            path = "/api/order/" + orderNo + "/reroute";
         } else if ("OMS_AUTO_PROCESS".equals(command.getType())) {
             path = "/api/order/" + orderNo + "/auto";
         } else if ("OMS_CANCEL".equals(command.getType())) {

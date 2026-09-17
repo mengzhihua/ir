@@ -23,7 +23,7 @@ npm run dev
 - `com.ir.tower` / `trace`：控制塔看板和全链路追踪
 - `com.ir.alert` / `action`：规则预警和跨系统协同指令
 - `com.ir.forecast`：MA、SES、Holt、Seasonal Naive、AUTO 预测和补货
-- `com.ir.sandbox`：库存/需求/仓配策略沙盘
+- `com.ir.sandbox`：人工沙盘与系统自动沙盘（成本/效率综合分）
 - `com.ir.cost`：成本汇总、明细和目标
 
 ## 前端
@@ -31,12 +31,12 @@ npm run dev
 前端使用 Vite + Vue 3 + vue-router 4 + Element Plus + ECharts/vue-echarts，位于
 `frontend/`。开发服务监听 `5174`，并将 `/api` 代理到 `http://localhost:8090`。
 登录令牌保存在 `localStorage` 的 `ir_token`，用户信息保存在 `ir_user`。
-控制塔、追踪、预警、规则、动作、预测、补货、沙盘、场景对比、成本、系统集成、
+控制塔、追踪、预警、规则、动作、预测、补货、人工沙盘、系统自动沙盘、场景对比、成本、系统集成、
 用户和操作日志页面均已提供；前端写操作按 ADMIN/PLANNER 与 VIEWER 角色隐藏。
 
 ## 对接
 
-系统接入配置预置 OMS/TMS/WMS/BMS 为 `MOCK`，SRM 为禁用预留。切换 HTTP 时使用 OTWB 事实表中的端点：OMS `/api/order/page`、`/api/inventory/page`、`/api/dashboard`、`/api/report/order-daily`；WMS `/api/outbound/order/page`、`/api/inventory/summary`、`/api/dashboard`、`/api/report/kpi`；TMS `/api/waybill/page`、`/api/billing/page`、`/api/dashboard`。BMS 约定 `GET /api/open/cost/records?from&to`，尚未上线。
+系统接入配置预置 OMS/TMS/WMS/BMS/SRM 为 `MOCK`。切换 HTTP 时：OMS/WMS/TMS/SRM 指令走 `/api/open/ir/actions`（业务单号）；BMS 成本走 `GET /api/open/cost/records?from&to`。
 
 ## 算法和沙盘
 

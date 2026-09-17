@@ -8,3 +8,7 @@ spring:
 ir:
   sync:
     enabled: false
+  sandbox:
+    auto-on-startup: false
+    auto-enabled: false
+    auto-apply: false
