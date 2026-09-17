@@ -18,6 +18,7 @@ public class OrderSnapshot extends BaseEntity {
     private String province;
     private String city;
     private String status;
+    private Integer priority;
     private BigDecimal payAmount;
     private BigDecimal freight;
     private BigDecimal qty;

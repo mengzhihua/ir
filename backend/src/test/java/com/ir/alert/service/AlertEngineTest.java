@@ -9,6 +9,8 @@ import com.ir.action.mapper.CtActionMapper;
 import com.ir.alert.entity.CtAlert;
 import com.ir.alert.mapper.CtAlertMapper;
 import com.ir.sandbox.service.BalanceAdvisor;
+import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.mapper.OrderSnapshotMapper;
 import java.util.HashSet;
 import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,6 +25,8 @@ class AlertEngineTest {
     private CtAlertMapper alertMapper;
     @Autowired
     private CtActionMapper actionMapper;
+    @Autowired
+    private OrderSnapshotMapper orderMapper;
 
     @Test
     void stuckOrderRuleFiresAndIsIdempotent() {
@@ -140,6 +144,11 @@ class AlertEngineTest {
         org.junit.jupiter.api.Assertions.assertNotNull(action);
         assertEquals("OMS_PRIORITIZE", action.getType());
         assertEquals("SUCCESS", action.getStatus());
+        OrderSnapshot order = orderMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OrderSnapshot>()
+                        .eq(OrderSnapshot::getOrderNo, action.getTargetKey()));
+        org.junit.jupiter.api.Assertions.assertNotNull(order);
+        assertEquals(Integer.valueOf(10), order.getPriority());
     }
 
     @Test

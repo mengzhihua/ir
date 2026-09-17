@@ -27,6 +27,10 @@
         <el-option label="仅看卡滞" :value="true" />
         <el-option label="仅看正常" :value="false" />
       </el-select>
+      <el-select v-model="filters.rushed" clearable placeholder="加急" style="width: 140px">
+        <el-option label="仅看加急" :value="true" />
+        <el-option label="仅看普通" :value="false" />
+      </el-select>
       <el-button type="primary" :icon="Search" @click="search">查询</el-button>
       <el-button @click="reset">重置</el-button>
     </div>
@@ -49,6 +53,12 @@
         </el-table-column>
         <el-table-column prop="oms.channelCode" label="渠道" width="100" />
         <el-table-column prop="oms.warehouseCode" label="仓库" width="110" />
+        <el-table-column label="加急" width="80">
+          <template #default="{ row }">
+            <el-tag v-if="Number(row.oms?.priority) >= 10" type="danger">高优</el-tag>
+            <span v-else>{{ row.oms?.priority ?? 0 }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="oms.carrierCode" label="承运商" width="100" />
         <el-table-column label="订单金额" width="130" align="right">
           <template #default="{ row }">
@@ -103,6 +113,10 @@
             <el-tag :type="statusType(detail.oms?.status)">
               {{ labelOf(detail.oms?.status, orderStatusLabels) }}
             </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="优先级">
+            <el-tag v-if="Number(detail.oms?.priority) >= 10" type="danger">高优 {{ detail.oms.priority }}</el-tag>
+            <span v-else>{{ detail.oms?.priority ?? 0 }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="订单金额">{{
             formatMoney(detail.oms?.payAmount)
@@ -248,7 +262,8 @@ const filters = reactive({
   status: '',
   warehouseCode: '',
   carrierCode: '',
-  stuck: undefined
+  stuck: undefined,
+  rushed: undefined
 })
 const pager = reactive({
   current: 1,
@@ -330,7 +345,8 @@ function reset() {
     status: '',
     warehouseCode: '',
     carrierCode: '',
-    stuck: undefined
+    stuck: undefined,
+    rushed: undefined
   })
   search()
 }

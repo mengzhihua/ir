@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS ct_order_snapshot (
     province VARCHAR(64),
     city VARCHAR(64),
     status VARCHAR(32),
+    priority INT,
     pay_amount DECIMAL(18,2),
     freight DECIMAL(18,2),
     qty DECIMAL(18,2),
@@ -282,3 +283,4 @@ CREATE TABLE IF NOT EXISTS ct_setting (
     updated_at TIMESTAMP
 );
 ALTER TABLE ct_setting ADD COLUMN setting_value VARCHAR(255);
+ALTER TABLE ct_order_snapshot ADD COLUMN priority INT;

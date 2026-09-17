@@ -54,6 +54,7 @@ public class TraceService {
             String warehouseCode,
             String carrierCode,
             Boolean stuck,
+            Boolean rushed,
             long current,
             long size) {
         LambdaQueryWrapper<OrderSnapshot> query = new LambdaQueryWrapper<>();
@@ -68,6 +69,12 @@ public class TraceService {
         }
         if (carrierCode != null && !carrierCode.trim().isEmpty()) {
             query.eq(OrderSnapshot::getCarrierCode, carrierCode);
+        }
+        if (Boolean.TRUE.equals(rushed)) {
+            query.ge(OrderSnapshot::getPriority, 10);
+        } else if (Boolean.FALSE.equals(rushed)) {
+            query.and(wrapper -> wrapper.isNull(OrderSnapshot::getPriority)
+                    .or().lt(OrderSnapshot::getPriority, 10));
         }
         query.orderByDesc(OrderSnapshot::getOrderTime);
         Page<OrderSnapshot> orders = orderMapper.selectPage(
