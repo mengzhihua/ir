@@ -121,6 +121,10 @@ public class ActionService {
                 clients.wms(system).execute(command);
             } else if ("TMS".equals(action.getTargetSystem())) {
                 clients.tms(system).execute(command);
+            } else if ("SRM".equals(action.getTargetSystem())) {
+                clients.srm(system).execute(command);
+            } else if ("BMS".equals(action.getTargetSystem())) {
+                throw new IllegalStateException("BMS 不接受控制塔指令");
             } else {
                 clients.ecosystem(system).execute(command);
             }
@@ -199,7 +203,8 @@ public class ActionService {
                 type("CRM_ESCALATE_CASE", "CRM", field("caseNo", "工单号", true)),
                 type("DMS_REPLENISH_SHORTAGE", "DMS", field("dealerCode", "经销商编码", true)),
                 type("OA_START_WORKFLOW", "OA", field("targetKey", "业务单号", true),
-                        field("definitionCode", "流程编码", false)));
+                        field("definitionCode", "流程编码", false)),
+                type("OA_APPROVE_TASK", "OA", field("taskId", "待办ID", true)));
     }
 
     private void mutateSnapshot(CtAction action, Map<String, Object> params) {

@@ -29,7 +29,7 @@ public class HttpBmsClient implements BmsClient {
         List<CostRecord> result = new ArrayList<>();
         for (Map<String, Object> row : HttpSupport.rows(HttpSupport.getMap(http, url, headers))) {
             CostRecord cost = new CostRecord();
-            cost.setBizDate(LocalDate.parse(HttpSupport.string(row, "bizDate", "date")));
+            cost.setBizDate(HttpSupport.localDate(row, "bizDate", "date"));
             cost.setOrderNo(HttpSupport.string(row, "orderNo"));
             cost.setWarehouseCode(HttpSupport.string(row, "warehouseCode"));
             cost.setCarrierCode(HttpSupport.string(row, "carrierCode"));

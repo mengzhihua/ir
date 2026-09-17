@@ -36,7 +36,7 @@ npm run dev
 
 ## 对接
 
-系统接入配置预置 OMS/TMS/WMS/BMS/SRM/SAP/OA/BOM/INV/CRM/DMS 为 `MOCK`。切换 HTTP 时：OMS/WMS/TMS 与 SRM/SAP/BOM/INV/CRM/DMS/OA 一样走 `GET /api/open/ir/snapshots` 与 `POST /api/open/ir/actions`；BMS 成本走 `GET /api/open/cost/records?from&to`。仓配联调种子：OMS `IR-SO-STUCK`、WMS `SO-IR-STUCK`、TMS `WB-IR-DELAY`。
+系统接入配置预置 OMS/TMS/WMS/BMS/SRM/SAP/OA/BOM/INV/CRM/DMS 为 `MOCK`。切换 HTTP 时：OMS/WMS/TMS 与 SRM/SAP/BOM/INV/CRM/DMS/OA 一样走 `GET /api/open/ir/snapshots` 与 `POST /api/open/ir/actions`；BMS 成本走 `GET /api/open/cost/records?from&to`。仓配联调种子：OMS `IR-SO-STUCK`、WMS `SO-IR-STUCK`、TMS `WB-IR-DELAY`。采购联调：SAP `M1099`/`MAT-1000` 低库存执行建议会建 PR 并协同 SRM/OA/WMS 补货。
 
 ## 算法和沙盘
 
