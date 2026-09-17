@@ -281,3 +281,4 @@ CREATE TABLE IF NOT EXISTS ct_setting (
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
+ALTER TABLE ct_setting ADD COLUMN setting_value VARCHAR(255);
