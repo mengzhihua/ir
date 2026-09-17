@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h2>成本分析</h2>
-        <p class="subtitle">按类型、仓库、承运商分析供应链成本；预估来自成功指令运价，回写来自换商后快照运费</p>
+        <p class="subtitle">按类型、仓库、承运商分析供应链成本；预估来自成功指令运价，回写只计换商后运费差（贵换为负）</p>
       </div>
       <el-button @click="load">刷新</el-button>
     </div>
@@ -22,7 +22,7 @@
       </div>
       <div class="stat">
         <div class="label">回写节省</div>
-        <div class="value success">{{ formatMoney(saving.actual) }}</div>
+        <div class="value" :class="actualClass">{{ formatMoney(saving.actual) }}</div>
       </div>
       <div class="stat">
         <div class="label">预估差</div>
@@ -165,16 +165,18 @@ const carrierOption = computed(() => ({
   yAxis: { type: 'value' },
   series: [{ type: 'bar', data: Object.values(summary.byCarrier || {}) }]
 }))
-const varianceClass = computed(() => {
-  const value = Number(saving.variance || 0)
-  if (value > 0) {
+const actualClass = computed(() => signClass(saving.actual))
+const varianceClass = computed(() => signClass(saving.variance))
+function signClass(value) {
+  const amount = Number(value || 0)
+  if (amount > 0) {
     return 'success'
   }
-  if (value < 0) {
+  if (amount < 0) {
     return 'danger'
   }
   return ''
-})
+}
 async function loadRecords() {
   loading.value = true
   try {

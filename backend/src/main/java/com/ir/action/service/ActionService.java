@@ -348,8 +348,9 @@ public class ActionService {
                 if (fromFreight != null) {
                     params.put("fromFreightAmount", fromFreight);
                 }
-                params.put("actualSaving",
-                        BalanceAdvisor.freightSaving(fromCarrier, toCarrier, fromFreight));
+                if (fromFreight != null && toFreight != null) {
+                    params.put("actualSaving", fromFreight.subtract(toFreight));
+                }
             }
         } else if (action.getTargetSystem() != null
                 && ClientFactory.ecosystemCode(action.getTargetSystem())) {

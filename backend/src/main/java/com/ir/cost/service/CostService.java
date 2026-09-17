@@ -131,15 +131,19 @@ public class CostService {
     public Map<String, Object> saving() {
         BigDecimal estimated = BigDecimal.ZERO;
         BigDecimal actual = BigDecimal.ZERO;
+        BigDecimal writtenExpected = BigDecimal.ZERO;
         Map<String, BigDecimal> byMonth = new LinkedHashMap<>();
         for (CtAction action : actionMapper.selectList(
                 new LambdaQueryWrapper<CtAction>()
                         .eq(CtAction::getStatus, "SUCCESS"))) {
             BigDecimal expected = action.getExpectedSaving() == null
                     ? BigDecimal.ZERO : action.getExpectedSaving();
-            BigDecimal written = actualOf(action, expected);
             estimated = estimated.add(expected);
-            actual = actual.add(written);
+            BigDecimal written = writtenSaving(action);
+            if (written != null) {
+                actual = actual.add(written);
+                writtenExpected = writtenExpected.add(expected);
+            }
             String month = action.getCreatedAt() == null
                     ? "unknown" : action.getCreatedAt().toLocalDate().toString()
                     .substring(0, 7);
@@ -148,7 +152,7 @@ public class CostService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", estimated);
         result.put("actual", actual);
-        result.put("variance", actual.subtract(estimated));
+        result.put("variance", actual.subtract(writtenExpected));
         result.put("byMonth", byMonth);
         result.put("estimated", true);
         return result;
@@ -203,19 +207,19 @@ public class CostService {
                 values.getOrDefault(normalized, BigDecimal.ZERO).add(value));
     }
 
-    private BigDecimal actualOf(CtAction action, BigDecimal expected) {
+    private BigDecimal writtenSaving(CtAction action) {
         try {
             Map<String, Object> params = objectMapper.readValue(
                     action.getParamsJson() == null ? "{}" : action.getParamsJson(),
                     new TypeReference<Map<String, Object>>() {
                     });
             Object value = params.get("actualSaving");
-            if (value == null) {
-                return expected;
+            if (value == null || String.valueOf(value).trim().isEmpty()) {
+                return null;
             }
             return new BigDecimal(String.valueOf(value));
         } catch (Exception ex) {
-            return expected;
+            return null;
         }
     }
 }

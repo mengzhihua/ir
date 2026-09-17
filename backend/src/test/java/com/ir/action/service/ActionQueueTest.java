@@ -15,6 +15,8 @@ import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.entity.ShipmentSnapshot;
 import com.ir.snapshot.mapper.OrderSnapshotMapper;
 import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -39,6 +41,8 @@ class ActionQueueTest {
     private ShipmentSnapshotMapper shipmentMapper;
     @Autowired
     private CostService costService;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Test
     void pendingIsDedupedAndOpposingStanceIsSuperseded() {
@@ -108,12 +112,51 @@ class ActionQueueTest {
         ShipmentSnapshot updated = shipmentMapper.selectById(shipment.getId());
         assertEquals("SELF01", updated.getCarrierCode());
         assertEquals(0, expectedFreight.compareTo(updated.getFreightAmount()));
+        assertEquals(0, fromFreight.subtract(expectedFreight).compareTo(
+                paramDecimal(action, "actualSaving")));
         Map<String, Object> saving = costService.saving();
         assertNotNull(saving.get("actual"));
         assertNotNull(saving.get("variance"));
-        assertTrue(new BigDecimal(String.valueOf(saving.get("actual")))
-                .compareTo(expectedSaving) >= 0);
         assertEquals(0, expectedSaving.compareTo(action.getExpectedSaving()));
+    }
+
+    @Test
+    void switchToFasterCarrierRecordsNegativeSaving() {
+        ShipmentSnapshot shipment = shipmentMapper.selectOne(
+                new LambdaQueryWrapper<ShipmentSnapshot>()
+                        .eq(ShipmentSnapshot::getCarrierCode, "SELF01")
+                        .gt(ShipmentSnapshot::getFreightAmount, BigDecimal.ZERO)
+                        .last("LIMIT 1"));
+        assertNotNull(shipment);
+        BigDecimal fromFreight = shipment.getFreightAmount();
+        BigDecimal toFreight = CarrierCodes.scaledFreight(
+                "SELF01", "SF", fromFreight);
+        Map<String, Object> request = pending(
+                "TMS_SWITCH_CARRIER", shipment.getWaybillCode(), "SF");
+        CtAction action = actions.createAndExecute(request);
+        assertEquals("SUCCESS", action.getStatus());
+        BigDecimal actualSaving = paramDecimal(action, "actualSaving");
+        assertTrue(actualSaving.compareTo(BigDecimal.ZERO) < 0);
+        assertEquals(0, fromFreight.subtract(toFreight).compareTo(actualSaving));
+        ShipmentSnapshot updated = shipmentMapper.selectById(shipment.getId());
+        assertEquals("SF", updated.getCarrierCode());
+        assertEquals(0, toFreight.compareTo(updated.getFreightAmount()));
+    }
+
+    @Test
+    void savingActualIgnoresEstimatedWithoutWriteback() {
+        Map<String, Object> before = costService.saving();
+        BigDecimal actualBefore = new BigDecimal(String.valueOf(before.get("actual")));
+        BigDecimal totalBefore = new BigDecimal(String.valueOf(before.get("total")));
+        Map<String, Object> request = pending("OMS_HOLD", "SO-SAVE-UNWRITTEN", null);
+        request.put("expectedSaving", 99);
+        CtAction action = actions.createAndExecute(request);
+        assertEquals("SUCCESS", action.getStatus());
+        Map<String, Object> after = costService.saving();
+        assertEquals(0, actualBefore.compareTo(
+                new BigDecimal(String.valueOf(after.get("actual")))));
+        assertEquals(0, totalBefore.add(new BigDecimal("99")).compareTo(
+                new BigDecimal(String.valueOf(after.get("total")))));
     }
 
     @Test
@@ -147,5 +190,17 @@ class ActionQueueTest {
         }
         request.put("params", params);
         return request;
+    }
+
+    private BigDecimal paramDecimal(CtAction action, String key) {
+        try {
+            Map<String, Object> params = objectMapper.readValue(
+                    action.getParamsJson(),
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            return new BigDecimal(String.valueOf(params.get(key)));
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 }
