@@ -75,4 +75,41 @@ class AlertEngineTest {
         assertTrue(types.contains("OA_START_WORKFLOW"));
         assertTrue(types.contains("WMS_REPLENISH"));
     }
+
+    @Test
+    void costOverrunExecutesSwitchOnWaybillNotWarehouse() {
+        alertEngine.evaluate();
+        CtAlert overrun = alertMapper.selectList(null).stream()
+                .filter(a -> "COST_OVERRUN".equals(a.getRuleCode()))
+                .findFirst().orElse(null);
+        org.junit.jupiter.api.Assertions.assertNotNull(overrun);
+        CtAction action = alertEngine.executeSuggested(overrun.getId());
+        org.junit.jupiter.api.Assertions.assertNotNull(action);
+        assertEquals("TMS_SWITCH_CARRIER", action.getType());
+        org.junit.jupiter.api.Assertions.assertTrue(
+                action.getTargetKey() != null && action.getTargetKey().startsWith("WB"));
+        org.junit.jupiter.api.Assertions.assertFalse("WH-SH".equals(action.getTargetKey()));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                action.getParamsJson().contains("JD")
+                        || action.getParamsJson().contains("SELF01")
+                        || action.getParamsJson().contains("SF"));
+        assertEquals("SUCCESS", action.getStatus());
+    }
+
+    @Test
+    void delaySuggestedActionStaysOnWaybill() {
+        alertEngine.evaluate();
+        CtAlert delay = alertMapper.selectList(null).stream()
+                .filter(a -> "TMS_DELAY".equals(a.getRuleCode()))
+                .findFirst().orElse(null);
+        org.junit.jupiter.api.Assertions.assertNotNull(delay);
+        assertEquals("WAYBILL", delay.getTargetType());
+        org.junit.jupiter.api.Assertions.assertTrue(
+                "TMS_SYNC_TRACK".equals(delay.getSuggestedAction())
+                        || "TMS_SWITCH_CARRIER".equals(delay.getSuggestedAction()));
+        CtAction action = alertEngine.executeSuggested(delay.getId());
+        org.junit.jupiter.api.Assertions.assertNotNull(action);
+        assertEquals(delay.getTargetKey(), action.getTargetKey());
+        assertEquals("SUCCESS", action.getStatus());
+    }
 }

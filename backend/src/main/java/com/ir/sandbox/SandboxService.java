@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.action.ActionService;
 import com.ir.action.CtAction;
+import com.ir.common.CarrierCodes;
 import com.ir.common.CodeGenerator;
 import com.ir.snapshot.InventorySnapshotMapper;
 import com.ir.snapshot.OrderSnapshot;
@@ -178,7 +179,8 @@ public class SandboxService {
                     continue;
                 }
                 result.add(dispatch("TMS_SWITCH_CARRIER", shipment.getWaybillCode(),
-                        map("carrierCode", targetCarrier), expected, execute));
+                        map("carrierCode", CarrierCodes.toTms(targetCarrier)),
+                        expected, execute));
             }
         }
 
@@ -392,7 +394,7 @@ public class SandboxService {
                 bestWeight = weight;
             }
         }
-        return best;
+        return CarrierCodes.toTms(best);
     }
 
     private String firstSku() {

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.action.ActionService;
 import com.ir.action.CtAction;
 import com.ir.forecast.ForecastService;
+import com.ir.sandbox.BalanceAdvisor;
 import com.ir.snapshot.CostRecord;
 import com.ir.snapshot.InventorySnapshot;
 import com.ir.snapshot.InventorySnapshotMapper;
@@ -44,6 +45,7 @@ public class AlertEngine {
     private final ObjectMapper objectMapper;
     private final CostRecordMapper costMapper;
     private final ForecastService forecastService;
+    private final BalanceAdvisor balanceAdvisor;
 
     public AlertEngine(
             CtRuleMapper ruleMapper,
@@ -57,7 +59,8 @@ public class AlertEngine {
             CodeGenerator codes,
             ObjectMapper objectMapper,
             CostRecordMapper costMapper,
-            ForecastService forecastService) {
+            ForecastService forecastService,
+            BalanceAdvisor balanceAdvisor) {
         this.ruleMapper = ruleMapper;
         this.alertMapper = alertMapper;
         this.orderMapper = orderMapper;
@@ -70,6 +73,7 @@ public class AlertEngine {
         this.objectMapper = objectMapper;
         this.costMapper = costMapper;
         this.forecastService = forecastService;
+        this.balanceAdvisor = balanceAdvisor;
     }
 
     @Transactional
@@ -145,11 +149,25 @@ public class AlertEngine {
         if (alert.getSuggestedAction() == null || alert.getSuggestedAction().trim().isEmpty()) {
             return null;
         }
+        if ("COST_OVERRUN".equals(alert.getType())) {
+            return executeOverrun(alert);
+        }
         Map<String, Object> params = new LinkedHashMap<>();
         fillFromExt(alert, params);
+        fillFromShipment(alert, params);
+        String type = alert.getSuggestedAction();
         String targetKey = actionKey(alert, params);
+        if ("TMS_DELAY".equals(alert.getType())) {
+            ShipmentSnapshot shipment = shipmentOf(alert.getTargetKey());
+            BalanceAdvisor.Advice advice = balanceAdvisor.adviseDelay(shipment);
+            if (advice != null) {
+                type = advice.getType();
+                targetKey = advice.getTargetKey();
+                params.putAll(advice.params());
+            }
+        }
         Map<String, Object> request = new LinkedHashMap<>();
-        request.put("type", alert.getSuggestedAction());
+        request.put("type", type);
         request.put("targetKey", targetKey);
         request.put("params", params);
         request.put("alertId", id);
@@ -158,6 +176,7 @@ public class AlertEngine {
                 && "SAP_LOW_STOCK".equals(alert.getRuleCode())) {
             fanOutPurchase(params, targetKey, id);
         }
+        alert.setSuggestedAction(type);
         alert.setActionId(action == null ? null : action.getId());
         alertMapper.updateById(alert);
         return action;
@@ -204,8 +223,23 @@ public class AlertEngine {
                     && shipment.getPlannedArriveTime().isBefore(now)
                     && !"DELIVERED".equals(shipment.getStatus())
                     && !"CLOSED".equals(shipment.getStatus()))) {
-                add(rule, "WAYBILL", shipment.getWaybillCode(), null,
-                        "运输到达延迟", "计划到达时间已过");
+                String suggested = rule.getSuggestedAction();
+                String detail = exceptionOnly ? "运单异常，先拉轨迹" : "计划到达时间已过";
+                if (!exceptionOnly) {
+                    BalanceAdvisor.Advice advice = balanceAdvisor.adviseDelay(shipment);
+                    if (advice != null) {
+                        suggested = advice.getType();
+                        if (BalanceAdvisor.SWITCH.equals(advice.getType())) {
+                            detail = "计划到达时间已过，成本/效率权衡后建议换 "
+                                    + advice.getCarrierCode();
+                        } else {
+                            detail = "计划到达时间已过，当前承运商已较优，建议追轨迹";
+                        }
+                    }
+                }
+                add(rule, "WAYBILL", shipment.getWaybillCode(),
+                        com.ir.common.WarehouseCodes.toOms(shipment.getFromSiteCode()),
+                        "运输到达延迟", detail, suggested);
             }
         }
     }
@@ -240,9 +274,12 @@ public class AlertEngine {
                     .divide(java.math.BigDecimal.valueOf(Math.max(1, count)),
                             4, java.math.RoundingMode.HALF_UP);
             if (perOrder.compareTo(threshold) > 0) {
+                String recommended = balanceAdvisor.pickCheaperForOverrun("SF");
                 add(rule, "WAREHOUSE", warehouse, warehouse,
                         "仓库成本超标", "近 " + params.getOrDefault(
-                                "days", 7) + " 天单均成本 " + perOrder);
+                                "days", 7) + " 天单均成本 " + perOrder
+                                + "，按成本/效率权重建议换承运商 " + recommended,
+                        rule.getSuggestedAction());
             }
         }
     }
@@ -302,11 +339,29 @@ public class AlertEngine {
             String warehouse,
             String title,
             String detail) {
+        add(rule, targetType, targetKey, warehouse, title, detail, rule.getSuggestedAction());
+    }
+
+    private void add(
+            CtRule rule,
+            String targetType,
+            String targetKey,
+            String warehouse,
+            String title,
+            String detail,
+            String suggestedAction) {
         CtAlert existing = alertMapper.selectOne(new LambdaQueryWrapper<CtAlert>()
                 .eq(CtAlert::getRuleCode, rule.getCode())
                 .eq(CtAlert::getTargetKey, targetKey)
                 .eq(CtAlert::getStatus, "OPEN"));
+        String suggested = suggestedAction == null || suggestedAction.trim().isEmpty()
+                ? rule.getSuggestedAction() : suggestedAction;
         if (existing != null) {
+            if (suggested != null && !suggested.equals(existing.getSuggestedAction())) {
+                existing.setSuggestedAction(suggested);
+                existing.setDetail(detail);
+                alertMapper.updateById(existing);
+            }
             return;
         }
         CtAlert alert = new CtAlert();
@@ -320,7 +375,7 @@ public class AlertEngine {
         alert.setTitle(title);
         alert.setDetail(detail);
         alert.setStatus("OPEN");
-        alert.setSuggestedAction(rule.getSuggestedAction());
+        alert.setSuggestedAction(suggested);
         alertMapper.insert(alert);
     }
 
@@ -402,13 +457,59 @@ public class AlertEngine {
         dispatch("WMS_REPLENISH", warehouse, wms, alertId);
     }
 
-    private void dispatch(String type, String targetKey, Map<String, Object> params, Long alertId) {
+    private CtAction executeOverrun(CtAlert alert) {
+        java.util.List<BalanceAdvisor.Advice> advice = balanceAdvisor.adviseOverrun(
+                alert.getWarehouseCode(),
+                shipmentMapper.selectList(null),
+                orderMapper.selectList(null));
+        if (advice.isEmpty()) {
+            return null;
+        }
+        CtAction primary = null;
+        for (BalanceAdvisor.Advice item : advice) {
+            CtAction action = dispatch(item.getType(), item.getTargetKey(),
+                    item.params(), alert.getId());
+            if (primary == null) {
+                primary = action;
+            }
+        }
+        alert.setSuggestedAction(BalanceAdvisor.SWITCH);
+        alert.setActionId(primary == null ? null : primary.getId());
+        alertMapper.updateById(alert);
+        return primary;
+    }
+
+    private void fillFromShipment(CtAlert alert, Map<String, Object> params) {
+        if (!"WAYBILL".equals(alert.getTargetType())) {
+            return;
+        }
+        ShipmentSnapshot shipment = shipmentOf(alert.getTargetKey());
+        if (shipment == null) {
+            return;
+        }
+        params.put("waybillCode", shipment.getWaybillCode());
+        if (shipment.getCarrierCode() != null) {
+            params.putIfAbsent("carrierCode",
+                    com.ir.common.CarrierCodes.toTms(shipment.getCarrierCode()));
+        }
+    }
+
+    private ShipmentSnapshot shipmentOf(String waybill) {
+        if (waybill == null || waybill.trim().isEmpty()) {
+            return null;
+        }
+        return shipmentMapper.selectOne(new LambdaQueryWrapper<ShipmentSnapshot>()
+                .eq(ShipmentSnapshot::getWaybillCode, waybill)
+                .last("LIMIT 1"));
+    }
+
+    private CtAction dispatch(String type, String targetKey, Map<String, Object> params, Long alertId) {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("type", type);
         request.put("targetKey", targetKey);
         request.put("params", params);
         request.put("alertId", alertId);
-        actions.createAndExecute(request);
+        return actions.createAndExecute(request);
     }
 
     private java.util.Set<String> stuckStatuses(Object value) {
