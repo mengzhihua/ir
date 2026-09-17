@@ -177,7 +177,7 @@ public class AlertEngine {
             if (order != null && statuses.contains(outbound.getStatus())
                     && order.getOrderTime() != null
                     && Duration.between(order.getOrderTime(), now).toHours() > threshold) {
-                add(rule, "ORDER", order.getOrderNo(), order.getWarehouseCode(),
+                add(rule, "ORDER", outbound.getCode(), outbound.getWarehouseCode(),
                         "WMS 拣货卡单", outbound.getStatus() + " 超过 " + threshold + " 小时");
             }
         }
