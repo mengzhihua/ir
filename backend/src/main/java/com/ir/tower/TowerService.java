@@ -1,10 +1,13 @@
 package com.ir.tower;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.ir.action.CtAction;
+import com.ir.action.CtActionMapper;
 import com.ir.alert.CtAlert;
 import com.ir.alert.CtAlertMapper;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSystemMapper;
+import com.ir.sandbox.BalancePolicy;
 import com.ir.sandbox.CtScenario;
 import com.ir.sandbox.SandboxService;
 import com.ir.snapshot.CostRecord;
@@ -41,8 +44,10 @@ public class TowerService {
     private final CostRecordMapper costs;
     private final ExtSnapshotMapper extSnapshots;
     private final CtAlertMapper alerts;
+    private final CtActionMapper actions;
     private final CtSystemMapper systems;
     private final SandboxService sandbox;
+    private final BalancePolicy policy;
 
     public TowerService(
             OrderSnapshotMapper orders,
@@ -52,8 +57,10 @@ public class TowerService {
             CostRecordMapper costs,
             ExtSnapshotMapper extSnapshots,
             CtAlertMapper alerts,
+            CtActionMapper actions,
             CtSystemMapper systems,
-            SandboxService sandbox) {
+            SandboxService sandbox,
+            BalancePolicy policy) {
         this.orders = orders;
         this.wmsOrders = wmsOrders;
         this.shipments = shipments;
@@ -61,8 +68,10 @@ public class TowerService {
         this.costs = costs;
         this.extSnapshots = extSnapshots;
         this.alerts = alerts;
+        this.actions = actions;
         this.systems = systems;
         this.sandbox = sandbox;
+        this.policy = policy;
     }
 
     public Map<String, Object> overview() {
@@ -155,7 +164,11 @@ public class TowerService {
         kpi.put("dmsShortage", countExt("DMS", "SHORTAGE", "SHORT"));
         kpi.put("crmOpenCases", countExt("CRM", "CASE", "NEW"));
         kpi.put("oaPendingTasks", countExt("OA", "WF_TASK", "PENDING"));
+        kpi.put("pendingActions", actions.selectCount(new LambdaQueryWrapper<CtAction>()
+                .eq(CtAction::getStatus, "PENDING")));
+        kpi.put("carrierMix", carrierMix(shipmentRows));
         result.put("kpi", kpi);
+        result.put("policy", policy.snapshot());
 
         Map<String, Object> funnel = new LinkedHashMap<>();
         funnel.put("oms", countStatuses(orderRows));
@@ -270,6 +283,19 @@ public class TowerService {
                 types.put(row.getDataType(), types.getOrDefault(row.getDataType(), 0) + 1);
             }
             result.put(system, types);
+        }
+        return result;
+    }
+
+    private Map<String, Integer> carrierMix(List<ShipmentSnapshot> rows) {
+        Map<String, Integer> result = new LinkedHashMap<>();
+        for (ShipmentSnapshot shipment : rows) {
+            if (Arrays.asList("DELIVERED", "CLOSED", "CANCELLED")
+                    .contains(shipment.getStatus())) {
+                continue;
+            }
+            String carrier = com.ir.common.CarrierCodes.toTms(shipment.getCarrierCode());
+            result.put(carrier, result.getOrDefault(carrier, 0) + 1);
         }
         return result;
     }

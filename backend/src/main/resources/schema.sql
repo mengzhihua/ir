@@ -273,3 +273,11 @@ ALTER TABLE ct_scenario ADD COLUMN stockout_units DECIMAL(18,2);
 ALTER TABLE ct_scenario ADD COLUMN cost_score DECIMAL(18,6);
 ALTER TABLE ct_scenario ADD COLUMN efficiency_score DECIMAL(18,6);
 ALTER TABLE ct_scenario ADD COLUMN balance_score DECIMAL(18,6);
+
+CREATE TABLE IF NOT EXISTS ct_setting (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(64) NOT NULL UNIQUE,
+    value VARCHAR(255),
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);

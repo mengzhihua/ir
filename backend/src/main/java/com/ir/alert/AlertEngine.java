@@ -383,7 +383,10 @@ public class AlertEngine {
         String suggested = suggestedAction == null || suggestedAction.trim().isEmpty()
                 ? rule.getSuggestedAction() : suggestedAction;
         if (existing != null) {
-            if (suggested != null && !suggested.equals(existing.getSuggestedAction())) {
+            boolean actionChanged = suggested != null
+                    && !suggested.equals(existing.getSuggestedAction());
+            boolean detailChanged = detail != null && !detail.equals(existing.getDetail());
+            if (actionChanged || detailChanged) {
                 existing.setSuggestedAction(suggested);
                 existing.setDetail(detail);
                 alertMapper.updateById(existing);
