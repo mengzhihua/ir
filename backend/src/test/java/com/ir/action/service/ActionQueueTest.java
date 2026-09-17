@@ -4,14 +4,22 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
+import com.ir.common.CarrierCodes;
+import com.ir.cost.service.CostService;
+import com.ir.sandbox.service.BalanceAdvisor;
 import com.ir.sandbox.service.BalancePolicy;
+import com.ir.snapshot.entity.ShipmentSnapshot;
+import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
@@ -23,6 +31,10 @@ class ActionQueueTest {
     private CtActionMapper actionMapper;
     @Autowired
     private BalancePolicy policy;
+    @Autowired
+    private ShipmentSnapshotMapper shipmentMapper;
+    @Autowired
+    private CostService costService;
 
     @Test
     void pendingIsDedupedAndOpposingStanceIsSuperseded() {
@@ -66,6 +78,38 @@ class ActionQueueTest {
         assertEquals("SUPERSEDED", actionMapper.selectById(rush.getId()).getStatus());
         assertEquals("PENDING", hold.getStatus());
         assertNotEquals(rush.getId(), hold.getId());
+    }
+
+    @Test
+    void switchCarrierRewritesFreightAndSavingActual() {
+        ShipmentSnapshot shipment = shipmentMapper.selectOne(
+                new LambdaQueryWrapper<ShipmentSnapshot>()
+                        .in(ShipmentSnapshot::getCarrierCode, Arrays.asList("SF", "JD"))
+                        .gt(ShipmentSnapshot::getFreightAmount, BigDecimal.ZERO)
+                        .last("LIMIT 1"));
+        assertNotNull(shipment);
+        String fromCarrier = shipment.getCarrierCode();
+        BigDecimal fromFreight = shipment.getFreightAmount();
+        BigDecimal expectedFreight = CarrierCodes.scaledFreight(
+                fromCarrier, "SELF01", fromFreight);
+        BigDecimal expectedSaving = BalanceAdvisor.freightSaving(
+                fromCarrier, "SELF01", fromFreight);
+        Map<String, Object> request = pending(
+                "TMS_SWITCH_CARRIER", shipment.getWaybillCode(), "SELF01");
+        request.put("expectedSaving", expectedSaving);
+        CtAction action = actions.createAndExecute(request);
+        assertEquals("SUCCESS", action.getStatus());
+        assertTrue(action.getParamsJson().contains("actualSaving"));
+        assertTrue(action.getParamsJson().contains("fromCarrierCode"));
+        ShipmentSnapshot updated = shipmentMapper.selectById(shipment.getId());
+        assertEquals("SELF01", updated.getCarrierCode());
+        assertEquals(0, expectedFreight.compareTo(updated.getFreightAmount()));
+        Map<String, Object> saving = costService.saving();
+        assertNotNull(saving.get("actual"));
+        assertNotNull(saving.get("variance"));
+        assertTrue(new BigDecimal(String.valueOf(saving.get("actual")))
+                .compareTo(expectedSaving) >= 0);
+        assertEquals(0, expectedSaving.compareTo(action.getExpectedSaving()));
     }
 
     @Test

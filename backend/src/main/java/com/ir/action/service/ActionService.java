@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
+import com.ir.common.CarrierCodes;
 import com.ir.common.CodeGenerator;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.ClientFactory;
@@ -178,7 +179,7 @@ public class ActionService {
             } else if ("TMS".equals(action.getTargetSystem())) {
                 if ("TMS_SWITCH_CARRIER".equals(action.getType())
                         && params.get("carrierCode") != null) {
-                    params.put("carrierCode", com.ir.common.CarrierCodes.toTms(
+                    params.put("carrierCode", CarrierCodes.toTms(
                             String.valueOf(params.get("carrierCode"))));
                     command.setParams(params);
                 }
@@ -191,6 +192,7 @@ public class ActionService {
                 clients.ecosystem(system).execute(command);
             }
             mutateSnapshot(action, params);
+            action.setParams(write(params));
             action.setStatus("SUCCESS");
             action.setResult("指令执行成功");
         } catch (Exception ex) {
@@ -323,8 +325,24 @@ public class ActionService {
                     new LambdaQueryWrapper<ShipmentSnapshot>()
                             .eq(ShipmentSnapshot::getWaybillCode, action.getTargetKey()));
             if (shipment != null && params.get("carrierCode") != null) {
-                shipment.setCarrierCode(String.valueOf(params.get("carrierCode")));
+                String toCarrier = String.valueOf(params.get("carrierCode"));
+                String fromCarrier = shipment.getCarrierCode();
+                BigDecimal fromFreight = shipment.getFreightAmount();
+                BigDecimal toFreight = CarrierCodes.scaledFreight(
+                        fromCarrier, toCarrier, fromFreight);
+                shipment.setCarrierCode(toCarrier);
+                if (toFreight != null) {
+                    shipment.setFreightAmount(toFreight);
+                }
                 shipmentMapper.updateById(shipment);
+                if (fromCarrier != null) {
+                    params.put("fromCarrierCode", fromCarrier);
+                }
+                if (fromFreight != null) {
+                    params.put("fromFreightAmount", fromFreight);
+                }
+                params.put("actualSaving",
+                        BalanceAdvisor.freightSaving(fromCarrier, toCarrier, fromFreight));
             }
         } else if (action.getTargetSystem() != null
                 && ClientFactory.ecosystemCode(action.getTargetSystem())) {

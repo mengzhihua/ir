@@ -143,6 +143,9 @@ class BalanceAdvisorTest {
     void freightSavingUsesRateDeltaAndShareSplitsScenario() {
         assertEquals(0, new BigDecimal("40.00").compareTo(
                 BalanceAdvisor.freightSaving("SF", "SELF01", new BigDecimal("110"))));
+        assertEquals(0, new BigDecimal("70.00").compareTo(
+                com.ir.common.CarrierCodes.scaledFreight(
+                        "SF", "SELF01", new BigDecimal("110"))));
         assertEquals(0, new BigDecimal("18.18").compareTo(
                 BalanceAdvisor.freightSaving("SF", "JD", new BigDecimal("100"))));
         assertEquals(0, BigDecimal.ZERO.compareTo(

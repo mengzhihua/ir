@@ -1,6 +1,7 @@
 package com.ir.common;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,6 +54,18 @@ public final class CarrierCodes {
             return BigDecimal.valueOf(1.8);
         }
         return BigDecimal.valueOf(1.4);
+    }
+
+    /** 按相对运价把原运费折到目标承运商。 */
+    public static BigDecimal scaledFreight(
+            String fromCarrier,
+            String toCarrier,
+            BigDecimal freight) {
+        BigDecimal from = rate(fromCarrier);
+        if (from.signum() <= 0 || freight == null || freight.signum() <= 0) {
+            return freight;
+        }
+        return freight.multiply(rate(toCarrier)).divide(from, 2, RoundingMode.HALF_UP);
     }
 
     /** 相对时效系数，越大越慢。 */

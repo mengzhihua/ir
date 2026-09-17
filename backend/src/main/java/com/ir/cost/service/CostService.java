@@ -10,6 +10,8 @@ import com.ir.cost.mapper.CtCostTargetMapper;
 import com.ir.snapshot.entity.CostRecord;
 import com.ir.snapshot.mapper.CostRecordMapper;
 import com.ir.snapshot.mapper.OrderSnapshotMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -24,16 +26,19 @@ public class CostService {
     private final CtCostTargetMapper targetMapper;
     private final CtActionMapper actionMapper;
     private final OrderSnapshotMapper orderMapper;
+    private final ObjectMapper objectMapper;
 
     public CostService(
             CostRecordMapper costMapper,
             CtCostTargetMapper targetMapper,
             CtActionMapper actionMapper,
-            OrderSnapshotMapper orderMapper) {
+            OrderSnapshotMapper orderMapper,
+            ObjectMapper objectMapper) {
         this.costMapper = costMapper;
         this.targetMapper = targetMapper;
         this.actionMapper = actionMapper;
         this.orderMapper = orderMapper;
+        this.objectMapper = objectMapper;
     }
 
     public Map<String, Object> summary(int days) {
@@ -124,21 +129,26 @@ public class CostService {
     }
 
     public Map<String, Object> saving() {
-        BigDecimal total = BigDecimal.ZERO;
+        BigDecimal estimated = BigDecimal.ZERO;
+        BigDecimal actual = BigDecimal.ZERO;
         Map<String, BigDecimal> byMonth = new LinkedHashMap<>();
         for (CtAction action : actionMapper.selectList(
                 new LambdaQueryWrapper<CtAction>()
                         .eq(CtAction::getStatus, "SUCCESS"))) {
-            BigDecimal value = action.getExpectedSaving() == null
+            BigDecimal expected = action.getExpectedSaving() == null
                     ? BigDecimal.ZERO : action.getExpectedSaving();
-            total = total.add(value);
+            BigDecimal written = actualOf(action, expected);
+            estimated = estimated.add(expected);
+            actual = actual.add(written);
             String month = action.getCreatedAt() == null
                     ? "unknown" : action.getCreatedAt().toLocalDate().toString()
                     .substring(0, 7);
-            add(byMonth, month, value);
+            add(byMonth, month, expected);
         }
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("total", total);
+        result.put("total", estimated);
+        result.put("actual", actual);
+        result.put("variance", actual.subtract(estimated));
         result.put("byMonth", byMonth);
         result.put("estimated", true);
         return result;
@@ -191,5 +201,21 @@ public class CostService {
         String normalized = key == null ? "UNKNOWN" : key;
         values.put(normalized,
                 values.getOrDefault(normalized, BigDecimal.ZERO).add(value));
+    }
+
+    private BigDecimal actualOf(CtAction action, BigDecimal expected) {
+        try {
+            Map<String, Object> params = objectMapper.readValue(
+                    action.getParamsJson() == null ? "{}" : action.getParamsJson(),
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            Object value = params.get("actualSaving");
+            if (value == null) {
+                return expected;
+            }
+            return new BigDecimal(String.valueOf(value));
+        } catch (Exception ex) {
+            return expected;
+        }
     }
 }

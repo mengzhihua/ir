@@ -98,6 +98,8 @@ class AlertEngineTest {
         org.junit.jupiter.api.Assertions.assertNotNull(action.getExpectedSaving());
         org.junit.jupiter.api.Assertions.assertTrue(
                 action.getExpectedSaving().compareTo(java.math.BigDecimal.ZERO) > 0);
+        org.junit.jupiter.api.Assertions.assertTrue(
+                action.getParamsJson() != null && action.getParamsJson().contains("actualSaving"));
     }
 
     @Test
