@@ -6,7 +6,7 @@ KEY (code)
 VALUES ('WMS', '仓储管理系统', 'http://localhost:8083', 'BEARER', 'admin', 'admin123', 'wms-open-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('TMS', '运输管理系统', 'http://localhost:8082', 'NONE', NULL, NULL, NULL, 'MOCK', TRUE);
+VALUES ('TMS', '运输管理系统', 'http://localhost:8082', 'API_KEY', NULL, NULL, 'tms-open-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
 VALUES ('BMS', '计费系统', 'http://localhost:8084', 'API_KEY', NULL, NULL, 'bms-open-key', 'MOCK', TRUE);
@@ -47,7 +47,7 @@ KEY (code)
 VALUES ('OMS_STUCK', '订单审核卡单', 'ORDER_STUCK', '{"status":"AUDITED","hours":4}', 'HIGH', TRUE, 'OMS_HOLD');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
-VALUES ('WMS_STUCK', '仓库拣货卡单', 'WMS_STUCK', '{"status":"PICKING","hours":6}', 'HIGH', TRUE, 'WMS_ALLOCATE');
+VALUES ('WMS_STUCK', '仓库拣货卡单', 'WMS_STUCK', '{"status":"NEW,PART_ALLOCATED,PICKING","hours":6}', 'HIGH', TRUE, 'WMS_ALLOCATE');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
 VALUES ('TMS_DELAY', '运输预计到达延误', 'TMS_DELAY', '{"hours":0}', 'HIGH', TRUE, 'TMS_SYNC_TRACK');

@@ -13,6 +13,7 @@ import com.ir.integration.mock.MockOmsClient;
 import com.ir.integration.mock.MockSrmClient;
 import com.ir.integration.mock.MockTmsClient;
 import com.ir.integration.mock.MockWmsClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -27,7 +28,8 @@ public class ClientFactory {
     private final MockBmsClient bms;
     private final MockSrmClient srm;
     private final MockEcosystemClient ecosystem;
-    private final RestTemplate http = new RestTemplate();
+    private final RestTemplate http;
+    private final String httpSystems;
 
     public ClientFactory(
             MockOmsClient oms,
@@ -35,13 +37,17 @@ public class ClientFactory {
             MockTmsClient tms,
             MockBmsClient bms,
             MockSrmClient srm,
-            MockEcosystemClient ecosystem) {
+            MockEcosystemClient ecosystem,
+            RestTemplate http,
+            @Value("${ir.http.systems:}") String httpSystems) {
         this.oms = oms;
         this.wms = wms;
         this.tms = tms;
         this.bms = bms;
         this.srm = srm;
         this.ecosystem = ecosystem;
+        this.http = http;
+        this.httpSystems = httpSystems;
     }
 
     public OmsClient oms(CtSystem system) {
@@ -64,7 +70,7 @@ public class ClientFactory {
 
     public TmsClient tms(CtSystem system) {
         if (httpMode(system)) {
-            return new HttpTmsClient(http, system.getBaseUrl());
+            return new HttpTmsClient(http, system.getBaseUrl(), system.getApiKey());
         }
         return tms;
     }
@@ -112,7 +118,29 @@ public class ClientFactory {
                 || "OA".equals(code);
     }
 
-    private static boolean httpMode(CtSystem system) {
-        return system != null && "HTTP".equalsIgnoreCase(system.getMode());
+    public static boolean forcedHttp(String httpSystems, String code) {
+        if (httpSystems == null || httpSystems.trim().isEmpty() || code == null) {
+            return false;
+        }
+        String value = httpSystems.trim();
+        if ("*".equals(value) || "ALL".equalsIgnoreCase(value)) {
+            return true;
+        }
+        for (String part : value.split(",")) {
+            if (code.equalsIgnoreCase(part.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean httpMode(CtSystem system) {
+        if (system == null) {
+            return false;
+        }
+        if ("HTTP".equalsIgnoreCase(system.getMode())) {
+            return true;
+        }
+        return forcedHttp(httpSystems, system.getCode());
     }
 }

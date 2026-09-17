@@ -11,9 +11,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +24,7 @@ public class HttpOmsClient implements OmsClient {
     private volatile String token;
 
     private final String apiKey;
+    private Map<String, Object> cachedSnapshot;
 
     public HttpOmsClient(RestTemplate http, String baseUrl, String username, String password) {
         this(http, baseUrl, username, password, null);
@@ -46,8 +45,12 @@ public class HttpOmsClient implements OmsClient {
 
     @Override
     public List<OrderSnapshot> fetchOrders() {
+        List<Map<String, Object>> rows = snapshotList("orders");
+        if (rows == null) {
+            rows = pages("/api/order/page");
+        }
         List<OrderSnapshot> result = new ArrayList<>();
-        for (Map<String, Object> row : pages("/api/order/page")) {
+        for (Map<String, Object> row : rows) {
             OrderSnapshot order = new OrderSnapshot();
             order.setOrderNo(HttpSupport.string(row, "orderNo", "orderSn", "orderCode"));
             order.setChannelCode(HttpSupport.string(row, "channelCode", "channel"));
@@ -59,10 +62,10 @@ public class HttpOmsClient implements OmsClient {
             order.setPayAmount(decimal(row, "payAmount", "amount"));
             order.setFreight(decimal(row, "freight"));
             order.setQty(decimal(row, "qty", "totalQty"));
-            order.setOrderTime(dateTime(row, "orderTime", "createTime"));
-            order.setPayTime(dateTime(row, "payTime"));
-            order.setShipTime(dateTime(row, "shipTime"));
-            order.setCompleteTime(dateTime(row, "completeTime"));
+            order.setOrderTime(HttpSupport.dateTime(row, "orderTime", "createTime"));
+            order.setPayTime(HttpSupport.dateTime(row, "payTime"));
+            order.setShipTime(HttpSupport.dateTime(row, "shipTime", "shippedAt"));
+            order.setCompleteTime(HttpSupport.dateTime(row, "completeTime", "completedAt"));
             order.setCarrierCode(HttpSupport.string(row, "carrierCode", "carrier"));
             order.setTrackingNo(HttpSupport.string(row, "trackingNo", "logisticsNo"));
             result.add(order);
@@ -72,8 +75,12 @@ public class HttpOmsClient implements OmsClient {
 
     @Override
     public List<InventorySnapshot> fetchInventory() {
+        List<Map<String, Object>> rows = snapshotList("inventory");
+        if (rows == null) {
+            rows = pages("/api/inventory/page");
+        }
         List<InventorySnapshot> result = new ArrayList<>();
-        for (Map<String, Object> row : pages("/api/inventory/page")) {
+        for (Map<String, Object> row : rows) {
             InventorySnapshot inventory = new InventorySnapshot();
             inventory.setSourceSystem("OMS");
             inventory.setWarehouseCode(HttpSupport.string(row, "warehouseCode", "warehouse"));
@@ -89,12 +96,21 @@ public class HttpOmsClient implements OmsClient {
 
     @Override
     public List<SalesPoint> fetchDailySales(int days) {
-        String url = baseUrl + "/api/report/order-daily?days=" + days;
+        List<Map<String, Object>> rows = snapshotList("sales");
+        if (rows == null) {
+            String url = baseUrl + "/api/report/order-daily?days=" + days;
+            rows = HttpSupport.rows(HttpSupport.getMap(http, url, headers()));
+        }
         List<SalesPoint> result = new ArrayList<>();
-        for (Map<String, Object> row : HttpSupport.rows(HttpSupport.getMap(http, url, headers()))) {
+        for (Map<String, Object> row : rows) {
+            LocalDate date = HttpSupport.localDate(row, "salesDate", "date", "orderDay", "order_day");
+            String sku = HttpSupport.string(row, "sku", "skuCode");
+            if (date == null || sku == null) {
+                continue;
+            }
             SalesPoint point = new SalesPoint();
-            point.setSalesDate(LocalDate.parse(HttpSupport.string(row, "salesDate", "date")));
-            point.setSku(HttpSupport.string(row, "sku", "skuCode"));
+            point.setSalesDate(date);
+            point.setSku(sku);
             point.setWarehouseCode(HttpSupport.string(row, "warehouseCode", "warehouse"));
             point.setChannelCode(HttpSupport.string(row, "channelCode", "channel"));
             point.setQty(decimal(row, "qty", "quantity"));
@@ -111,7 +127,7 @@ public class HttpOmsClient implements OmsClient {
 
     @Override
     public void execute(ActionCommand command) {
-        if (apiKey != null && !apiKey.trim().isEmpty()) {
+        if (hasApiKey()) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("type", command.getType());
             body.put("targetKey", command.getTargetKey());
@@ -142,11 +158,34 @@ public class HttpOmsClient implements OmsClient {
     @Override
     public boolean health() {
         try {
-            dashboard();
+            if (hasApiKey()) {
+                snapshot();
+            } else {
+                dashboard();
+            }
             return true;
         } catch (IntegrationException ex) {
             return false;
         }
+    }
+
+    private List<Map<String, Object>> snapshotList(String name) {
+        if (!hasApiKey()) {
+            return null;
+        }
+        try {
+            return HttpSupport.namedList(snapshot(), name);
+        } catch (IntegrationException ex) {
+            return null;
+        }
+    }
+
+    private Map<String, Object> snapshot() {
+        if (cachedSnapshot == null) {
+            cachedSnapshot = HttpSupport.getMap(
+                    http, baseUrl + "/api/open/ir/snapshots", HttpSupport.apiKey(apiKey));
+        }
+        return cachedSnapshot;
     }
 
     private List<Map<String, Object>> pages(String path) {
@@ -154,7 +193,7 @@ public class HttpOmsClient implements OmsClient {
         int page = 1;
         int size = 200;
         while (true) {
-            String url = baseUrl + path + "?page=" + page + "&size=" + size;
+            String url = baseUrl + path + "?current=" + page + "&size=" + size;
             List<Map<String, Object>> current =
                     HttpSupport.rows(HttpSupport.getMap(http, url, headers()));
             rows.addAll(current);
@@ -167,6 +206,10 @@ public class HttpOmsClient implements OmsClient {
 
     private HttpHeaders headers() {
         return HttpSupport.bearer(login());
+    }
+
+    private boolean hasApiKey() {
+        return apiKey != null && !apiKey.trim().isEmpty();
     }
 
     private synchronized String login() {
@@ -193,11 +236,6 @@ public class HttpOmsClient implements OmsClient {
 
     private static BigDecimal decimal(Map<String, Object> row, String... names) {
         return BigDecimal.valueOf(HttpSupport.doubleValue(row, names));
-    }
-
-    private static LocalDateTime dateTime(Map<String, Object> row, String... names) {
-        String value = HttpSupport.string(row, names);
-        return value == null ? null : LocalDateTime.parse(value.replace(" ", "T"));
     }
 
     private static String trim(String value) {

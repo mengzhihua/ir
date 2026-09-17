@@ -170,13 +170,15 @@ public class AlertEngine {
 
     private void evaluateWms(CtRule rule, Map<String, Object> params, LocalDateTime now) {
         long threshold = number(params.get("hours"), 6L);
+        java.util.Set<String> statuses = stuckStatuses(params.get("status"));
         for (WmsOrderSnapshot outbound : wmsMapper.selectList(null)) {
             OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
                     .eq(OrderSnapshot::getOrderNo, outbound.getExternalNo()));
-            if (order != null && "PICKING".equals(outbound.getStatus())
+            if (order != null && statuses.contains(outbound.getStatus())
+                    && order.getOrderTime() != null
                     && Duration.between(order.getOrderTime(), now).toHours() > threshold) {
-                add(rule, "ORDER", order.getOrderNo(), order.getWarehouseCode(),
-                        "WMS 拣货卡单", "PICKING 超过 " + threshold + " 小时");
+                add(rule, "ORDER", outbound.getCode(), outbound.getWarehouseCode(),
+                        "WMS 拣货卡单", outbound.getStatus() + " 超过 " + threshold + " 小时");
             }
         }
     }
@@ -325,5 +327,22 @@ public class AlertEngine {
 
     private long number(Object value, long fallback) {
         return value == null ? fallback : Long.parseLong(String.valueOf(value));
+    }
+
+    private java.util.Set<String> stuckStatuses(Object value) {
+        java.util.Set<String> out = new java.util.LinkedHashSet<String>();
+        if (value == null || String.valueOf(value).trim().isEmpty()
+                || "null".equals(String.valueOf(value))) {
+            out.add("NEW");
+            out.add("PART_ALLOCATED");
+            out.add("PICKING");
+            return out;
+        }
+        for (String part : String.valueOf(value).split(",")) {
+            if (!part.trim().isEmpty()) {
+                out.add(part.trim());
+            }
+        }
+        return out;
     }
 }

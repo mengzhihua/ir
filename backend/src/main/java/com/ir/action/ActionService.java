@@ -220,6 +220,11 @@ public class ActionService {
         } else if ("WMS_ALLOCATE".equals(action.getType())) {
             WmsOrderSnapshot order = wmsMapper.selectOne(new LambdaQueryWrapper<WmsOrderSnapshot>()
                     .eq(WmsOrderSnapshot::getCode, action.getTargetKey()));
+            if (order == null) {
+                order = wmsMapper.selectOne(new LambdaQueryWrapper<WmsOrderSnapshot>()
+                        .eq(WmsOrderSnapshot::getExternalNo, action.getTargetKey())
+                        .last("LIMIT 1"));
+            }
             if (order != null) {
                 order.setStatus("ALLOCATED");
                 wmsMapper.updateById(order);
