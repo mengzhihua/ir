@@ -140,6 +140,7 @@ public class CostService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", total);
         result.put("byMonth", byMonth);
+        result.put("estimated", true);
         return result;
     }
 

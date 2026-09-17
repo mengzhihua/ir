@@ -8,6 +8,7 @@ import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
 import com.ir.alert.entity.CtAlert;
 import com.ir.alert.mapper.CtAlertMapper;
+import com.ir.sandbox.service.BalanceAdvisor;
 import java.util.HashSet;
 import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -94,6 +95,9 @@ class AlertEngineTest {
                         || action.getParamsJson().contains("SELF01")
                         || action.getParamsJson().contains("SF"));
         assertEquals("SUCCESS", action.getStatus());
+        org.junit.jupiter.api.Assertions.assertNotNull(action.getExpectedSaving());
+        org.junit.jupiter.api.Assertions.assertTrue(
+                action.getExpectedSaving().compareTo(java.math.BigDecimal.ZERO) > 0);
     }
 
     @Test
@@ -111,6 +115,15 @@ class AlertEngineTest {
         org.junit.jupiter.api.Assertions.assertNotNull(action);
         assertEquals(delay.getTargetKey(), action.getTargetKey());
         assertEquals("SUCCESS", action.getStatus());
+        if (BalanceAdvisor.SWITCH.equals(action.getType())) {
+            org.junit.jupiter.api.Assertions.assertTrue(
+                    action.getExpectedSaving() != null
+                            && action.getExpectedSaving().compareTo(java.math.BigDecimal.ZERO) > 0);
+        } else {
+            org.junit.jupiter.api.Assertions.assertTrue(
+                    action.getExpectedSaving() == null
+                            || action.getExpectedSaving().compareTo(java.math.BigDecimal.ZERO) == 0);
+        }
     }
 
     @Test
