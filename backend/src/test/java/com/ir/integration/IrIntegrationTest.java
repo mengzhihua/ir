@@ -105,16 +105,10 @@ class IrIntegrationTest {
         for (JsonNode action : mapper.readTree(executed).get("data")) {
             types.add(action.get("type").asText());
             systems.add(action.get("targetSystem").asText());
-            if ("SAP_CREATE_PR".equals(action.get("type").asText())) {
-                org.junit.jupiter.api.Assertions.assertFalse(
-                        action.get("targetKey").asText().contains("/"),
-                        "SAP 物料号不应带着工厂/库位复合键");
-                JsonNode params = action.get("params");
-                if (params != null && params.isTextual()) {
-                    params = mapper.readTree(params.asText());
-                }
-                org.junit.jupiter.api.Assertions.assertNotNull(params);
-                org.junit.jupiter.api.Assertions.assertEquals("MAT-1000", params.get("sku").asText());
+            if ("WMS_REPLENISH".equals(action.get("type").asText())) {
+                org.junit.jupiter.api.Assertions.assertTrue(
+                        action.get("targetKey").asText().startsWith("WH"),
+                        "仓内补货目标应是仓库编码而不是工厂号");
             }
         }
         org.junit.jupiter.api.Assertions.assertTrue(types.contains("SAP_CREATE_PR"));

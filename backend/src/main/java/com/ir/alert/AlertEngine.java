@@ -150,9 +150,11 @@ public class AlertEngine {
         request.put("type", alert.getSuggestedAction());
         request.put("targetKey", alert.getTargetKey());
         request.put("alertId", id);
-        if (alert.getWarehouseCode() != null) {
-            Map<String, Object> params = new LinkedHashMap<>();
+        Map<String, Object> params = new LinkedHashMap<>();
+        if (alert.getWarehouseCode() != null && alert.getWarehouseCode().startsWith("WH-")) {
             params.put("warehouseCode", alert.getWarehouseCode());
+        }
+        if (!params.isEmpty()) {
             request.put("params", params);
         }
         List<CtAction> created = coordination.dispatch(request, true);

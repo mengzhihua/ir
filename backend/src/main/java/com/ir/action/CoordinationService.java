@@ -130,7 +130,10 @@ public class CoordinationService {
 
     private Map<String, Object> wmsPlan(Map<String, Object> seed) {
         Map<String, Object> params = paramsOf(seed);
-        String warehouse = first(str(params.get("warehouseCode")), "WH-SH");
+        String warehouse = str(params.get("warehouseCode"));
+        if (warehouse == null || !(warehouse.startsWith("WH-") || warehouse.startsWith("WH0"))) {
+            warehouse = "WH-SH";
+        }
         params.put("warehouseCode", warehouse);
         Map<String, Object> plan = new LinkedHashMap<>();
         plan.put("type", "WMS_REPLENISH");

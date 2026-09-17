@@ -115,7 +115,7 @@ public class ActionEnricher {
                 params.put("qty", BigDecimal.ONE);
             }
         } else if ("WMS_REPLENISH".equals(type)) {
-            String warehouse = first(str(params.get("warehouseCode")), targetKey, "WH-SH");
+            String warehouse = wmsWarehouse(first(str(params.get("warehouseCode")), targetKey));
             params.put("warehouseCode", warehouse);
             result.put("targetKey", warehouse);
         } else if ("WMS_ALLOCATE".equals(type)) {
@@ -268,6 +268,13 @@ public class ActionEnricher {
             }
         }
         return onHand == null || onHand.signum() <= 0 ? BigDecimal.ONE : onHand;
+    }
+
+    private static String wmsWarehouse(String value) {
+        if (value != null && (value.startsWith("WH-") || value.startsWith("WH0"))) {
+            return value;
+        }
+        return "WH-SH";
     }
 
     private static String systemHint(String type) {
