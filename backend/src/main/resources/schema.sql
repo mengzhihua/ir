@@ -197,6 +197,7 @@ CREATE TABLE IF NOT EXISTS ct_scenario (
     scenario_no VARCHAR(80) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
     baseline BOOLEAN NOT NULL,
+    mode VARCHAR(16),
     params_json CLOB,
     result_json CLOB,
     status VARCHAR(16) NOT NULL,
@@ -205,6 +206,7 @@ CREATE TABLE IF NOT EXISTS ct_scenario (
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
+ALTER TABLE ct_scenario ADD COLUMN IF NOT EXISTS mode VARCHAR(16);
 
 CREATE TABLE IF NOT EXISTS ct_cost_target (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

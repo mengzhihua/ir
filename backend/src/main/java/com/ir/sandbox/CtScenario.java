@@ -18,6 +18,8 @@ public class CtScenario extends BaseEntity {
     private String scenarioNo;
     private String name;
     private Boolean baseline;
+    /** 沙盘类型：MANUAL 人工沙盘 / AUTO 系统自动推演。 */
+    private String mode;
     @JsonIgnore
     private String paramsJson;
     @JsonIgnore

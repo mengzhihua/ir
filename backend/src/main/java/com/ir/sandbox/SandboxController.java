@@ -41,13 +41,23 @@ public class SandboxController {
         return R.ok(service.run(id));
     }
 
+    @PostMapping("/auto")
+    public R<Map<String, Object>> auto(@RequestBody(required = false) Map<String, Object> request) {
+        Map<String, Object> body = request == null ? Map.of() : request;
+        return R.ok(service.autoDeduce(
+                decimal(body.get("costWeight")),
+                integer(body.get("horizonDays")),
+                decimal(body.get("demandMultiplier"))));
+    }
+
     @GetMapping("/scenario/page")
     public R<Page<CtScenario>> page(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String mode,
             @RequestParam(defaultValue = "1") long current,
             @RequestParam(defaultValue = "20") long size) {
-        return R.ok(service.page(name, status, current, size));
+        return R.ok(service.page(name, status, mode, current, size));
     }
 
     @GetMapping("/scenario/{id}")
@@ -80,5 +90,15 @@ public class SandboxController {
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException("场景参数格式错误", ex);
         }
+    }
+
+    private java.math.BigDecimal decimal(Object value) {
+        return value == null ? null : new java.math.BigDecimal(String.valueOf(value));
+    }
+
+    private Integer integer(Object value) {
+        return value == null ? null
+                : Integer.valueOf(new java.math.BigDecimal(
+                        String.valueOf(value)).intValue());
     }
 }

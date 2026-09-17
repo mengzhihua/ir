@@ -23,6 +23,11 @@ public class ScenarioParams {
     private BigDecimal stockoutPenaltyPerUnit = BigDecimal.valueOf(20);
     private int replenishLeadDays = 3;
     private BigDecimal initialInventoryMultiplier = BigDecimal.ONE;
+    /**
+     * 成本权重（0~1）：成本与效率兼顾的取舍旋钮。
+     * 1 = 完全追求最低成本；0 = 完全追求最高效率（服务水平/时效）；0.5 = 均衡。
+     */
+    private BigDecimal costWeight = BigDecimal.valueOf(0.5);
 
     public ScenarioParams() {
         channelDemandMultiplier.put("TMALL", BigDecimal.ONE);
@@ -68,6 +73,7 @@ public class ScenarioParams {
                 initialInventoryMultiplier == null
                         ? BigDecimal.ONE
                         : initialInventoryMultiplier);
+        normalized.setCostWeight(clampWeight(costWeight));
         if (channelDemandMultiplier != null
                 && !channelDemandMultiplier.isEmpty()) {
             normalized.setChannelDemandMultiplier(
@@ -80,5 +86,18 @@ public class ScenarioParams {
             normalized.setCarrierRate(new LinkedHashMap<>(carrierRate));
         }
         return normalized;
+    }
+
+    private static BigDecimal clampWeight(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.valueOf(0.5);
+        }
+        if (value.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
+        if (value.compareTo(BigDecimal.ONE) > 0) {
+            return BigDecimal.ONE;
+        }
+        return value;
     }
 }

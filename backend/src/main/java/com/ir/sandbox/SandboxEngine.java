@@ -39,6 +39,10 @@ public class SandboxEngine {
         private BigDecimal serviceLevel = BigDecimal.ZERO;
         private BigDecimal stockoutUnits = BigDecimal.ZERO;
         private BigDecimal avgLeadDays = BigDecimal.ZERO;
+        private BigDecimal fulfilledUnits = BigDecimal.ZERO;
+        private BigDecimal costPerFulfilledUnit = BigDecimal.ZERO;
+        /** 成本-效率综合得分（0~100，越高越兼顾成本与效率）；由 CostEfficiencyScorer 赋值。 */
+        private BigDecimal costEfficiencyScore = BigDecimal.ZERO;
         private List<Map<String, Object>> dailySeries = new ArrayList<>();
         private List<Map<String, Object>> perSkuSummary = new ArrayList<>();
     }
@@ -178,10 +182,78 @@ public class SandboxEngine {
                 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
                 : round(totalLead.divide(BigDecimal.valueOf(leadCount), 6,
                         RoundingMode.HALF_UP), 2));
+        result.setFulfilledUnits(round(totalFulfilled, 2));
+        result.setCostPerFulfilledUnit(totalFulfilled.signum() == 0
+                ? BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP)
+                : round(result.getTotalCost().divide(totalFulfilled, 6,
+                        RoundingMode.HALF_UP), 4));
         roundMap(result.getCostByType(), 2);
         roundMap(result.getCostByWarehouse(), 2);
         roundMap(result.getCostByCarrier(), 2);
         return result;
+    }
+
+    /**
+     * 为一组方案计算“成本-效率综合得分”（0~100，越高越好），并写回每个 Result。
+     * <p>在候选集合内对成本、服务水平、平均时效做 min-max 归一化后加权：
+     * 损失 = costWeight×成本损失 + (1-costWeight)×效率损失，
+     * 其中效率损失 = 0.7×服务损失 + 0.3×时效损失；得分 = 100×(1-损失)。
+     * 这样可让供应商在“成本”和“效率（服务水平/时效）”之间按权重兼顾取舍。
+     *
+     * @return 得分最高（最兼顾成本与效率）方案在列表中的下标；空列表返回 -1。
+     */
+    public static int assignCostEfficiencyScores(
+            List<Result> results,
+            double costWeight) {
+        if (results == null || results.isEmpty()) {
+            return -1;
+        }
+        double weight = Math.max(0.0, Math.min(1.0, costWeight));
+        double minCost = Double.MAX_VALUE;
+        double maxCost = -Double.MAX_VALUE;
+        double minService = Double.MAX_VALUE;
+        double maxService = -Double.MAX_VALUE;
+        double minLead = Double.MAX_VALUE;
+        double maxLead = -Double.MAX_VALUE;
+        for (Result r : results) {
+            double cost = value(r.getTotalCost());
+            double service = value(r.getServiceLevel());
+            double lead = value(r.getAvgLeadDays());
+            minCost = Math.min(minCost, cost);
+            maxCost = Math.max(maxCost, cost);
+            minService = Math.min(minService, service);
+            maxService = Math.max(maxService, service);
+            minLead = Math.min(minLead, lead);
+            maxLead = Math.max(maxLead, lead);
+        }
+        int best = -1;
+        double bestScore = -1.0;
+        for (int i = 0; i < results.size(); i++) {
+            Result r = results.get(i);
+            double costLoss = norm(value(r.getTotalCost()), minCost, maxCost);
+            double serviceLoss = maxService <= minService ? 0.0
+                    : (maxService - value(r.getServiceLevel()))
+                    / (maxService - minService);
+            double leadLoss = norm(value(r.getAvgLeadDays()), minLead, maxLead);
+            double efficiencyLoss = 0.7 * serviceLoss + 0.3 * leadLoss;
+            double loss = weight * costLoss + (1.0 - weight) * efficiencyLoss;
+            double score = 100.0 * (1.0 - loss);
+            r.setCostEfficiencyScore(BigDecimal.valueOf(score)
+                    .setScale(2, RoundingMode.HALF_UP));
+            if (score > bestScore) {
+                bestScore = score;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    private static double value(BigDecimal value) {
+        return value == null ? 0.0 : value.doubleValue();
+    }
+
+    private static double norm(double v, double min, double max) {
+        return max <= min ? 0.0 : (v - min) / (max - min);
     }
 
     private BigDecimal channelDemand(
