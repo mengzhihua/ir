@@ -203,7 +203,8 @@ public class ActionService {
                 type("CRM_ESCALATE_CASE", "CRM", "CRM升级工单", field("caseNo", "工单号", true)),
                 type("DMS_REPLENISH_SHORTAGE", "DMS", "DMS缺货补货", field("dealerCode", "经销商编码", true)),
                 type("OA_START_WORKFLOW", "OA", "OA发起审批", field("targetKey", "业务单号", true),
-                        field("definitionCode", "流程编码", false)));
+                        field("definitionCode", "流程编码", false)),
+                type("OA_APPROVE_TASK", "OA", "OA审批待办", field("taskId", "待办ID", true)));
     }
 
     private void mutateSnapshot(CtAction action, Map<String, Object> params) {
@@ -277,6 +278,9 @@ public class ActionService {
         }
         if (action.getType().contains("SUBMIT")) {
             snapshot.setStatus("SUBMITTED");
+        } else if ("OA_APPROVE_TASK".equals(action.getType())
+                || "OA_COMPLETE_TASK".equals(action.getType())) {
+            snapshot.setStatus("APPROVED");
         } else if (action.getType().contains("APPROVE") || action.getType().contains("RELEASE")) {
             snapshot.setStatus("RELEASED");
         } else if (action.getType().contains("ESCALATE")) {

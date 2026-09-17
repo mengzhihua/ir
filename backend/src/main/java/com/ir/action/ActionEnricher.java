@@ -156,6 +156,12 @@ public class ActionEnricher {
             put(params, "businessType", first(str(params.get("businessType")), "IR"));
             put(params, "businessId", first(str(params.get("businessId")), targetKey));
             put(params, "title", first(str(params.get("title")), "IR 控制塔审批 " + targetKey));
+        } else if ("OA_APPROVE_TASK".equals(type) || "OA_COMPLETE_TASK".equals(type)) {
+            put(params, "taskId", first(str(params.get("taskId")), targetKey));
+            put(params, "comment", first(str(params.get("comment")), "IR 控制塔系统审批"));
+            if (str(params.get("taskId")) != null) {
+                result.put("targetKey", str(params.get("taskId")));
+            }
         }
     }
 
@@ -164,7 +170,7 @@ public class ActionEnricher {
             return;
         }
         String[] parts = targetKey.split("/");
-        if (parts.length >= 3 && parts[0].startsWith("MAT-")) {
+        if (parts.length >= 3 && (parts[0].startsWith("MAT-") || parts[1].matches("\\d{4}"))) {
             put(params, "sku", parts[0]);
             put(params, "matnr", parts[0]);
             put(params, "werks", parts[1]);

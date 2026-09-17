@@ -89,7 +89,7 @@ KEY (code)
 VALUES ('DMS_PART_SHORTAGE', '经销商备件缺货', 'EXT_STATUS', '{"system":"DMS","dataType":"SHORTAGE","status":"SHORT"}', 'HIGH', TRUE, 'DMS_REPLENISH_SHORTAGE');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
-VALUES ('OA_WF_PENDING', 'OA 审批待办积压', 'EXT_STATUS', '{"system":"OA","dataType":"WF_TASK","status":"PENDING"}', 'MEDIUM', TRUE, NULL);
+VALUES ('OA_WF_PENDING', 'OA 审批待办积压', 'EXT_STATUS', '{"system":"OA","dataType":"WF_TASK","status":"PENDING"}', 'MEDIUM', TRUE, 'OA_APPROVE_TASK');
 
 MERGE INTO ct_cost_target ("month", cost_type, target_amount)
 KEY ("month", cost_type)

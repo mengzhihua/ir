@@ -130,4 +130,35 @@ class IrIntegrationTest {
                 .andExpect(jsonPath("$.data.supplyRisks.length()").value(org.hamcrest.Matchers.greaterThan(0)))
                 .andExpect(jsonPath("$.data.ecosystem").isArray());
     }
+
+    @Test
+    void oaPendingApprovesAssignedTaskWithoutFanOut() throws Exception {
+        String t = token();
+        mvc.perform(post("/api/alert/evaluate").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk());
+        String alerts = mvc.perform(get("/api/alert/page?size=200").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        Long oaAlertId = null;
+        for (JsonNode row : mapper.readTree(alerts).get("data").get("records")) {
+            if ("OA_WF_PENDING".equals(row.get("ruleCode").asText())) {
+                oaAlertId = row.get("id").asLong();
+                org.junit.jupiter.api.Assertions.assertEquals("OA_APPROVE_TASK",
+                        row.get("suggestedAction").asText());
+                break;
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertNotNull(oaAlertId, "应产生 OA 待办预警");
+        String executed = mvc.perform(post("/api/alert/" + oaAlertId + "/execute-suggested")
+                        .header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andReturn().getResponse().getContentAsString();
+        JsonNode action = mapper.readTree(executed).get("data").get(0);
+        org.junit.jupiter.api.Assertions.assertEquals("OA_APPROVE_TASK", action.get("type").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("OA", action.get("targetSystem").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("SUCCESS", action.get("status").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("8801", action.get("targetKey").asText());
+    }
 }

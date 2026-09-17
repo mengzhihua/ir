@@ -28,7 +28,7 @@ final class HttpSupport {
                     });
             return response.getBody() == null ? Collections.emptyMap() : response.getBody();
         } catch (Exception ex) {
-            throw new IntegrationException("调用 OTWB 接口失败: " + url, ex);
+            throw new IntegrationException("调用下游系统接口失败: " + url, ex);
         }
     }
 
@@ -42,7 +42,7 @@ final class HttpSupport {
                     });
             return response.getBody() == null ? Collections.emptyMap() : response.getBody();
         } catch (Exception ex) {
-            throw new IntegrationException("调用 OTWB 接口失败: " + url, ex);
+            throw new IntegrationException("调用下游系统接口失败: " + url, ex);
         }
     }
 
