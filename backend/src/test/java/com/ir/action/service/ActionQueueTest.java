@@ -7,6 +7,8 @@ import org.springframework.test.context.ActiveProfiles;
 import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
 import com.ir.sandbox.service.BalancePolicy;
+import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.mapper.OrderSnapshotMapper;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -21,6 +23,8 @@ class ActionQueueTest {
     private ActionService actions;
     @Autowired
     private CtActionMapper actionMapper;
+    @Autowired
+    private OrderSnapshotMapper orderMapper;
     @Autowired
     private BalancePolicy policy;
 
@@ -66,6 +70,21 @@ class ActionQueueTest {
         assertEquals("SUPERSEDED", actionMapper.selectById(rush.getId()).getStatus());
         assertEquals("PENDING", hold.getStatus());
         assertNotEquals(rush.getId(), hold.getId());
+    }
+
+    @Test
+    void prioritizeWritesSnapshotPriority() {
+        Map<String, Object> request = pending("OMS_PRIORITIZE", "SO000043", null);
+        Map<String, Object> params = new LinkedHashMap<String, Object>();
+        params.put("priority", 10);
+        request.put("params", params);
+        CtAction action = actions.createAndExecute(request);
+        assertEquals("SUCCESS", action.getStatus());
+        OrderSnapshot order = orderMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OrderSnapshot>()
+                        .eq(OrderSnapshot::getOrderNo, "SO000043"));
+        org.junit.jupiter.api.Assertions.assertNotNull(order);
+        assertEquals(Integer.valueOf(10), order.getPriority());
     }
 
     @Test

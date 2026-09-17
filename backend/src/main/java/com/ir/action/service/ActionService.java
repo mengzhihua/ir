@@ -299,6 +299,13 @@ public class ActionService {
                 order.setStatus("CREATED");
                 orderMapper.updateById(order);
             }
+        } else if ("OMS_PRIORITIZE".equals(action.getType())) {
+            OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
+                    .eq(OrderSnapshot::getOrderNo, action.getTargetKey()));
+            if (order != null) {
+                order.setPriority(priorityOf(params));
+                orderMapper.updateById(order);
+            }
         } else if ("OMS_CANCEL".equals(action.getType())) {
             OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
                     .eq(OrderSnapshot::getOrderNo, action.getTargetKey()));
@@ -433,6 +440,18 @@ public class ActionService {
         result.put("label", label);
         result.put("required", required);
         return result;
+    }
+
+    private int priorityOf(Map<String, Object> params) {
+        Object value = params == null ? null : params.get("priority");
+        if (value == null || String.valueOf(value).trim().isEmpty()) {
+            return 10;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (NumberFormatException ex) {
+            return 10;
+        }
     }
 
     private String systemFor(String type) {

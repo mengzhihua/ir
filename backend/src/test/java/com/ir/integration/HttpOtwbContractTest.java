@@ -31,7 +31,7 @@ class HttpOtwbContractTest {
                 .andRespond(withSuccess(
                         "{\"code\":0,\"data\":{\"system\":\"OMS\",\"orders\":[{"
                                 + "\"orderNo\":\"IR-SO-STUCK\",\"status\":\"AUDITED\","
-                                + "\"warehouseCode\":\"WH-SH\",\"qty\":2,"
+                                + "\"warehouseCode\":\"WH-SH\",\"qty\":2,\"priority\":10,"
                                 + "\"orderTime\":\"2026-09-16 22:00:00\"}],"
                                 + "\"inventory\":[{\"sku\":\"SKU001\",\"warehouseCode\":\"WH-SH\","
                                 + "\"qtyOnHand\":500,\"qtyAvailable\":500,\"safetyQty\":10}],"
@@ -52,6 +52,7 @@ class HttpOtwbContractTest {
         assertEquals(1, orders.size());
         assertEquals("IR-SO-STUCK", orders.get(0).getOrderNo());
         assertEquals("AUDITED", orders.get(0).getStatus());
+        assertEquals(Integer.valueOf(10), orders.get(0).getPriority());
 
         ActionCommand command = new ActionCommand();
         command.setType("OMS_HOLD");
