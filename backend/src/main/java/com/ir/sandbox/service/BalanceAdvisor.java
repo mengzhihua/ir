@@ -9,6 +9,7 @@ import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.entity.ShipmentSnapshot;
 import com.ir.snapshot.entity.WmsOrderSnapshot;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -61,7 +62,7 @@ public class BalanceAdvisor {
                 carrier = best;
             }
         }
-        return advice(type, shipment.getWaybillCode(), carrier);
+        return advice(type, shipment.getWaybillCode(), carrier, shipment);
     }
 
     public List<Advice> adviseOverrun(
@@ -88,7 +89,7 @@ public class BalanceAdvisor {
             if (target == null || target.equals(current)) {
                 continue;
             }
-            result.add(advice(SWITCH, shipment.getWaybillCode(), target));
+            result.add(advice(SWITCH, shipment.getWaybillCode(), target, shipment));
             limit++;
         }
         return result;
@@ -308,11 +309,41 @@ public class BalanceAdvisor {
         return base.multiply(BigDecimal.valueOf(1.2)).setScale(0, java.math.RoundingMode.UP);
     }
 
-    private Advice advice(String type, String waybill, String carrier) {
+    public static BigDecimal freightSaving(
+            String fromCarrier,
+            String toCarrier,
+            BigDecimal freight) {
+        BigDecimal from = CarrierCodes.rate(fromCarrier);
+        BigDecimal to = CarrierCodes.rate(toCarrier);
+        if (from.signum() <= 0 || to.compareTo(from) >= 0) {
+            return BigDecimal.ZERO;
+        }
+        if (freight == null || freight.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return freight.multiply(from.subtract(to))
+                .divide(from, 2, RoundingMode.HALF_UP)
+                .max(BigDecimal.ZERO);
+    }
+
+    public static BigDecimal shareSaving(BigDecimal total, int count) {
+        if (total == null || total.signum() <= 0 || count <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return total.divide(BigDecimal.valueOf(count), 2, RoundingMode.HALF_UP);
+    }
+
+    private Advice advice(String type, String waybill, String carrier, ShipmentSnapshot shipment) {
         Advice advice = new Advice();
         advice.type = type;
         advice.targetKey = waybill;
         advice.carrierCode = carrier;
+        if (SWITCH.equals(type)) {
+            advice.expectedSaving = freightSaving(
+                    shipment == null ? null : shipment.getCarrierCode(),
+                    carrier,
+                    shipment == null ? null : shipment.getFreightAmount());
+        }
         return advice;
     }
 
@@ -359,6 +390,7 @@ public class BalanceAdvisor {
         private String remark;
         private Integer priority;
         private BigDecimal qty;
+        private BigDecimal expectedSaving;
 
         public String getType() {
             return type;
@@ -370,6 +402,10 @@ public class BalanceAdvisor {
 
         public String getCarrierCode() {
             return carrierCode;
+        }
+
+        public BigDecimal getExpectedSaving() {
+            return expectedSaving;
         }
 
         public Map<String, Object> params() {

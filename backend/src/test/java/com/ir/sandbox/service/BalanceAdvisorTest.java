@@ -139,6 +139,30 @@ class BalanceAdvisorTest {
                 BalanceAdvisor.opposes("EFFICIENCY", "TMS_SWITCH_CARRIER", "SELF01"));
     }
 
+    @Test
+    void freightSavingUsesRateDeltaAndShareSplitsScenario() {
+        assertEquals(0, new BigDecimal("40.00").compareTo(
+                BalanceAdvisor.freightSaving("SF", "SELF01", new BigDecimal("110"))));
+        assertEquals(0, new BigDecimal("18.18").compareTo(
+                BalanceAdvisor.freightSaving("SF", "JD", new BigDecimal("100"))));
+        assertEquals(0, BigDecimal.ZERO.compareTo(
+                BalanceAdvisor.freightSaving("SELF01", "SF", new BigDecimal("100"))));
+        assertEquals(0, new BigDecimal("12.50").compareTo(
+                BalanceAdvisor.shareSaving(new BigDecimal("50"), 4)));
+        assertEquals(0, BigDecimal.ZERO.compareTo(BalanceAdvisor.shareSaving(BigDecimal.TEN, 0)));
+
+        ShipmentSnapshot shipment = waybill("WB-SAVE", "SF", "IN_TRANSIT", "WH01");
+        shipment.setFreightAmount(new BigDecimal("110"));
+        BalanceAdvisor.Advice cost = new BalanceAdvisor(
+                BigDecimal.valueOf(0.8), BigDecimal.valueOf(0.2)).adviseDelay(shipment);
+        assertEquals(BalanceAdvisor.SWITCH, cost.getType());
+        assertEquals(0, new BigDecimal("40.00").compareTo(cost.getExpectedSaving()));
+        BalanceAdvisor.Advice sync = new BalanceAdvisor(
+                BigDecimal.valueOf(0.2), BigDecimal.valueOf(0.8)).adviseDelay(shipment);
+        assertEquals(BalanceAdvisor.SYNC, sync.getType());
+        org.junit.jupiter.api.Assertions.assertNull(sync.getExpectedSaving());
+    }
+
     private ShipmentSnapshot waybill(
             String code, String carrier, String status, String site) {
         ShipmentSnapshot shipment = new ShipmentSnapshot();

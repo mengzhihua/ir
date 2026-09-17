@@ -162,6 +162,7 @@ public class SandboxService {
         ScenarioParams params = read(scenario.getParamsJson(), ScenarioParams.class).normalized();
         ScenarioParams baseParams = read(baseline().getParamsJson(), ScenarioParams.class).normalized();
         List<CtAction> result = new ArrayList<>();
+        List<Map<String, Object>> jobs = new ArrayList<>();
         BigDecimal expected = expectedSaving(baseline(), scenario);
 
         int reroutes = 0;
@@ -174,9 +175,9 @@ public class SandboxService {
                 if (targetWarehouse.equals(order.getWarehouseCode())) {
                     continue;
                 }
-                result.add(dispatch("OMS_REROUTE_WAREHOUSE", order.getOrderNo(),
+                jobs.add(job("OMS_REROUTE_WAREHOUSE", order.getOrderNo(),
                         map("warehouseCode", targetWarehouse, "sku", firstSku()),
-                        expected, execute));
+                        null));
                 reroutes++;
             }
         }
@@ -192,9 +193,11 @@ public class SandboxService {
                 if (targetCarrier.equals(shipment.getCarrierCode())) {
                     continue;
                 }
-                result.add(dispatch("TMS_SWITCH_CARRIER", shipment.getWaybillCode(),
-                        map("carrierCode", CarrierCodes.toTms(targetCarrier)),
-                        expected, execute));
+                String mapped = CarrierCodes.toTms(targetCarrier);
+                jobs.add(job("TMS_SWITCH_CARRIER", shipment.getWaybillCode(),
+                        map("carrierCode", mapped),
+                        BalanceAdvisor.freightSaving(
+                                shipment.getCarrierCode(), mapped, shipment.getFreightAmount())));
                 switches++;
             }
         }
@@ -216,11 +219,30 @@ public class SandboxService {
                     continue;
                 }
                 String sku = String.valueOf(summary.get("sku"));
-                result.add(dispatch("SRM_PURCHASE_SUGGEST", sku,
+                jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
                         map("sku", sku, "qty", stockout, "suggestQty", stockout),
-                        expected, execute));
+                        null));
                 purchases++;
             }
+        }
+        BigDecimal leftover = expected;
+        int unassigned = 0;
+        for (Map<String, Object> job : jobs) {
+            if (job.get("expectedSaving") != null) {
+                leftover = leftover.subtract((BigDecimal) job.get("expectedSaving")).max(BigDecimal.ZERO);
+            } else {
+                unassigned++;
+            }
+        }
+        BigDecimal share = BalanceAdvisor.shareSaving(leftover, unassigned);
+        for (Map<String, Object> job : jobs) {
+            BigDecimal saving = (BigDecimal) job.get("expectedSaving");
+            result.add(dispatch(
+                    String.valueOf(job.get("type")),
+                    String.valueOf(job.get("targetKey")),
+                    paramsOf(job),
+                    saving == null ? share : saving,
+                    execute));
         }
         return result;
     }
@@ -431,6 +453,25 @@ public class SandboxService {
         BigDecimal base = nz(baseline.getTotalCost());
         BigDecimal next = nz(scenario.getTotalCost());
         return base.subtract(next).max(BigDecimal.ZERO);
+    }
+
+    private Map<String, Object> job(
+            String type,
+            String targetKey,
+            Map<String, Object> params,
+            BigDecimal expectedSaving) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("type", type);
+        row.put("targetKey", targetKey);
+        row.put("params", params);
+        row.put("expectedSaving", expectedSaving);
+        return row;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> paramsOf(Map<String, Object> job) {
+        Object params = job.get("params");
+        return params instanceof Map ? (Map<String, Object>) params : new LinkedHashMap<>();
     }
 
     private Map<String, Object> map(Object... values) {

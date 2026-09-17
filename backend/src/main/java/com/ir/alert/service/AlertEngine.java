@@ -163,9 +163,10 @@ public class AlertEngine {
         fillFromShipment(alert, params);
         String type = alert.getSuggestedAction();
         String targetKey = actionKey(alert, params);
+        BalanceAdvisor.Advice advice = null;
         if ("TMS_DELAY".equals(alert.getType())) {
             ShipmentSnapshot shipment = shipmentOf(alert.getTargetKey());
-            BalanceAdvisor.Advice advice = balanceAdvisor.adviseDelay(shipment);
+            advice = balanceAdvisor.adviseDelay(shipment);
             if (advice != null) {
                 type = advice.getType();
                 targetKey = advice.getTargetKey();
@@ -173,7 +174,7 @@ public class AlertEngine {
             }
         } else if ("ORDER_STUCK".equals(alert.getType())) {
             OrderSnapshot order = orderOf(alert.getTargetKey());
-            BalanceAdvisor.Advice advice = balanceAdvisor.adviseStuckOrder(
+            advice = balanceAdvisor.adviseStuckOrder(
                     order, alert.getRuleCode());
             if (advice != null) {
                 type = advice.getType();
@@ -183,7 +184,7 @@ public class AlertEngine {
         } else if ("WMS_STUCK".equals(alert.getType())) {
             WmsOrderSnapshot outbound = wmsOf(alert.getTargetKey());
             OrderSnapshot order = outbound == null ? null : orderOf(outbound.getExternalNo());
-            BalanceAdvisor.Advice advice = balanceAdvisor.adviseWmsStuck(outbound, order);
+            advice = balanceAdvisor.adviseWmsStuck(outbound, order);
             if (advice != null) {
                 type = advice.getType();
                 targetKey = advice.getTargetKey();
@@ -195,6 +196,7 @@ public class AlertEngine {
         request.put("targetKey", targetKey);
         request.put("params", params);
         request.put("alertId", id);
+        request.put("expectedSaving", savingOf(advice, type, targetKey, params));
         CtAction action = actions.createAndExecute(request);
         if (action != null && "SUCCESS".equals(action.getStatus())
                 && "SAP_LOW_STOCK".equals(alert.getRuleCode())) {
@@ -307,13 +309,19 @@ public class AlertEngine {
                 String.valueOf(params.getOrDefault(
                         "costPerOrderThreshold", params.getOrDefault(
                                 "threshold", "0"))));
+        java.util.List<ShipmentSnapshot> shipments = shipmentMapper.selectList(null);
+        java.util.List<OrderSnapshot> orders = orderMapper.selectList(null);
         for (String warehouse : amountByWarehouse.keySet()) {
             int count = ordersByWarehouse.get(warehouse).size();
             java.math.BigDecimal perOrder = amountByWarehouse.get(warehouse)
                     .divide(java.math.BigDecimal.valueOf(Math.max(1, count)),
                             4, java.math.RoundingMode.HALF_UP);
             if (perOrder.compareTo(threshold) > 0) {
-                String recommended = balanceAdvisor.pickCheaperForOverrun("SF");
+                java.util.List<BalanceAdvisor.Advice> advice = balanceAdvisor.adviseOverrun(
+                        warehouse, shipments, orders);
+                String recommended = advice.isEmpty()
+                        ? balanceAdvisor.pickCheaperForOverrun("SF")
+                        : advice.get(0).getCarrierCode();
                 add(rule, "WAREHOUSE", warehouse, warehouse,
                         "仓库成本超标", "近 " + params.getOrDefault(
                                 "days", 7) + " 天单均成本 " + perOrder
@@ -516,7 +524,7 @@ public class AlertEngine {
         CtAction primary = null;
         for (BalanceAdvisor.Advice item : advice) {
             CtAction action = dispatch(item.getType(), item.getTargetKey(),
-                    item.params(), alert.getId());
+                    item.params(), alert.getId(), item.getExpectedSaving());
             if (primary == null) {
                 primary = action;
             }
@@ -617,12 +625,54 @@ public class AlertEngine {
     }
 
     private CtAction dispatch(String type, String targetKey, Map<String, Object> params, Long alertId) {
+        return dispatch(type, targetKey, params, alertId, null);
+    }
+
+    private CtAction dispatch(
+            String type,
+            String targetKey,
+            Map<String, Object> params,
+            Long alertId,
+            java.math.BigDecimal expectedSaving) {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("type", type);
         request.put("targetKey", targetKey);
         request.put("params", params);
         request.put("alertId", alertId);
+        request.put("expectedSaving", savingOf(null, type, targetKey, params, expectedSaving));
         return actions.createAndExecute(request);
+    }
+
+    private java.math.BigDecimal savingOf(
+            BalanceAdvisor.Advice advice,
+            String type,
+            String targetKey,
+            Map<String, Object> params) {
+        return savingOf(advice, type, targetKey, params, null);
+    }
+
+    private java.math.BigDecimal savingOf(
+            BalanceAdvisor.Advice advice,
+            String type,
+            String targetKey,
+            Map<String, Object> params,
+            java.math.BigDecimal explicit) {
+        if (explicit != null) {
+            return explicit;
+        }
+        if (advice != null && advice.getExpectedSaving() != null) {
+            return advice.getExpectedSaving();
+        }
+        if (BalanceAdvisor.SWITCH.equals(type) && params != null && params.get("carrierCode") != null) {
+            ShipmentSnapshot shipment = shipmentOf(targetKey);
+            if (shipment != null) {
+                return BalanceAdvisor.freightSaving(
+                        shipment.getCarrierCode(),
+                        String.valueOf(params.get("carrierCode")),
+                        shipment.getFreightAmount());
+            }
+        }
+        return java.math.BigDecimal.ZERO;
     }
 
     private java.util.Set<String> stuckStatuses(Object value) {

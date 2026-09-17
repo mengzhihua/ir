@@ -55,6 +55,8 @@ class ActionQueueTest {
         assertEquals(created.getId(), reused.getId());
         assertEquals(0, new BigDecimal("25").compareTo(reused.getExpectedSaving()));
         assertEquals("SUCCESS", reused.getStatus());
+        CtAction retried = actions.retry(reused.getId());
+        assertEquals(0, new BigDecimal("25").compareTo(retried.getExpectedSaving()));
     }
 
     @Test

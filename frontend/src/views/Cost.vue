@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h2>成本分析</h2>
-        <p class="subtitle">按类型、仓库、承运商分析供应链成本</p>
+        <p class="subtitle">按类型、仓库、承运商分析供应链成本；节省来自成功指令的运价预估，不是 BMS 实账</p>
       </div>
       <el-button @click="load">刷新</el-button>
     </div>
@@ -17,7 +17,7 @@
         <div class="value">{{ formatMoney(summary.costPerOrder) }}</div>
       </div>
       <div class="stat">
-        <div class="label">节省</div>
+        <div class="label">预估节省</div>
         <div class="value success">{{ formatMoney(saving.total) }}</div>
       </div>
     </div>

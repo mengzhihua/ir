@@ -211,6 +211,7 @@ public class ActionService {
         request.put("targetKey", original.getTargetKey());
         request.put("params", read(original.getParamsJson()));
         request.put("alertId", original.getAlertId());
+        request.put("expectedSaving", original.getExpectedSaving());
         return createAndExecute(request);
     }
 
