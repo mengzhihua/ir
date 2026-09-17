@@ -18,7 +18,7 @@ npm run dev
 
 ## 目录
 
-- `com.ir.integration`：OMS/TMS/WMS/BMS MOCK/HTTP 客户端与同步
+- `com.ir.integration`：OMS/TMS/WMS/BMS/SRM/SAP/BOM/INV/CRM/DMS/OA MOCK/HTTP 客户端与同步
 - `com.ir.snapshot`：统一快照与确定性演示数据
 - `com.ir.tower` / `trace`：控制塔看板和全链路追踪
 - `com.ir.alert` / `action`：规则预警和跨系统协同指令
@@ -36,7 +36,7 @@ npm run dev
 
 ## 对接
 
-系统接入配置预置 OMS/TMS/WMS/BMS/SRM 为 `MOCK`。切换 HTTP 时：OMS/WMS/TMS/SRM 指令走 `/api/open/ir/actions`（业务单号）；BMS 成本走 `GET /api/open/cost/records?from&to`。
+系统接入配置预置 OMS/TMS/WMS/BMS/SRM/SAP/OA/BOM/INV/CRM/DMS 为 `MOCK`。切换 HTTP 时：OMS/WMS/TMS 指令走 `/api/open/ir/actions`；SRM/SAP/BOM/INV/CRM/DMS/OA 走 `GET /api/open/ir/snapshots` 与 `POST /api/open/ir/actions`；BMS 成本走 `GET /api/open/cost/records?from&to`。
 
 ## 算法和沙盘
 

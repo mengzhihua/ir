@@ -3,34 +3,37 @@
     <div class="page-title">
       <div>
         <h2>系统集成</h2>
-        <p class="subtitle">统一管理OMS、WMS、TMS、BMS连接与同步</p>
+        <p class="subtitle">OMS / WMS / TMS / BMS / SRM / SAP / BOM / INV / CRM / DMS / OA 统一同步与指令</p>
       </div>
-      <el-button @click="load">刷新</el-button>
+      <div>
+        <el-button :disabled="!canWrite()" type="primary" @click="syncAll">全部同步</el-button>
+        <el-button @click="load">刷新</el-button>
+      </div>
     </div>
     <div class="system-grid">
       <el-card v-for="system in systems" :key="system.id" class="system-card"
         ><template #header
           ><div class="card-head">
             <strong>{{ system.name || system.systemName || system.code }}</strong
-            ><el-tag :type="system.code === 'SRM' ? 'info' : 'success'">{{
-              system.code === 'SRM' ? '预留' : labelOf(system.mode, systemModeLabels)
+            ><el-tag :type="healthOk(system) ? 'success' : 'info'">{{
+              labelOf(system.mode, systemModeLabels)
             }}</el-tag>
           </div></template
         ><el-descriptions :column="1" size="small"
           ><el-descriptions-item label="地址">{{
             system.baseUrl || 'Mock数据源'
           }}</el-descriptions-item
-          ><el-descriptions-item label="最近同步">{{
-            formatDate(system.lastSyncAt)
-          }}</el-descriptions-item
           ><el-descriptions-item label="最近健康">{{
             formatDate(system.lastHealthAt)
+          }}</el-descriptions-item
+          ><el-descriptions-item label="最近错误">{{
+            system.lastError || '—'
           }}</el-descriptions-item></el-descriptions
         >
         <div class="card-actions">
           <el-radio-group
             v-model="system.mode"
-            :disabled="system.code === 'SRM' || !canWrite()"
+            :disabled="!canWrite()"
             @change="saveMode(system)"
             ><el-radio-button value="MOCK" /><el-radio-button value="HTTP" /></el-radio-group
           ><el-button size="small" @click="edit(system)">编辑</el-button
@@ -38,12 +41,39 @@
           ><el-button
             size="small"
             type="primary"
-            :disabled="system.code === 'SRM' || !canWrite()"
+            :disabled="!canWrite()"
             @click="sync(system)"
             >立即同步</el-button
           >
         </div></el-card
       >
+    </div>
+    <div class="panel">
+      <div class="panel-title">
+        <h3>生态快照</h3>
+        <span class="muted">SAP / SRM / BOM / INV / CRM / DMS / OA</span>
+      </div>
+      <el-table :data="snapshots" stripe
+        ><el-table-column prop="sourceSystem" label="系统" width="90" /><el-table-column
+          prop="dataType"
+          label="类型"
+          width="140" /><el-table-column prop="bizKey" label="单号" min-width="160" /><el-table-column
+          prop="status"
+          label="状态"
+          width="120" /><el-table-column prop="sku" label="SKU/物料" width="140" /><el-table-column
+          prop="title"
+          label="摘要"
+          min-width="180" /><template #empty><el-empty description="暂无生态快照，请先同步" /></template
+      ></el-table>
+      <div class="pagination">
+        <el-pagination
+          v-model:current-page="snapPager.current"
+          v-model:page-size="snapPager.size"
+          :total="snapPager.total"
+          layout="total, prev, pager, next"
+          @current-change="loadSnapshots"
+        />
+      </div>
     </div>
     <div class="panel">
       <div class="panel-title"><h3>同步日志</h3></div>
@@ -102,17 +132,28 @@ import { formatDate, pageResult } from '../utils/format'
 import { labelOf, systemModeLabels } from '../utils/labels'
 const systems = ref([])
 const logs = ref([])
+const snapshots = ref([])
 const visible = ref(false)
 const editing = reactive({})
 const pager = reactive({ current: 1, size: 20, total: 0 })
+const snapPager = reactive({ current: 1, size: 20, total: 0 })
+function healthOk(system) {
+  return system.lastHealthOk === true
+}
 async function load() {
   systems.value = await integrationApi.systems()
   loadLogs()
+  loadSnapshots()
 }
 async function loadLogs() {
   const page = pageResult(await integrationApi.logs({ ...pager }))
   logs.value = page.records
   pager.total = page.total
+}
+async function loadSnapshots() {
+  const page = pageResult(await integrationApi.snapshots({ ...snapPager }))
+  snapshots.value = page.records
+  snapPager.total = page.total
 }
 function edit(system) {
   Object.assign(editing, system)
@@ -136,14 +177,19 @@ async function health(system) {
 async function sync(system) {
   await integrationApi.sync(system.code)
   ElMessage.success('同步任务已提交')
-  loadLogs()
+  load()
+}
+async function syncAll() {
+  await integrationApi.sync()
+  ElMessage.success('已同步全部系统')
+  load()
 }
 load()
 </script>
 <style scoped>
 .system-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -159,7 +205,7 @@ load()
   justify-content: flex-start;
   margin-top: 18px;
 }
-@media (max-width: 1100px) {
+@media (max-width: 1400px) {
   .system-grid {
     grid-template-columns: 1fr 1fr;
   }

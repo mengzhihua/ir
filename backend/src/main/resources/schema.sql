@@ -130,6 +130,24 @@ CREATE TABLE IF NOT EXISTS ct_cost_record (
     updated_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS ct_ext_snapshot (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    source_system VARCHAR(32) NOT NULL,
+    data_type VARCHAR(32) NOT NULL,
+    biz_key VARCHAR(100) NOT NULL,
+    status VARCHAR(32),
+    sku VARCHAR(64),
+    qty DECIMAL(18,2),
+    amount DECIMAL(18,2),
+    plant_code VARCHAR(32),
+    title VARCHAR(255),
+    extra_json CLOB,
+    synced_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    UNIQUE(source_system, data_type, biz_key)
+);
+
 CREATE TABLE IF NOT EXISTS ct_rule (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(64) NOT NULL UNIQUE,

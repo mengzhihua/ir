@@ -65,7 +65,8 @@ export const integrationApi = {
   remove: (id) => http.delete(`/integration/system/${id}`),
   health: (code) => http.post(`/integration/system/${code}/health`),
   sync: (code) => (code ? http.post(`/integration/sync/${code}`) : http.post('/integration/sync')),
-  logs: (params) => http.get('/integration/sync-log/page', { params })
+  logs: (params) => http.get('/integration/sync-log/page', { params }),
+  snapshots: (params) => http.get('/integration/snapshot/page', { params })
 }
 export const systemApi = {
   users: (params) => http.get('/system/user', { params }),

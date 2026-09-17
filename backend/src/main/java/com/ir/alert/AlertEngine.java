@@ -11,6 +11,8 @@ import com.ir.snapshot.CostRecord;
 import com.ir.snapshot.InventorySnapshot;
 import com.ir.snapshot.InventorySnapshotMapper;
 import com.ir.snapshot.CostRecordMapper;
+import com.ir.snapshot.ExtSnapshot;
+import com.ir.snapshot.ExtSnapshotMapper;
 import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.OrderSnapshotMapper;
 import com.ir.snapshot.ShipmentSnapshot;
@@ -36,6 +38,7 @@ public class AlertEngine {
     private final WmsOrderSnapshotMapper wmsMapper;
     private final ShipmentSnapshotMapper shipmentMapper;
     private final InventorySnapshotMapper inventoryMapper;
+    private final ExtSnapshotMapper extMapper;
     private final ActionService actions;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
@@ -49,6 +52,7 @@ public class AlertEngine {
             WmsOrderSnapshotMapper wmsMapper,
             ShipmentSnapshotMapper shipmentMapper,
             InventorySnapshotMapper inventoryMapper,
+            ExtSnapshotMapper extMapper,
             ActionService actions,
             CodeGenerator codes,
             ObjectMapper objectMapper,
@@ -60,6 +64,7 @@ public class AlertEngine {
         this.wmsMapper = wmsMapper;
         this.shipmentMapper = shipmentMapper;
         this.inventoryMapper = inventoryMapper;
+        this.extMapper = extMapper;
         this.actions = actions;
         this.codes = codes;
         this.objectMapper = objectMapper;
@@ -86,6 +91,8 @@ public class AlertEngine {
                 evaluateCost(rule, params);
             } else if ("FORECAST_STOCKOUT".equals(rule.getType())) {
                 evaluateForecast(rule, params);
+            } else if ("EXT_STATUS".equals(rule.getType())) {
+                evaluateExt(rule, params);
             }
         }
         return all();
@@ -133,6 +140,9 @@ public class AlertEngine {
     public CtAction executeSuggested(Long id) {
         CtAlert alert = alertMapper.selectById(id);
         if (alert == null) {
+            return null;
+        }
+        if (alert.getSuggestedAction() == null || alert.getSuggestedAction().trim().isEmpty()) {
             return null;
         }
         Map<String, Object> request = new LinkedHashMap<>();
@@ -256,6 +266,21 @@ public class AlertEngine {
             if (inventory.getQtyAvailable().compareTo(inventory.getSafetyQty()) < 0) {
                 add(rule, "SKU", inventory.getSku(), inventory.getWarehouseCode(),
                         "低库存", "可用库存低于安全库存");
+            }
+        }
+    }
+
+    private void evaluateExt(CtRule rule, Map<String, Object> params) {
+        String system = String.valueOf(params.getOrDefault("system", ""));
+        String dataType = String.valueOf(params.getOrDefault("dataType", ""));
+        String status = String.valueOf(params.getOrDefault("status", ""));
+        for (ExtSnapshot row : extMapper.selectList(new LambdaQueryWrapper<ExtSnapshot>()
+                .eq(ExtSnapshot::getSourceSystem, system)
+                .eq(ExtSnapshot::getDataType, dataType))) {
+            if (status.equals(row.getStatus())) {
+                add(rule, dataType, row.getBizKey(), row.getPlantCode(),
+                        rule.getName(), (row.getTitle() == null ? row.getBizKey() : row.getTitle())
+                                + " 状态 " + row.getStatus());
             }
         }
     }

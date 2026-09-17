@@ -36,5 +36,9 @@ class AlertEngineTest {
         assertTrue(rules.contains("FORECAST_STOCKOUT"));
         assertTrue(rules.contains("UNSHIPPED_ORDER"));
         assertTrue(rules.contains("EXCEPTION_SHIPMENT"));
+        assertTrue(rules.contains("SAP_LOW_STOCK"));
+        assertTrue(rules.contains("SRM_PR_DRAFT"));
+        assertTrue(rules.contains("DMS_PART_SHORTAGE"));
+        assertTrue(rules.contains("CRM_OPEN_CASE"));
     }
 }

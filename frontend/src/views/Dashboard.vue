@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h2>控制塔总览</h2>
-        <p class="subtitle">订单、库存、运输、成本和系统健康度实时看板</p>
+        <p class="subtitle">订单、库存、运输、采购、ERP 与经销商网络实时看板</p>
       </div>
       <el-button type="primary" :loading="loading" @click="load">刷新数据</el-button>
     </div>
@@ -108,6 +108,17 @@
     </div>
     <div class="panel">
       <div class="panel-title">
+        <h3>生态单据</h3>
+        <span class="muted">SAP / SRM / BOM / INV / CRM / DMS / OA 快照条数</span>
+      </div>
+      <el-table :data="ecosystemRows" stripe>
+        <el-table-column prop="system" label="系统" width="90" />
+        <el-table-column prop="summary" label="单据类型" />
+        <template #empty><el-empty description="暂无生态快照" /></template>
+      </el-table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">
         <h3>系统健康</h3>
         <span class="muted">最后同步时间</span>
       </div>
@@ -146,7 +157,8 @@ const overview = reactive({
   warehouseLoad: [],
   alertsTop: [],
   systems: [],
-  recommendation: null
+  recommendation: null,
+  ecosystem: {}
 })
 
 const cards = computed(() => [
@@ -163,7 +175,12 @@ const cards = computed(() => [
     label: '平均时效',
     value: `${formatNumber(overview.kpi.avgLeadTimeHours, 1)}小时`,
     color: '#909399'
-  }
+  },
+  { label: 'SAP低库存', value: formatNumber(overview.kpi.sapLowStock, 0), color: '#f56c6c' },
+  { label: 'SRM待提交PR', value: formatNumber(overview.kpi.srmOpenPr, 0), color: '#e6a23c' },
+  { label: 'DMS备件缺货', value: formatNumber(overview.kpi.dmsShortage, 0), color: '#f56c6c' },
+  { label: 'CRM新工单', value: formatNumber(overview.kpi.crmOpenCases, 0), color: '#e6a23c' },
+  { label: 'OA待办', value: formatNumber(overview.kpi.oaPendingTasks, 0), color: '#909399' }
 ])
 
 const costOption = computed(() => {
@@ -215,6 +232,15 @@ function healthOk(system) {
   return system.lastHealthOk === true || String(system.healthStatus).toUpperCase() === 'UP'
 }
 
+const ecosystemRows = computed(() =>
+  Object.entries(overview.ecosystem || {}).map(([system, types]) => ({
+    system,
+    summary: Object.entries(types || {})
+      .map(([type, count]) => `${type} ${count}`)
+      .join(' · ')
+  }))
+)
+
 async function load() {
   loading.value = true
   try {
@@ -230,7 +256,7 @@ load()
 <style scoped>
 .health-list {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 

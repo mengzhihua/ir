@@ -8,6 +8,8 @@ import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSyncLogMapper;
 import com.ir.integration.mapper.CtSystemMapper;
 import com.ir.integration.sync.SyncService;
+import com.ir.snapshot.ExtSnapshot;
+import com.ir.snapshot.ExtSnapshotMapper;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,14 +29,17 @@ public class IntegrationController {
     private final SyncService sync;
     private final CtSystemMapper systemMapper;
     private final CtSyncLogMapper syncLogMapper;
+    private final ExtSnapshotMapper extMapper;
 
     public IntegrationController(
             SyncService sync,
             CtSystemMapper systemMapper,
-            CtSyncLogMapper syncLogMapper) {
+            CtSyncLogMapper syncLogMapper,
+            ExtSnapshotMapper extMapper) {
         this.sync = sync;
         this.systemMapper = systemMapper;
         this.syncLogMapper = syncLogMapper;
+        this.extMapper = extMapper;
     }
 
     @GetMapping("/system")
@@ -65,7 +70,7 @@ public class IntegrationController {
         if (system == null) {
             return R.fail(404, "系统不存在");
         }
-        if (java.util.Arrays.asList("OMS", "TMS", "WMS", "BMS", "SRM")
+        if (java.util.Arrays.asList("OMS", "TMS", "WMS", "BMS", "SRM", "SAP", "OA", "BOM", "INV", "CRM", "DMS")
                 .contains(system.getCode())) {
             return R.fail(400, "内置系统不可删除");
         }
@@ -86,6 +91,25 @@ public class IntegrationController {
     @PostMapping("/sync/{code}")
     public R<Map<String, Object>> one(@PathVariable String code) {
         return R.ok(sync.sync(code));
+    }
+
+    @GetMapping("/snapshot/page")
+    public R<Page<ExtSnapshot>> snapshots(
+            @RequestParam(required = false) String systemCode,
+            @RequestParam(required = false) String dataType,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "20") long size) {
+        LambdaQueryWrapper<ExtSnapshot> query = new LambdaQueryWrapper<>();
+        if (systemCode != null && !systemCode.trim().isEmpty()) {
+            query.eq(ExtSnapshot::getSourceSystem, systemCode);
+        }
+        if (dataType != null && !dataType.trim().isEmpty()) {
+            query.eq(ExtSnapshot::getDataType, dataType);
+        }
+        query.orderByAsc(ExtSnapshot::getSourceSystem)
+                .orderByAsc(ExtSnapshot::getDataType)
+                .orderByDesc(ExtSnapshot::getId);
+        return R.ok(extMapper.selectPage(new Page<>(current, size), query));
     }
 
     @GetMapping("/sync-log/page")

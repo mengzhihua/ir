@@ -44,4 +44,38 @@ class IrIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.recommendation.id").value(id));
     }
+
+    @Test void ecosystemSystemsSyncAndAct() throws Exception {
+        String t = token();
+        String systems = mvc.perform(get("/api/integration/system").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(11)))
+                .andReturn().getResponse().getContentAsString();
+        JsonNode list = mapper.readTree(systems).get("data");
+        java.util.Set<String> codes = new java.util.HashSet<>();
+        list.forEach(n -> codes.add(n.get("code").asText()));
+        org.junit.jupiter.api.Assertions.assertTrue(codes.containsAll(
+                java.util.Arrays.asList("OMS", "WMS", "TMS", "BMS", "SRM", "SAP", "BOM", "INV", "CRM", "DMS", "OA")));
+        mvc.perform(post("/api/integration/sync/SAP").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ok").value(true));
+        mvc.perform(get("/api/integration/snapshot/page?systemCode=SAP&size=20")
+                        .header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(org.hamcrest.Matchers.greaterThan(0)));
+        mvc.perform(post("/api/action").header("Authorization", "Bearer " + t)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"SAP_CREATE_PR\",\"targetKey\":\"MAT-1000\",\"params\":{\"qty\":10}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"));
+        mvc.perform(post("/api/action").header("Authorization", "Bearer " + t)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"SRM_PURCHASE_SUGGEST\",\"targetKey\":\"SKU001\",\"params\":{\"qty\":5}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"));
+        mvc.perform(get("/api/tower/overview").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ecosystem.SAP").isMap())
+                .andExpect(jsonPath("$.data.kpi.sapLowStock").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
+    }
 }
