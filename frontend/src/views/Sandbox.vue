@@ -228,7 +228,7 @@ import {
 } from '../utils/format'
 import { actionStatusLabels, labelOf, scenarioStatusLabels, tagTypes } from '../utils/labels'
 const channels = ['TMALL', 'JD', 'DOUYIN', 'OFFLINE', 'API']
-const carriers = ['SF', 'JDL', 'ZTO', 'SELF']
+const carriers = ['SF', 'JD', 'SELF01']
 const rows = ref([])
 const selected = ref(null)
 const loading = ref(false)

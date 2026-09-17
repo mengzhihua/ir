@@ -121,7 +121,8 @@ public class SandboxEngine {
                                 params.getHandlingCostPerOrder().add(
                                         params.getPackagingCostPerOrder()));
                         dayLead = dayLead.add(distance.multiply(
-                                BigDecimal.valueOf(1.2)));
+                                BigDecimal.valueOf(1.2)).multiply(
+                                carrierLeadFactor(params)));
                         dayLeadCount++;
                     }
                 }
@@ -302,9 +303,22 @@ public class SandboxEngine {
                         distance(warehouse, region)).add(
                         params.getHandlingCostPerOrder());
             } else if ("BALANCED".equals(params.getAllocationStrategy())) {
-                value = demand.signum() == 0 ? available
-                        : available.divide(demand, 6,
-                        RoundingMode.HALF_UP).negate();
+                BigDecimal costPart = effectiveRate(params).multiply(
+                        distance(warehouse, region)).add(
+                        params.getHandlingCostPerOrder());
+                BigDecimal leadPart = distance(warehouse, region)
+                        .multiply(carrierLeadFactor(params));
+                BigDecimal costW = params.getCostWeight() == null
+                        ? BigDecimal.valueOf(0.5) : params.getCostWeight();
+                BigDecimal effW = params.getEfficiencyWeight() == null
+                        ? BigDecimal.valueOf(0.5) : params.getEfficiencyWeight();
+                value = costPart.multiply(costW).add(leadPart.multiply(effW));
+                if (available.signum() <= 0) {
+                    value = value.add(BigDecimal.TEN);
+                }
+                if (demand.signum() == 0) {
+                    value = available.negate();
+                }
             } else {
                 value = distance(warehouse, region);
             }
@@ -366,6 +380,25 @@ public class SandboxEngine {
                             RoundingMode.HALF_UP)));
         }
         return total;
+    }
+
+    private BigDecimal carrierLeadFactor(ScenarioParams params) {
+        BigDecimal result = BigDecimal.ZERO;
+        BigDecimal total = BigDecimal.ZERO;
+        Map<String, BigDecimal> leads = params.getCarrierLead();
+        for (Map.Entry<String, BigDecimal> entry
+                : params.getCarrierMix().entrySet()) {
+            BigDecimal weight = entry.getValue() == null
+                    ? BigDecimal.ZERO : entry.getValue();
+            BigDecimal lead = leads == null
+                    ? com.ir.common.CarrierCodes.lead(entry.getKey())
+                    : leads.getOrDefault(entry.getKey(),
+                    com.ir.common.CarrierCodes.lead(entry.getKey()));
+            result = result.add(weight.multiply(lead));
+            total = total.add(weight);
+        }
+        return total.signum() == 0 ? BigDecimal.ONE
+                : result.divide(total, 6, RoundingMode.HALF_UP);
     }
 
     private BigDecimal effectiveRate(ScenarioParams params) {

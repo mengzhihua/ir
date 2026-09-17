@@ -29,7 +29,7 @@ public class MockDataset {
     private static final List<String> CHANNELS =
             Arrays.asList("TMALL", "JD", "DOUYIN", "OFFLINE", "API");
     private static final List<String> CARRIERS =
-            Arrays.asList("SF", "JDL", "ZTO", "SELF");
+            Arrays.asList("SF", "JD", "SELF01");
 
     private final List<OrderSnapshot> orders = new ArrayList<>();
     private final List<WmsOrderSnapshot> outbound = new ArrayList<>();

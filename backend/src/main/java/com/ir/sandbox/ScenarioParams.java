@@ -1,5 +1,6 @@
 package com.ir.sandbox;
 
+import com.ir.common.CarrierCodes;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -16,6 +17,7 @@ public class ScenarioParams {
     private String singleWarehouse;
     private Map<String, BigDecimal> carrierMix = new LinkedHashMap<>();
     private Map<String, BigDecimal> carrierRate = new LinkedHashMap<>();
+    private Map<String, BigDecimal> carrierLead = new LinkedHashMap<>();
     private int safetyDays = 3;
     private BigDecimal storageCostPerUnitDay = BigDecimal.valueOf(0.02);
     private BigDecimal handlingCostPerOrder = BigDecimal.valueOf(1.5);
@@ -32,12 +34,15 @@ public class ScenarioParams {
         channelDemandMultiplier.put("DOUYIN", BigDecimal.ONE);
         channelDemandMultiplier.put("OFFLINE", BigDecimal.ONE);
         channelDemandMultiplier.put("API", BigDecimal.ONE);
-        carrierMix.put("SF", BigDecimal.valueOf(0.4));
-        carrierMix.put("JDL", BigDecimal.valueOf(0.3));
-        carrierMix.put("SELF", BigDecimal.valueOf(0.3));
-        carrierRate.put("SF", BigDecimal.valueOf(2.2));
-        carrierRate.put("JDL", BigDecimal.valueOf(1.8));
-        carrierRate.put("SELF", BigDecimal.valueOf(1.4));
+        carrierMix.put(CarrierCodes.SF, BigDecimal.valueOf(0.4));
+        carrierMix.put(CarrierCodes.JD, BigDecimal.valueOf(0.3));
+        carrierMix.put(CarrierCodes.SELF01, BigDecimal.valueOf(0.3));
+        carrierRate.put(CarrierCodes.SF, CarrierCodes.rate(CarrierCodes.SF));
+        carrierRate.put(CarrierCodes.JD, CarrierCodes.rate(CarrierCodes.JD));
+        carrierRate.put(CarrierCodes.SELF01, CarrierCodes.rate(CarrierCodes.SELF01));
+        carrierLead.put(CarrierCodes.SF, CarrierCodes.lead(CarrierCodes.SF));
+        carrierLead.put(CarrierCodes.JD, CarrierCodes.lead(CarrierCodes.JD));
+        carrierLead.put(CarrierCodes.SELF01, CarrierCodes.lead(CarrierCodes.SELF01));
     }
 
     public ScenarioParams normalized() {
@@ -80,11 +85,10 @@ public class ScenarioParams {
                     new LinkedHashMap<>(channelDemandMultiplier));
         }
         if (carrierMix != null && !carrierMix.isEmpty()) {
-            normalized.setCarrierMix(new LinkedHashMap<>(carrierMix));
+            normalized.setCarrierMix(CarrierCodes.mergeMix(carrierMix));
         }
-        if (carrierRate != null && !carrierRate.isEmpty()) {
-            normalized.setCarrierRate(new LinkedHashMap<>(carrierRate));
-        }
+        normalized.setCarrierRate(CarrierCodes.mergeRates(carrierRate));
+        normalized.setCarrierLead(CarrierCodes.mergeLeads(carrierLead));
         return normalized;
     }
 }

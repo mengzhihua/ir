@@ -14,4 +14,26 @@ class SandboxEngineTest {
     @Test void carrierMixChangesCarrierCost(){ScenarioParams a=new ScenarioParams();a.setHorizonDays(7);SandboxEngine.Result first=new SandboxEngine().run(a,data());a.setCarrierMix(Collections.singletonMap("SF",BigDecimal.ONE));SandboxEngine.Result second=new SandboxEngine().run(a,data());assertNotEquals(first.getCostByCarrier(),second.getCostByCarrier());}
     @Test void emptyCarrierMixUsesBaselineDefaults(){ScenarioParams a=new ScenarioParams();a.setHorizonDays(7);a.setCarrierMix(Collections.emptyMap());SandboxEngine.Result result=new SandboxEngine().run(a,data());assertFalse(result.getCostByCarrier().isEmpty());assertTrue(result.getCostByCarrier().containsKey("SF"));}
     @Test void replenishmentQueueReducesStockout(){ScenarioParams fast=new ScenarioParams();fast.setHorizonDays(7);fast.setInitialInventoryMultiplier(BigDecimal.ZERO);fast.setReplenishLeadDays(3);ScenarioParams slow=new ScenarioParams();slow.setHorizonDays(7);slow.setInitialInventoryMultiplier(BigDecimal.ZERO);slow.setReplenishLeadDays(999);SandboxEngine e=new SandboxEngine();assertTrue(e.run(fast,data()).getStockoutUnits().compareTo(e.run(slow,data()).getStockoutUnits())<0);}
+    @Test void cheaperCarrierLowersCostAndSlowsLead(){
+        SandboxEngine e=new SandboxEngine();
+        ScenarioParams sf=new ScenarioParams();
+        sf.setHorizonDays(7);
+        sf.setCarrierMix(Collections.singletonMap("SF",BigDecimal.ONE));
+        ScenarioParams self=new ScenarioParams();
+        self.setHorizonDays(7);
+        self.setCarrierMix(Collections.singletonMap("SELF01",BigDecimal.ONE));
+        SandboxEngine.Result fast=e.run(sf,data());
+        SandboxEngine.Result cheap=e.run(self,data());
+        assertTrue(cheap.getTotalCost().compareTo(fast.getTotalCost())<0);
+        assertTrue(cheap.getAvgLeadDays().compareTo(fast.getAvgLeadDays())>0);
+        assertTrue(fast.getCostByCarrier().containsKey("SF"));
+        assertTrue(cheap.getCostByCarrier().containsKey("SELF01"));
+    }
+    @Test void legacyJdlMixNormalizesToJd(){
+        ScenarioParams a=new ScenarioParams();
+        a.setCarrierMix(Collections.singletonMap("JDL",BigDecimal.ONE));
+        ScenarioParams n=a.normalized();
+        assertTrue(n.getCarrierMix().containsKey("JD"));
+        assertEquals(new BigDecimal("1"), n.getCarrierMix().get("JD"));
+    }
 }

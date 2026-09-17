@@ -157,11 +157,11 @@ public class AutoSandboxService {
         return params;
     }
 
-    private Map<String, BigDecimal> mix(double sf, double jdl, double self) {
+    private Map<String, BigDecimal> mix(double sf, double jd, double self) {
         Map<String, BigDecimal> mix = new LinkedHashMap<>();
         mix.put("SF", BigDecimal.valueOf(sf));
-        mix.put("JDL", BigDecimal.valueOf(jdl));
-        mix.put("SELF", BigDecimal.valueOf(self));
+        mix.put("JD", BigDecimal.valueOf(jd));
+        mix.put("SELF01", BigDecimal.valueOf(self));
         return mix;
     }
 

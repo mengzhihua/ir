@@ -120,6 +120,12 @@ public class ActionService {
             } else if ("WMS".equals(action.getTargetSystem())) {
                 clients.wms(system).execute(command);
             } else if ("TMS".equals(action.getTargetSystem())) {
+                if ("TMS_SWITCH_CARRIER".equals(action.getType())
+                        && params.get("carrierCode") != null) {
+                    params.put("carrierCode", com.ir.common.CarrierCodes.toTms(
+                            String.valueOf(params.get("carrierCode"))));
+                    command.setParams(params);
+                }
                 clients.tms(system).execute(command);
             } else if ("SRM".equals(action.getTargetSystem())) {
                 clients.srm(system).execute(command);
