@@ -343,6 +343,8 @@ public class AlertEngine {
         }
         ExtSnapshot row = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
                 .eq(ExtSnapshot::getBizKey, alert.getTargetKey())
+                .eq(alert.getTargetType() != null && !alert.getTargetType().trim().isEmpty(),
+                        ExtSnapshot::getDataType, alert.getTargetType())
                 .last("LIMIT 1"));
         if (row == null) {
             return;
