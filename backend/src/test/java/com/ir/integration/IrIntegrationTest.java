@@ -87,7 +87,8 @@ class IrIntegrationTest {
                             .content("{\"costWeight\":0.8,\"efficiencyWeight\":0.2,\"reevaluate\":true}"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(0))
-                    .andExpect(jsonPath("$.data.stance").value("COST"));
+                    .andExpect(jsonPath("$.data.stance").value("COST"))
+                    .andExpect(jsonPath("$.data.superseded").isNumber());
             mvc.perform(get("/api/sandbox/policy").header("Authorization", "Bearer " + t))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.stance").value("COST"));
@@ -109,6 +110,19 @@ class IrIntegrationTest {
                 }
             }
             org.junit.jupiter.api.Assertions.assertTrue(foundHold);
+            String wms = mvc.perform(get("/api/alert/page?type=WMS_STUCK&status=OPEN&size=50")
+                            .header("Authorization", "Bearer " + t))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            boolean foundWmsHold = false;
+            for (JsonNode row : mapper.readTree(wms).get("data").get("records")) {
+                if ("WMS_STUCK".equals(row.path("ruleCode").asText())) {
+                    org.junit.jupiter.api.Assertions.assertEquals("OMS_HOLD",
+                            row.path("suggestedAction").asText());
+                    foundWmsHold = true;
+                }
+            }
+            org.junit.jupiter.api.Assertions.assertTrue(foundWmsHold);
         } finally {
             mvc.perform(put("/api/sandbox/policy").header("Authorization", "Bearer " + t)
                             .contentType(MediaType.APPLICATION_JSON)

@@ -28,7 +28,8 @@ export const actionApi = {
   page: (params) => http.get('/action/page', { params }),
   types: () => http.get('/action/types'),
   create: (data) => http.post('/action', data),
-  retry: (id) => http.post(`/action/${id}/retry`)
+  retry: (id) => http.post(`/action/${id}/retry`),
+  execute: (id) => http.post(`/action/${id}/execute`)
 }
 export const forecastApi = {
   history: (params) => http.get('/forecast/history', { params }),

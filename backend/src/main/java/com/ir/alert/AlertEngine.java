@@ -177,6 +177,15 @@ public class AlertEngine {
                 targetKey = advice.getTargetKey();
                 params.putAll(advice.params());
             }
+        } else if ("WMS_STUCK".equals(alert.getType())) {
+            WmsOrderSnapshot outbound = wmsOf(alert.getTargetKey());
+            OrderSnapshot order = outbound == null ? null : orderOf(outbound.getExternalNo());
+            BalanceAdvisor.Advice advice = balanceAdvisor.adviseWmsStuck(outbound, order);
+            if (advice != null) {
+                type = advice.getType();
+                targetKey = advice.getTargetKey();
+                params.putAll(advice.params());
+            }
         }
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("type", type);
@@ -224,8 +233,15 @@ public class AlertEngine {
             if (order != null && statuses.contains(outbound.getStatus())
                     && order.getOrderTime() != null
                     && Duration.between(order.getOrderTime(), now).toHours() > threshold) {
+                BalanceAdvisor.Advice advice = balanceAdvisor.adviseWmsStuck(outbound, order);
+                String suggested = advice == null
+                        ? rule.getSuggestedAction() : advice.getType();
+                String detail = outbound.getStatus() + " 超过 " + threshold + " 小时";
+                if (advice != null) {
+                    detail = detail + "，按成本/效率权重建议 " + advice.getType();
+                }
                 add(rule, "ORDER", outbound.getCode(), outbound.getWarehouseCode(),
-                        "WMS 拣货卡单", outbound.getStatus() + " 超过 " + threshold + " 小时");
+                        "WMS 拣货卡单", detail, suggested);
             }
         }
     }
@@ -579,6 +595,21 @@ public class AlertEngine {
         }
         return orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
                 .eq(OrderSnapshot::getOrderNo, orderNo)
+                .last("LIMIT 1"));
+    }
+
+    private WmsOrderSnapshot wmsOf(String code) {
+        if (code == null || code.trim().isEmpty()) {
+            return null;
+        }
+        WmsOrderSnapshot outbound = wmsMapper.selectOne(new LambdaQueryWrapper<WmsOrderSnapshot>()
+                .eq(WmsOrderSnapshot::getCode, code)
+                .last("LIMIT 1"));
+        if (outbound != null) {
+            return outbound;
+        }
+        return wmsMapper.selectOne(new LambdaQueryWrapper<WmsOrderSnapshot>()
+                .eq(WmsOrderSnapshot::getExternalNo, code)
                 .last("LIMIT 1"));
     }
 

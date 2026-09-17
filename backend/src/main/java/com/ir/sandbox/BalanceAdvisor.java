@@ -4,6 +4,7 @@ import com.ir.common.CarrierCodes;
 import com.ir.common.WarehouseCodes;
 import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.ShipmentSnapshot;
+import com.ir.snapshot.WmsOrderSnapshot;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -145,6 +146,46 @@ public class BalanceAdvisor {
             result.add(replenish);
         }
         return result;
+    }
+
+    public Advice adviseWmsStuck(WmsOrderSnapshot outbound, OrderSnapshot order) {
+        if (outbound == null || outbound.getCode() == null) {
+            return null;
+        }
+        Advice advice = new Advice();
+        if (costFirst()) {
+            advice.type = "OMS_HOLD";
+            advice.targetKey = order != null && order.getOrderNo() != null
+                    ? order.getOrderNo() : outbound.getExternalNo();
+            advice.warehouseCode = outbound.getWarehouseCode();
+            advice.remark = "IR 成本优先，仓内卡单先挂起";
+        } else {
+            advice.type = "WMS_ALLOCATE";
+            advice.targetKey = outbound.getCode();
+            advice.warehouseCode = outbound.getWarehouseCode();
+        }
+        return advice;
+    }
+
+    public static boolean opposes(String stance, String type, String carrier) {
+        if (type == null || stance == null) {
+            return false;
+        }
+        String mapped = CarrierCodes.toTms(carrier);
+        if ("COST".equals(stance)) {
+            if ("OMS_PRIORITIZE".equals(type) || "OMS_AUTO_PROCESS".equals(type)
+                    || "WMS_ALLOCATE".equals(type)) {
+                return true;
+            }
+            return "TMS_SWITCH_CARRIER".equals(type) && CarrierCodes.SF.equals(mapped);
+        }
+        if ("EFFICIENCY".equals(stance)) {
+            if ("OMS_HOLD".equals(type)) {
+                return true;
+            }
+            return "TMS_SWITCH_CARRIER".equals(type) && CarrierCodes.SELF01.equals(mapped);
+        }
+        return false;
     }
 
     public boolean costFirst() {
