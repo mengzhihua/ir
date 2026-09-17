@@ -9,7 +9,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +21,7 @@ public class HttpWmsClient implements WmsClient {
     private final String password;
     private volatile String token;
     private final String apiKey;
+    private Map<String, Object> cachedSnapshot;
 
     public HttpWmsClient(RestTemplate http, String baseUrl, String username, String password) {
         this(http, baseUrl, username, password, null);
@@ -42,8 +42,12 @@ public class HttpWmsClient implements WmsClient {
 
     @Override
     public List<WmsOrderSnapshot> fetchOutbound() {
+        List<Map<String, Object>> rows = snapshotList("outbound");
+        if (rows == null) {
+            rows = pages("/api/outbound/order/page");
+        }
         List<WmsOrderSnapshot> result = new ArrayList<>();
-        for (Map<String, Object> row : pages("/api/outbound/order/page")) {
+        for (Map<String, Object> row : rows) {
             WmsOrderSnapshot order = new WmsOrderSnapshot();
             order.setCode(HttpSupport.string(row, "code", "orderNo", "orderCode"));
             order.setExternalNo(HttpSupport.string(row, "externalNo", "sourceNo"));
@@ -54,8 +58,8 @@ public class HttpWmsClient implements WmsClient {
             order.setShippedQty(decimal(row, "shippedQty"));
             order.setCarrier(HttpSupport.string(row, "carrier", "carrierCode"));
             order.setTrackingNo(HttpSupport.string(row, "trackingNo"));
-            order.setPackedAt(dateTime(row, "packedAt"));
-            order.setShippedAt(dateTime(row, "shippedAt"));
+            order.setPackedAt(HttpSupport.dateTime(row, "packedAt"));
+            order.setShippedAt(HttpSupport.dateTime(row, "shippedAt"));
             result.add(order);
         }
         return result;
@@ -63,17 +67,21 @@ public class HttpWmsClient implements WmsClient {
 
     @Override
     public List<InventorySnapshot> fetchInventorySummary() {
+        List<Map<String, Object>> rows = snapshotList("inventory");
+        if (rows == null) {
+            Map<String, Object> response = HttpSupport.getMap(
+                    http, baseUrl + "/api/inventory/summary", headers());
+            rows = HttpSupport.rows(response);
+        }
         List<InventorySnapshot> result = new ArrayList<>();
-        Map<String, Object> response = HttpSupport.getMap(
-                http, baseUrl + "/api/inventory/summary", headers());
-        for (Map<String, Object> row : HttpSupport.rows(response)) {
+        for (Map<String, Object> row : rows) {
             InventorySnapshot inventory = new InventorySnapshot();
             inventory.setSourceSystem("WMS");
             inventory.setWarehouseCode(HttpSupport.string(row, "warehouseCode", "warehouse"));
-            inventory.setSku(HttpSupport.string(row, "sku", "skuCode"));
-            inventory.setQtyOnHand(decimal(row, "qtyOnHand", "quantity"));
-            inventory.setQtyReserved(decimal(row, "qtyReserved", "reserved"));
-            inventory.setQtyAvailable(decimal(row, "qtyAvailable", "available"));
+            inventory.setSku(HttpSupport.string(row, "sku", "skuCode", "itemCode"));
+            inventory.setQtyOnHand(decimal(row, "qtyOnHand", "quantity", "qty"));
+            inventory.setQtyReserved(decimal(row, "qtyReserved", "reserved", "allocatedQty"));
+            inventory.setQtyAvailable(decimal(row, "qtyAvailable", "available", "availableQty"));
             inventory.setSafetyQty(decimal(row, "safetyQty", "safeStock"));
             result.add(inventory);
         }
@@ -87,7 +95,7 @@ public class HttpWmsClient implements WmsClient {
 
     @Override
     public void execute(ActionCommand command) {
-        if (apiKey != null && !apiKey.trim().isEmpty()) {
+        if (hasApiKey()) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("type", command.getType());
             body.put("targetKey", command.getTargetKey());
@@ -107,11 +115,34 @@ public class HttpWmsClient implements WmsClient {
     @Override
     public boolean health() {
         try {
-            dashboard();
+            if (hasApiKey()) {
+                snapshot();
+            } else {
+                dashboard();
+            }
             return true;
         } catch (IntegrationException ex) {
             return false;
         }
+    }
+
+    private List<Map<String, Object>> snapshotList(String name) {
+        if (!hasApiKey()) {
+            return null;
+        }
+        try {
+            return HttpSupport.namedList(snapshot(), name);
+        } catch (IntegrationException ex) {
+            return null;
+        }
+    }
+
+    private Map<String, Object> snapshot() {
+        if (cachedSnapshot == null) {
+            cachedSnapshot = HttpSupport.getMap(
+                    http, baseUrl + "/api/open/ir/snapshots", HttpSupport.apiKey(apiKey));
+        }
+        return cachedSnapshot;
     }
 
     private List<Map<String, Object>> pages(String path) {
@@ -120,7 +151,7 @@ public class HttpWmsClient implements WmsClient {
         int size = 200;
         while (true) {
             List<Map<String, Object>> current = HttpSupport.rows(HttpSupport.getMap(
-                    http, baseUrl + path + "?page=" + page + "&size=" + size, headers()));
+                    http, baseUrl + path + "?current=" + page + "&size=" + size, headers()));
             rows.addAll(current);
             if (current.size() < size) {
                 return rows;
@@ -155,12 +186,11 @@ public class HttpWmsClient implements WmsClient {
         return HttpSupport.bearer(login());
     }
 
-    private static BigDecimal decimal(Map<String, Object> row, String... names) {
-        return BigDecimal.valueOf(HttpSupport.doubleValue(row, names));
+    private boolean hasApiKey() {
+        return apiKey != null && !apiKey.trim().isEmpty();
     }
 
-    private static LocalDateTime dateTime(Map<String, Object> row, String... names) {
-        String value = HttpSupport.string(row, names);
-        return value == null ? null : LocalDateTime.parse(value.replace(" ", "T"));
+    private static BigDecimal decimal(Map<String, Object> row, String... names) {
+        return BigDecimal.valueOf(HttpSupport.doubleValue(row, names));
     }
 }

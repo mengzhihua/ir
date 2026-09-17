@@ -65,6 +65,51 @@ final class HttpSupport {
     }
 
     @SuppressWarnings("unchecked")
+    static List<Map<String, Object>> namedList(Map<String, Object> response, String... names) {
+        Object data = response.get("data");
+        if (data instanceof Map) {
+            Map<String, Object> payload = (Map<String, Object>) data;
+            for (String name : names) {
+                Object value = payload.get(name);
+                if (value instanceof List) {
+                    return (List<Map<String, Object>>) value;
+                }
+            }
+        }
+        return rows(response);
+    }
+
+    static java.time.LocalDateTime dateTime(Map<String, Object> row, String... names) {
+        return dateTime(string(row, names));
+    }
+
+    static java.time.LocalDateTime dateTime(String value) {
+        if (value == null || value.trim().isEmpty() || "null".equals(value)) {
+            return null;
+        }
+        String normalized = value.trim().replace(" ", "T");
+        if (normalized.length() > 19) {
+            normalized = normalized.substring(0, 19);
+        }
+        if (normalized.length() == 16) {
+            normalized = normalized + ":00";
+        }
+        return java.time.LocalDateTime.parse(normalized);
+    }
+
+    static java.time.LocalDate localDate(Map<String, Object> row, String... names) {
+        String value = string(row, names);
+        if (value == null || value.trim().isEmpty() || "null".equals(value)) {
+            return null;
+        }
+        String normalized = value.trim().replace(" ", "T");
+        if (normalized.length() >= 10) {
+            normalized = normalized.substring(0, 10);
+        }
+        return java.time.LocalDate.parse(normalized);
+    }
+
+    @SuppressWarnings("unchecked")
     static String string(Map<String, Object> row, String... names) {
         for (String name : names) {
             Object value = row.get(name);

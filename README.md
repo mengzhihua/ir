@@ -36,7 +36,7 @@ npm run dev
 
 ## 对接
 
-系统接入配置预置 OMS/TMS/WMS/BMS/SRM/SAP/OA/BOM/INV/CRM/DMS 为 `MOCK`。切换 HTTP 时：OMS/WMS/TMS 指令走 `/api/open/ir/actions`；SRM/SAP/BOM/INV/CRM/DMS/OA 走 `GET /api/open/ir/snapshots` 与 `POST /api/open/ir/actions`；BMS 成本走 `GET /api/open/cost/records?from&to`。
+系统接入配置预置 OMS/TMS/WMS/BMS/SRM/SAP/OA/BOM/INV/CRM/DMS 为 `MOCK`。切换 HTTP 时：OMS/WMS/TMS 与 SRM/SAP/BOM/INV/CRM/DMS/OA 一样走 `GET /api/open/ir/snapshots` 与 `POST /api/open/ir/actions`；BMS 成本走 `GET /api/open/cost/records?from&to`。仓配联调种子：OMS `IR-SO-STUCK`、WMS `SO-IR-STUCK`、TMS `WB-IR-DELAY`。
 
 ## 算法和沙盘
 

@@ -64,7 +64,7 @@ public class ClientFactory {
 
     public TmsClient tms(CtSystem system) {
         if (httpMode(system)) {
-            return new HttpTmsClient(http, system.getBaseUrl());
+            return new HttpTmsClient(http, system.getBaseUrl(), system.getApiKey());
         }
         return tms;
     }
