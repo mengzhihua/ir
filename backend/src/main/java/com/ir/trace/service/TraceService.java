@@ -21,8 +21,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class TraceService {
@@ -109,10 +111,13 @@ public class TraceService {
         result.put("costs", costMapper.selectList(new LambdaQueryWrapper<CostRecord>()
                 .eq(CostRecord::getOrderNo, orderNo)
                 .orderByAsc(CostRecord::getBizDate)));
+        List<String> keys = relatedKeys(order, wms, shipment);
         result.put("alerts", alertMapper.selectList(new LambdaQueryWrapper<CtAlert>()
-                .eq(CtAlert::getTargetKey, orderNo)));
+                .in(CtAlert::getTargetKey, keys)
+                .orderByDesc(CtAlert::getCreatedAt)));
         result.put("actions", actionMapper.selectList(new LambdaQueryWrapper<CtAction>()
-                .eq(CtAction::getTargetKey, orderNo)));
+                .in(CtAction::getTargetKey, keys)
+                .orderByDesc(CtAction::getCreatedAt)));
         return result;
     }
 
@@ -159,13 +164,53 @@ public class TraceService {
     }
 
     private WmsOrderSnapshot wms(String orderNo) {
+        WmsOrderSnapshot row = wmsMapper.selectOne(new LambdaQueryWrapper<WmsOrderSnapshot>()
+                .eq(WmsOrderSnapshot::getExternalNo, orderNo)
+                .last("LIMIT 1"));
+        if (row != null) {
+            return row;
+        }
         return wmsMapper.selectOne(new LambdaQueryWrapper<WmsOrderSnapshot>()
-                .eq(WmsOrderSnapshot::getExternalNo, orderNo));
+                .eq(WmsOrderSnapshot::getCode, orderNo)
+                .last("LIMIT 1"));
     }
 
     private ShipmentSnapshot shipment(String orderNo) {
+        ShipmentSnapshot row = shipmentMapper.selectOne(new LambdaQueryWrapper<ShipmentSnapshot>()
+                .eq(ShipmentSnapshot::getSourceNo, orderNo)
+                .last("LIMIT 1"));
+        if (row != null) {
+            return row;
+        }
         return shipmentMapper.selectOne(new LambdaQueryWrapper<ShipmentSnapshot>()
-                .eq(ShipmentSnapshot::getSourceNo, orderNo));
+                .eq(ShipmentSnapshot::getWaybillCode, orderNo)
+                .last("LIMIT 1"));
+    }
+
+    private List<String> relatedKeys(
+            OrderSnapshot order,
+            WmsOrderSnapshot wms,
+            ShipmentSnapshot shipment) {
+        LinkedHashSet<String> keys = new LinkedHashSet<String>();
+        addKey(keys, order.getOrderNo());
+        addKey(keys, order.getWmsOrderNo());
+        addKey(keys, order.getTmsOrderNo());
+        addKey(keys, order.getTrackingNo());
+        if (wms != null) {
+            addKey(keys, wms.getCode());
+            addKey(keys, wms.getExternalNo());
+        }
+        if (shipment != null) {
+            addKey(keys, shipment.getWaybillCode());
+            addKey(keys, shipment.getSourceNo());
+        }
+        return new ArrayList<String>(keys);
+    }
+
+    private void addKey(Set<String> keys, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            keys.add(value.trim());
+        }
     }
 
     private String stage(
