@@ -210,6 +210,20 @@ public class ActionService {
                 order.setWarehouseCode(String.valueOf(params.get("warehouseCode")));
                 orderMapper.updateById(order);
             }
+        } else if ("OMS_HOLD".equals(action.getType())) {
+            OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
+                    .eq(OrderSnapshot::getOrderNo, action.getTargetKey()));
+            if (order != null) {
+                order.setStatus("HOLD");
+                orderMapper.updateById(order);
+            }
+        } else if ("OMS_UNHOLD".equals(action.getType())) {
+            OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
+                    .eq(OrderSnapshot::getOrderNo, action.getTargetKey()));
+            if (order != null) {
+                order.setStatus("CREATED");
+                orderMapper.updateById(order);
+            }
         } else if ("OMS_CANCEL".equals(action.getType())) {
             OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
                     .eq(OrderSnapshot::getOrderNo, action.getTargetKey()));
