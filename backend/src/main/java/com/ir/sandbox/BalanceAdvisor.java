@@ -4,7 +4,7 @@ import com.ir.common.CarrierCodes;
 import com.ir.common.WarehouseCodes;
 import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.ShipmentSnapshot;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -22,16 +22,19 @@ public class BalanceAdvisor {
     public static final String SWITCH = "TMS_SWITCH_CARRIER";
     public static final String SYNC = "TMS_SYNC_TRACK";
 
-    @Value("${ir.sandbox.cost-weight:0.5}")
-    private BigDecimal costWeight;
+    private final BalancePolicy policy;
+    private final BigDecimal costWeight;
+    private final BigDecimal efficiencyWeight;
 
-    @Value("${ir.sandbox.efficiency-weight:0.5}")
-    private BigDecimal efficiencyWeight;
-
-    public BalanceAdvisor() {
+    @Autowired
+    public BalanceAdvisor(BalancePolicy policy) {
+        this.policy = policy;
+        this.costWeight = null;
+        this.efficiencyWeight = null;
     }
 
     public BalanceAdvisor(BigDecimal costWeight, BigDecimal efficiencyWeight) {
+        this.policy = null;
         this.costWeight = costWeight;
         this.efficiencyWeight = efficiencyWeight;
     }
@@ -41,7 +44,7 @@ public class BalanceAdvisor {
             return null;
         }
         String current = CarrierCodes.toTms(shipment.getCarrierCode());
-        String best = pickCarrier(current, candidates(null), costWeight, efficiencyWeight);
+        String best = pickCarrier(current, candidates(null), costW(), effW());
         String type = SYNC;
         String carrier = current;
         if (best != null && !best.equals(current)) {
@@ -145,15 +148,15 @@ public class BalanceAdvisor {
     }
 
     public boolean costFirst() {
-        return nz(costWeight).compareTo(nz(efficiencyWeight)) > 0;
+        return nz(costW()).compareTo(nz(effW())) > 0;
     }
 
     public boolean efficiencyFirst() {
-        return nz(efficiencyWeight).compareTo(nz(costWeight)) > 0;
+        return nz(effW()).compareTo(nz(costW())) > 0;
     }
 
     public String pickCarrier(String current) {
-        return pickCarrier(current, candidates(null), costWeight, efficiencyWeight);
+        return pickCarrier(current, candidates(null), costW(), effW());
     }
 
     public String pickCheaperForOverrun(String current) {
@@ -291,6 +294,14 @@ public class BalanceAdvisor {
 
     private boolean faster(String left, String right) {
         return CarrierCodes.lead(left).compareTo(CarrierCodes.lead(right)) < 0;
+    }
+
+    private BigDecimal costW() {
+        return policy != null ? policy.costWeight() : costWeight;
+    }
+
+    private BigDecimal effW() {
+        return policy != null ? policy.efficiencyWeight() : efficiencyWeight;
     }
 
     private BigDecimal nz(BigDecimal value) {

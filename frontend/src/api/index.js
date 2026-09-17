@@ -48,7 +48,9 @@ export const sandboxApi = {
   apply: (id, execute = false) =>
     http.post(`/sandbox/scenario/${id}/apply`, {}, { params: { execute } }),
   autoRun: () => http.post('/sandbox/auto/run', {}, { timeout: 120000 }),
-  autoLatest: () => http.get('/sandbox/auto/latest')
+  autoLatest: () => http.get('/sandbox/auto/latest'),
+  policy: () => http.get('/sandbox/policy'),
+  savePolicy: (data) => http.put('/sandbox/policy', data)
 }
 export const costApi = {
   summary: (days = 30) => http.get('/cost/summary', { params: { days } }),

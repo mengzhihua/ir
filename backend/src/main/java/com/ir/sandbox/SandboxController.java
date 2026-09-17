@@ -1,11 +1,13 @@
 package com.ir.sandbox;
 
 import com.ir.action.CtAction;
+import com.ir.alert.AlertEngine;
 import com.ir.common.R;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,10 +21,18 @@ import java.util.Map;
 public class SandboxController {
     private final SandboxService service;
     private final AutoSandboxService autoSandbox;
+    private final BalancePolicy policy;
+    private final AlertEngine alerts;
 
-    public SandboxController(SandboxService service, AutoSandboxService autoSandbox) {
+    public SandboxController(
+            SandboxService service,
+            AutoSandboxService autoSandbox,
+            BalancePolicy policy,
+            AlertEngine alerts) {
         this.service = service;
         this.autoSandbox = autoSandbox;
+        this.policy = policy;
+        this.alerts = alerts;
     }
 
     @PostMapping("/baseline")
@@ -83,6 +93,35 @@ public class SandboxController {
     @GetMapping("/auto/latest")
     public R<Map<String, Object>> autoLatest() {
         return R.ok(autoSandbox.latest());
+    }
+
+    @GetMapping("/policy")
+    public R<Map<String, Object>> policy() {
+        return R.ok(policy.snapshot());
+    }
+
+    @PutMapping("/policy")
+    public R<Map<String, Object>> updatePolicy(@RequestBody Map<String, Object> request) {
+        java.math.BigDecimal cost = decimal(request.get("costWeight"), policy.costWeight());
+        java.math.BigDecimal efficiency = decimal(
+                request.get("efficiencyWeight"), policy.efficiencyWeight());
+        Map<String, Object> snapshot = policy.update(cost, efficiency);
+        if (truthy(request.get("reevaluate"))) {
+            snapshot.put("alerts", alerts.evaluate().size());
+        }
+        return R.ok(snapshot);
+    }
+
+    private java.math.BigDecimal decimal(Object value, java.math.BigDecimal fallback) {
+        if (value == null || String.valueOf(value).trim().isEmpty()) {
+            return fallback;
+        }
+        return new java.math.BigDecimal(String.valueOf(value));
+    }
+
+    private boolean truthy(Object value) {
+        return Boolean.TRUE.equals(value)
+                || "true".equalsIgnoreCase(String.valueOf(value));
     }
 
     private ScenarioParams toParams(Object value) {
