@@ -210,7 +210,7 @@ const stanceType = computed(() => {
   const stance = overview.policy?.stance
   if (stance === 'COST') return 'warning'
   if (stance === 'EFFICIENCY') return 'success'
-  return ''
+  return 'info'
 })
 const carrierSummary = computed(() => {
   const mix = overview.kpi?.carrierMix || {}
