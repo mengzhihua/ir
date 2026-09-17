@@ -11,6 +11,8 @@ import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSystemMapper;
 import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.OrderSnapshotMapper;
+import com.ir.snapshot.ExtSnapshot;
+import com.ir.snapshot.ExtSnapshotMapper;
 import com.ir.snapshot.ShipmentSnapshot;
 import com.ir.snapshot.ShipmentSnapshotMapper;
 import com.ir.snapshot.WmsOrderSnapshot;
@@ -34,6 +36,7 @@ public class ActionService {
     private final OrderSnapshotMapper orderMapper;
     private final WmsOrderSnapshotMapper wmsMapper;
     private final ShipmentSnapshotMapper shipmentMapper;
+    private final ExtSnapshotMapper extMapper;
     private final ClientFactory clients;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
@@ -44,6 +47,7 @@ public class ActionService {
             OrderSnapshotMapper orderMapper,
             WmsOrderSnapshotMapper wmsMapper,
             ShipmentSnapshotMapper shipmentMapper,
+            ExtSnapshotMapper extMapper,
             ClientFactory clients,
             CodeGenerator codes,
             ObjectMapper objectMapper) {
@@ -52,6 +56,7 @@ public class ActionService {
         this.orderMapper = orderMapper;
         this.wmsMapper = wmsMapper;
         this.shipmentMapper = shipmentMapper;
+        this.extMapper = extMapper;
         this.clients = clients;
         this.codes = codes;
         this.objectMapper = objectMapper;
@@ -117,7 +122,7 @@ public class ActionService {
             } else if ("TMS".equals(action.getTargetSystem())) {
                 clients.tms(system).execute(command);
             } else {
-                clients.srm(system).execute(command);
+                clients.ecosystem(system).execute(command);
             }
             mutateSnapshot(action, params);
             action.setStatus("SUCCESS");
@@ -180,7 +185,21 @@ public class ActionService {
                 type("TMS_SWITCH_CARRIER", "TMS", field("waybillId", "运单号", true),
                         field("carrierCode", "承运商编码", true)),
                 type("SRM_PURCHASE_SUGGEST", "SRM", field("sku", "SKU", true),
-                        field("qty", "建议数量", true)));
+                        field("qty", "建议数量", true)),
+                type("SRM_SUBMIT_PR", "SRM", field("code", "采购申请号", true)),
+                type("SRM_APPROVE_PR", "SRM", field("code", "采购申请号", true)),
+                type("SAP_CREATE_PR", "SAP", field("sku", "物料号", true),
+                        field("qty", "数量", true)),
+                type("SAP_RELEASE_PR", "SAP", field("banfn", "采购申请号", true)),
+                type("SAP_RELEASE_MO", "SAP", field("aufnr", "生产订单号", true)),
+                type("BOM_EXPLODE", "BOM", field("bomNo", "BOM 编号", true)),
+                type("INV_SUBMIT_REQUEST", "INV", field("requestNo", "开票申请号", true)),
+                type("INV_APPROVE_REQUEST", "INV", field("requestNo", "开票申请号", true)),
+                type("CRM_ADVANCE_STAGE", "CRM", field("opportunityId", "商机ID", true)),
+                type("CRM_ESCALATE_CASE", "CRM", field("caseNo", "工单号", true)),
+                type("DMS_REPLENISH_SHORTAGE", "DMS", field("dealerCode", "经销商编码", true)),
+                type("OA_START_WORKFLOW", "OA", field("targetKey", "业务单号", true),
+                        field("definitionCode", "流程编码", false)));
     }
 
     private void mutateSnapshot(CtAction action, Map<String, Object> params) {
@@ -212,6 +231,24 @@ public class ActionService {
             if (shipment != null && params.get("carrierCode") != null) {
                 shipment.setCarrierCode(String.valueOf(params.get("carrierCode")));
                 shipmentMapper.updateById(shipment);
+            }
+        } else if (action.getTargetSystem() != null
+                && ClientFactory.ecosystemCode(action.getTargetSystem())) {
+            ExtSnapshot snapshot = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
+                    .eq(ExtSnapshot::getSourceSystem, action.getTargetSystem())
+                    .eq(ExtSnapshot::getBizKey, action.getTargetKey())
+                    .last("LIMIT 1"));
+            if (snapshot != null) {
+                if (action.getType().contains("SUBMIT")) {
+                    snapshot.setStatus("SUBMITTED");
+                } else if (action.getType().contains("APPROVE") || action.getType().contains("RELEASE")) {
+                    snapshot.setStatus("RELEASED");
+                } else if (action.getType().contains("ESCALATE")) {
+                    snapshot.setStatus("ESCALATED");
+                } else if (action.getType().contains("ADVANCE")) {
+                    snapshot.setStatus("NEEDS_ANALYSIS");
+                }
+                extMapper.updateById(snapshot);
             }
         }
     }
@@ -247,6 +284,24 @@ public class ActionService {
         }
         if (type.startsWith("TMS_")) {
             return "TMS";
+        }
+        if (type.startsWith("SAP_")) {
+            return "SAP";
+        }
+        if (type.startsWith("BOM_")) {
+            return "BOM";
+        }
+        if (type.startsWith("INV_")) {
+            return "INV";
+        }
+        if (type.startsWith("CRM_")) {
+            return "CRM";
+        }
+        if (type.startsWith("DMS_")) {
+            return "DMS";
+        }
+        if (type.startsWith("OA_")) {
+            return "OA";
         }
         return "SRM";
     }

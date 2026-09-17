@@ -3,10 +3,10 @@ package com.ir.integration.sync;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ir.integration.client.BmsClient;
 import com.ir.integration.client.ClientFactory;
+import com.ir.integration.client.EcosystemClient;
 import com.ir.integration.client.IntegrationException;
 import com.ir.integration.client.OmsClient;
 import com.ir.common.WarehouseCodes;
-import com.ir.integration.client.SrmClient;
 import com.ir.integration.client.TmsClient;
 import com.ir.integration.client.WmsClient;
 import com.ir.integration.entity.CtSyncLog;
@@ -15,6 +15,8 @@ import com.ir.integration.mapper.CtSyncLogMapper;
 import com.ir.integration.mapper.CtSystemMapper;
 import com.ir.snapshot.CostRecord;
 import com.ir.snapshot.CostRecordMapper;
+import com.ir.snapshot.ExtSnapshot;
+import com.ir.snapshot.ExtSnapshotMapper;
 import com.ir.snapshot.InventorySnapshot;
 import com.ir.snapshot.InventorySnapshotMapper;
 import com.ir.snapshot.OrderSnapshot;
@@ -30,6 +32,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -47,6 +50,7 @@ public class SyncService {
     private final InventorySnapshotMapper inventoryMapper;
     private final SalesDailyMapper salesMapper;
     private final CostRecordMapper costMapper;
+    private final ExtSnapshotMapper extMapper;
     private final ClientFactory clients;
 
     public SyncService(
@@ -58,6 +62,7 @@ public class SyncService {
             InventorySnapshotMapper inventoryMapper,
             SalesDailyMapper salesMapper,
             CostRecordMapper costMapper,
+            ExtSnapshotMapper extMapper,
             ClientFactory clients) {
         this.systemMapper = systemMapper;
         this.syncLogMapper = syncLogMapper;
@@ -67,6 +72,7 @@ public class SyncService {
         this.inventoryMapper = inventoryMapper;
         this.salesMapper = salesMapper;
         this.costMapper = costMapper;
+        this.extMapper = extMapper;
         this.clients = clients;
     }
 
@@ -109,9 +115,9 @@ public class SyncService {
                 LocalDate to = LocalDate.now();
                 result.put("costs", persistCosts(
                         client.fetchCosts(to.minusDays(90), to), "BMS"));
-            } else if ("SRM".equals(code)) {
-                SrmClient client = clients.srm(system);
-                result.put("health", client.health());
+            } else if (ClientFactory.ecosystemCode(code)) {
+                EcosystemClient client = clients.ecosystem(system);
+                result.put("snapshots", persistExt(code, client.fetchSnapshots()));
             }
             system.setLastHealthAt(LocalDateTime.now());
             system.setLastHealthOk(true);
@@ -149,10 +155,10 @@ public class SyncService {
             ok = clients.wms(system).health();
         } else if ("TMS".equals(code)) {
             ok = clients.tms(system).health();
-        } else if ("SRM".equals(code)) {
-            ok = clients.srm(system).health();
-        } else {
+        } else if ("BMS".equals(code)) {
             ok = clients.bms(system).health();
+        } else {
+            ok = clients.ecosystem(system).health();
         }
         system.setLastHealthAt(LocalDateTime.now());
         system.setLastHealthOk(ok);
@@ -266,6 +272,60 @@ public class SyncService {
         }
         saveLog("OMS", "ORDER", "SUCCESS", rows.size(), "日销量同步完成");
         return rows.size();
+    }
+
+    private int persistExt(String systemCode, List<Map<String, Object>> rows) {
+        int count = 0;
+        for (Map<String, Object> raw : rows) {
+            String dataType = string(raw.get("dataType"));
+            String bizKey = string(raw.get("bizKey"));
+            if (dataType == null || bizKey == null) {
+                continue;
+            }
+            ExtSnapshot row = new ExtSnapshot();
+            row.setSourceSystem(systemCode);
+            row.setDataType(dataType);
+            row.setBizKey(bizKey);
+            row.setStatus(string(raw.get("status")));
+            row.setSku(string(raw.get("sku")));
+            row.setQty(decimal(raw.get("qty")));
+            row.setAmount(decimal(raw.get("amount")));
+            row.setPlantCode(string(raw.get("plantCode")));
+            row.setTitle(string(raw.get("title")));
+            row.setSyncedAt(LocalDateTime.now());
+            ExtSnapshot existing = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
+                    .eq(ExtSnapshot::getSourceSystem, systemCode)
+                    .eq(ExtSnapshot::getDataType, dataType)
+                    .eq(ExtSnapshot::getBizKey, bizKey));
+            if (existing == null) {
+                extMapper.insert(row);
+            } else {
+                row.setId(existing.getId());
+                extMapper.updateById(row);
+            }
+            count++;
+        }
+        saveLog(systemCode, "SNAPSHOT", "SUCCESS", count, "生态快照同步完成");
+        return count;
+    }
+
+    private static String string(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value);
+        return text.trim().isEmpty() || "null".equals(text) ? null : text;
+    }
+
+    private static BigDecimal decimal(Object value) {
+        if (value == null) {
+            return BigDecimal.ZERO;
+        }
+        try {
+            return new BigDecimal(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return BigDecimal.ZERO;
+        }
     }
 
     private int persistCosts(List<CostRecord> rows, String sourceSystem) {

@@ -9,6 +9,8 @@ import com.ir.sandbox.CtScenario;
 import com.ir.sandbox.SandboxService;
 import com.ir.snapshot.CostRecord;
 import com.ir.snapshot.CostRecordMapper;
+import com.ir.snapshot.ExtSnapshot;
+import com.ir.snapshot.ExtSnapshotMapper;
 import com.ir.snapshot.InventorySnapshot;
 import com.ir.snapshot.InventorySnapshotMapper;
 import com.ir.snapshot.OrderSnapshot;
@@ -37,6 +39,7 @@ public class TowerService {
     private final ShipmentSnapshotMapper shipments;
     private final InventorySnapshotMapper inventory;
     private final CostRecordMapper costs;
+    private final ExtSnapshotMapper extSnapshots;
     private final CtAlertMapper alerts;
     private final CtSystemMapper systems;
     private final SandboxService sandbox;
@@ -47,6 +50,7 @@ public class TowerService {
             ShipmentSnapshotMapper shipments,
             InventorySnapshotMapper inventory,
             CostRecordMapper costs,
+            ExtSnapshotMapper extSnapshots,
             CtAlertMapper alerts,
             CtSystemMapper systems,
             SandboxService sandbox) {
@@ -55,6 +59,7 @@ public class TowerService {
         this.shipments = shipments;
         this.inventory = inventory;
         this.costs = costs;
+        this.extSnapshots = extSnapshots;
         this.alerts = alerts;
         this.systems = systems;
         this.sandbox = sandbox;
@@ -145,6 +150,11 @@ public class TowerService {
         kpi.put("avgLeadTimeHours", leadCount == 0 ? BigDecimal.ZERO
                 : leadTotal.divide(BigDecimal.valueOf(leadCount), 2,
                         RoundingMode.HALF_UP));
+        kpi.put("sapLowStock", countExt("SAP", "STOCK", "LOW"));
+        kpi.put("srmOpenPr", countExt("SRM", "PR", "DRAFT"));
+        kpi.put("dmsShortage", countExt("DMS", "SHORTAGE", "SHORT"));
+        kpi.put("crmOpenCases", countExt("CRM", "CASE", "NEW"));
+        kpi.put("oaPendingTasks", countExt("OA", "WF_TASK", "PENDING"));
         result.put("kpi", kpi);
 
         Map<String, Object> funnel = new LinkedHashMap<>();
@@ -154,6 +164,7 @@ public class TowerService {
         result.put("funnel", funnel);
         result.put("costTrend", costTrend(from));
         result.put("warehouseLoad", warehouseLoad(orderRows, inventoryRows));
+        result.put("ecosystem", ecosystem());
         result.put("alertsTop", alerts.selectList(new LambdaQueryWrapper<CtAlert>()
                 .eq(CtAlert::getStatus, "OPEN")
                 .orderByDesc(CtAlert::getCreatedAt)
@@ -248,5 +259,25 @@ public class TowerService {
             result.add(row);
         }
         return result;
+    }
+
+    private Map<String, Object> ecosystem() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (String system : Arrays.asList("SAP", "SRM", "BOM", "INV", "CRM", "DMS", "OA")) {
+            Map<String, Integer> types = new LinkedHashMap<>();
+            for (ExtSnapshot row : extSnapshots.selectList(new LambdaQueryWrapper<ExtSnapshot>()
+                    .eq(ExtSnapshot::getSourceSystem, system))) {
+                types.put(row.getDataType(), types.getOrDefault(row.getDataType(), 0) + 1);
+            }
+            result.put(system, types);
+        }
+        return result;
+    }
+
+    private long countExt(String system, String dataType, String status) {
+        return extSnapshots.selectCount(new LambdaQueryWrapper<ExtSnapshot>()
+                .eq(ExtSnapshot::getSourceSystem, system)
+                .eq(ExtSnapshot::getDataType, dataType)
+                .eq(ExtSnapshot::getStatus, status));
     }
 }
