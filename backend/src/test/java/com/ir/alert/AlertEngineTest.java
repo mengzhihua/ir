@@ -128,6 +128,16 @@ class AlertEngineTest {
     }
 
     @Test
+    void wmsStuckSuggestsAllocateWhenBalanced() {
+        alertEngine.evaluate();
+        CtAlert stuck = alertMapper.selectList(null).stream()
+                .filter(a -> "WMS_STUCK".equals(a.getRuleCode()))
+                .findFirst().orElse(null);
+        org.junit.jupiter.api.Assertions.assertNotNull(stuck);
+        assertEquals("WMS_ALLOCATE", stuck.getSuggestedAction());
+    }
+
+    @Test
     void lowStockBalancedFansOutPurchaseAndReplenish() {
         alertEngine.evaluate();
         CtAlert low = alertMapper.selectList(null).stream()

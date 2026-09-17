@@ -17,7 +17,9 @@
       ><el-select v-model="filters.status" clearable placeholder="状态" @change="search"
         ><el-option label="待执行" value="PENDING" /><el-option
           label="成功"
-          value="SUCCESS" /><el-option label="失败" value="FAILED" /></el-select
+          value="SUCCESS" /><el-option label="失败" value="FAILED" /><el-option
+          label="已作废"
+          value="SUPERSEDED" /></el-select
       ><el-input
         v-model="filters.targetKey"
         clearable
@@ -31,7 +33,11 @@
         ><el-table-column prop="actionNo" label="指令号" width="180" /><el-table-column
           prop="type"
           label="类型"
-          width="180" /><el-table-column
+          width="180"
+          ><template #default="{ row }">{{
+            labelOf(row.type, actionTypeLabels)
+          }}</template></el-table-column
+        ><el-table-column
           prop="targetKey"
           label="目标对象"
           width="180" /><el-table-column prop="status" label="状态" width="100"
@@ -45,8 +51,14 @@
           label="创建时间"
           width="165"
           ><template #default="{ row }">{{ formatDate(row.createdAt) }}</template></el-table-column
-        ><el-table-column label="操作" width="100"
+        ><el-table-column label="操作" width="140"
           ><template #default="{ row }"
+            ><el-button
+              v-if="canWrite() && row.status === 'PENDING'"
+              link
+              type="primary"
+              @click="execute(row)"
+              >执行</el-button
             ><el-button
               v-if="canWrite() && row.status === 'FAILED'"
               link
@@ -99,7 +111,7 @@ import { ElMessage } from 'element-plus'
 import { actionApi } from '../api'
 import { canWrite } from '../auth'
 import { formatDate, pageResult } from '../utils/format'
-import { actionStatusLabels, labelOf, tagTypes } from '../utils/labels'
+import { actionStatusLabels, actionTypeLabels, labelOf, tagTypes } from '../utils/labels'
 const rows = ref([])
 const types = ref([])
 const loading = ref(false)
@@ -143,6 +155,11 @@ async function create() {
   await actionApi.create({ ...form })
   visible.value = false
   ElMessage.success('指令已创建')
+  load()
+}
+async function execute(row) {
+  await actionApi.execute(row.id)
+  ElMessage.success('已执行待办指令')
   load()
 }
 async function retry(row) {

@@ -31,6 +31,11 @@ public class ActionController {
         return R.ok(service.retry(id));
     }
 
+    @PostMapping("/{id}/execute")
+    public R<CtAction> execute(@PathVariable Long id) {
+        return R.ok(service.executePending(id));
+    }
+
     @GetMapping("/page")
     public R<Page<CtAction>> page(
             @org.springframework.web.bind.annotation.RequestParam(required = false)

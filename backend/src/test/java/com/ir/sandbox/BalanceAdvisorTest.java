@@ -2,6 +2,7 @@ package com.ir.sandbox;
 
 import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.ShipmentSnapshot;
+import com.ir.snapshot.WmsOrderSnapshot;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -108,6 +109,36 @@ class BalanceAdvisorTest {
         assertEquals(2, fast.size());
         assertEquals("WMS_REPLENISH", fast.get(1).getType());
         assertEquals("WH-SH", fast.get(1).getTargetKey());
+    }
+
+    @Test
+    void wmsStuckHoldsWhenCostLeadsAndAllocatesOtherwise() {
+        WmsOrderSnapshot outbound = new WmsOrderSnapshot();
+        outbound.setCode("SO-IR-STUCK");
+        outbound.setExternalNo("IR-SO-STUCK");
+        outbound.setWarehouseCode("WH-SH");
+        OrderSnapshot order = new OrderSnapshot();
+        order.setOrderNo("IR-SO-STUCK");
+        assertEquals("OMS_HOLD", new BalanceAdvisor(BigDecimal.valueOf(0.8), BigDecimal.valueOf(0.2))
+                .adviseWmsStuck(outbound, order).getType());
+        assertEquals("WMS_ALLOCATE", new BalanceAdvisor(BigDecimal.valueOf(0.2), BigDecimal.valueOf(0.8))
+                .adviseWmsStuck(outbound, order).getType());
+        assertEquals("WMS_ALLOCATE", new BalanceAdvisor(BigDecimal.valueOf(0.5), BigDecimal.valueOf(0.5))
+                .adviseWmsStuck(outbound, order).getType());
+    }
+
+    @Test
+    void opposingPendingDetectsRushVsHold() {
+        org.junit.jupiter.api.Assertions.assertTrue(
+                BalanceAdvisor.opposes("COST", "OMS_AUTO_PROCESS", null));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                BalanceAdvisor.opposes("COST", "TMS_SWITCH_CARRIER", "SF"));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                BalanceAdvisor.opposes("COST", "TMS_SWITCH_CARRIER", "SELF01"));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                BalanceAdvisor.opposes("EFFICIENCY", "OMS_HOLD", null));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                BalanceAdvisor.opposes("EFFICIENCY", "TMS_SWITCH_CARRIER", "SELF01"));
     }
 
     private ShipmentSnapshot waybill(

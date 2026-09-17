@@ -20,6 +20,7 @@ public class AutoSandboxService {
     private final SandboxService sandbox;
     private final CodeGenerator codes;
     private final BalancePolicy policy;
+    private final com.ir.action.ActionService actions;
 
     @Value("${ir.sandbox.auto-apply:false}")
     private boolean autoApply;
@@ -30,10 +31,15 @@ public class AutoSandboxService {
     @Value("${ir.sandbox.auto-enabled:true}")
     private boolean autoEnabled;
 
-    public AutoSandboxService(SandboxService sandbox, CodeGenerator codes, BalancePolicy policy) {
+    public AutoSandboxService(
+            SandboxService sandbox,
+            CodeGenerator codes,
+            BalancePolicy policy,
+            com.ir.action.ActionService actions) {
         this.sandbox = sandbox;
         this.codes = codes;
         this.policy = policy;
+        this.actions = actions;
     }
 
     public synchronized Map<String, Object> run() {
@@ -47,9 +53,10 @@ public class AutoSandboxService {
         CtScenario recommended = pickRecommended(rows);
         sandbox.markRecommended(rows, recommended == null ? null : recommended.getId());
 
-        List<CtAction> actions = new ArrayList<>();
+        List<CtAction> queued = new ArrayList<>();
         if (recommended != null && (autoApply || autoQueue)) {
-            actions.addAll(sandbox.apply(recommended.getId(), autoApply));
+            actions.supersedeOpposing(policy.stance());
+            queued.addAll(sandbox.apply(recommended.getId(), autoApply));
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -57,7 +64,7 @@ public class AutoSandboxService {
         result.putAll(policy.snapshot());
         result.put("recommended", recommended);
         result.put("scenarios", rows);
-        result.put("actions", actions);
+        result.put("actions", queued);
         result.put("autoQueue", autoQueue);
         result.put("autoApply", autoApply);
         return result;

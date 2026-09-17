@@ -17,6 +17,7 @@ import com.ir.snapshot.ShipmentSnapshot;
 import com.ir.snapshot.ShipmentSnapshotMapper;
 import com.ir.snapshot.WmsOrderSnapshot;
 import com.ir.snapshot.WmsOrderSnapshotMapper;
+import com.ir.sandbox.BalanceAdvisor;
 import com.ir.system.CurrentUser;
 import com.ir.system.User;
 import org.springframework.stereotype.Service;
@@ -64,6 +65,26 @@ public class ActionService {
 
     @Transactional
     public CtAction createAndExecute(Map<String, Object> request) {
+        String type = String.valueOf(request.get("type"));
+        String targetKey = String.valueOf(request.get("targetKey"));
+        supersedeRelatedPending(type, targetKey, null);
+        CtAction existing = findPending(type, targetKey);
+        Map<String, Object> params = paramsOf(request);
+        if (existing != null) {
+            existing.setParams(write(params));
+            if (request.get("alertId") != null) {
+                existing.setAlertId(Long.valueOf(String.valueOf(request.get("alertId"))));
+            }
+            try {
+                execute(existing, params);
+            } catch (Exception ex) {
+                existing.setStatus("FAILED");
+                existing.setResult(ex.getMessage());
+                existing.setExecutedAt(LocalDateTime.now());
+                actionMapper.updateById(existing);
+            }
+            return actionMapper.selectById(existing.getId());
+        }
         CtAction action = create(request);
         try {
             execute(action, read(action.getParamsJson()));
@@ -78,7 +99,43 @@ public class ActionService {
 
     @Transactional
     public CtAction createPending(Map<String, Object> request) {
+        String type = String.valueOf(request.get("type"));
+        String targetKey = String.valueOf(request.get("targetKey"));
+        supersedeRelatedPending(type, targetKey, null);
+        CtAction existing = findPending(type, targetKey);
+        if (existing != null) {
+            existing.setParams(write(paramsOf(request)));
+            existing.setExpectedSaving(decimal(request.get("expectedSaving")));
+            if (request.get("alertId") != null) {
+                existing.setAlertId(Long.valueOf(String.valueOf(request.get("alertId"))));
+            }
+            actionMapper.updateById(existing);
+            return existing;
+        }
         return create(request);
+    }
+
+    @Transactional
+    public CtAction executePending(Long id) {
+        CtAction action = actionMapper.selectById(id);
+        if (action == null || !"PENDING".equals(action.getStatus())) {
+            return action;
+        }
+        execute(action, read(action.getParamsJson()));
+        return actionMapper.selectById(action.getId());
+    }
+
+    @Transactional
+    public int supersedeOpposing(String stance) {
+        int count = 0;
+        for (CtAction action : actionMapper.selectList(new LambdaQueryWrapper<CtAction>()
+                .eq(CtAction::getStatus, "PENDING"))) {
+            if (BalanceAdvisor.opposes(stance, action.getType(), carrierOf(action))) {
+                markSuperseded(action, "立场改为 " + stance + "，作废冲突待办");
+                count++;
+            }
+        }
+        return count;
     }
 
     private CtAction create(Map<String, Object> request) {
@@ -288,6 +345,61 @@ public class ActionService {
                 extMapper.updateById(snapshot);
             }
         }
+    }
+
+    private Map<String, Object> paramsOf(Map<String, Object> request) {
+        return request.get("params") instanceof Map
+                ? objectMapper.convertValue(request.get("params"),
+                new TypeReference<Map<String, Object>>() {
+                })
+                : new LinkedHashMap<>();
+    }
+
+    private CtAction findPending(String type, String targetKey) {
+        return actionMapper.selectOne(new LambdaQueryWrapper<CtAction>()
+                .eq(CtAction::getStatus, "PENDING")
+                .eq(CtAction::getType, type)
+                .eq(CtAction::getTargetKey, targetKey)
+                .orderByDesc(CtAction::getId)
+                .last("LIMIT 1"));
+    }
+
+    private void supersedeRelatedPending(String type, String targetKey, Long keepId) {
+        if (targetKey == null) {
+            return;
+        }
+        for (CtAction row : actionMapper.selectList(new LambdaQueryWrapper<CtAction>()
+                .eq(CtAction::getStatus, "PENDING")
+                .eq(CtAction::getTargetKey, targetKey))) {
+            if (keepId != null && keepId.equals(row.getId())) {
+                continue;
+            }
+            if (type.equals(row.getType())) {
+                continue;
+            }
+            if (omsStance(type) && omsStance(row.getType())) {
+                markSuperseded(row, "同订单已改为 " + type);
+            }
+        }
+    }
+
+    private boolean omsStance(String type) {
+        return "OMS_HOLD".equals(type)
+                || "OMS_PRIORITIZE".equals(type)
+                || "OMS_AUTO_PROCESS".equals(type);
+    }
+
+    private void markSuperseded(CtAction action, String result) {
+        action.setStatus("SUPERSEDED");
+        action.setResult(result);
+        action.setExecutedAt(LocalDateTime.now());
+        actionMapper.updateById(action);
+    }
+
+    private String carrierOf(CtAction action) {
+        Map<String, Object> params = read(action.getParamsJson());
+        Object value = params.get("carrierCode");
+        return value == null ? null : String.valueOf(value);
     }
 
     private Map<String, Object> type(

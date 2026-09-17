@@ -23,16 +23,19 @@ public class SandboxController {
     private final AutoSandboxService autoSandbox;
     private final BalancePolicy policy;
     private final AlertEngine alerts;
+    private final com.ir.action.ActionService actions;
 
     public SandboxController(
             SandboxService service,
             AutoSandboxService autoSandbox,
             BalancePolicy policy,
-            AlertEngine alerts) {
+            AlertEngine alerts,
+            com.ir.action.ActionService actions) {
         this.service = service;
         this.autoSandbox = autoSandbox;
         this.policy = policy;
         this.alerts = alerts;
+        this.actions = actions;
     }
 
     @PostMapping("/baseline")
@@ -70,7 +73,10 @@ public class SandboxController {
 
     @GetMapping("/defaults")
     public R<ScenarioParams> defaults() {
-        return R.ok(new ScenarioParams());
+        ScenarioParams params = new ScenarioParams();
+        params.setCostWeight(policy.costWeight());
+        params.setEfficiencyWeight(policy.efficiencyWeight());
+        return R.ok(params);
     }
 
     @GetMapping("/compare")
@@ -106,6 +112,7 @@ public class SandboxController {
         java.math.BigDecimal efficiency = decimal(
                 request.get("efficiencyWeight"), policy.efficiencyWeight());
         Map<String, Object> snapshot = policy.update(cost, efficiency);
+        snapshot.put("superseded", actions.supersedeOpposing(policy.stance()));
         if (truthy(request.get("reevaluate"))) {
             snapshot.put("alerts", alerts.evaluate().size());
         }
