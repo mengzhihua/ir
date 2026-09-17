@@ -15,7 +15,7 @@
         ><el-option label="WH-SH" value="WH-SH" /><el-option
           label="WH-BJ"
           value="WH-BJ" /><el-option label="WH-GZ" value="WH-GZ" /></el-select
-      ><el-button type="primary" @click="load">查询</el-button
+      ><el-button type="primary" @click="search">查询</el-button
       ><el-button v-if="canWrite() && selected.length" type="primary" @click="batchAction"
         >批量转指令</el-button
       >
@@ -50,6 +50,7 @@
           :total="pager.total"
           layout="total, prev, pager, next"
           @current-change="load"
+          @size-change="resize"
         />
       </div>
     </div>
@@ -78,7 +79,6 @@ import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { forecastApi } from '../api'
 import { canWrite } from '../auth'
-import { pageResult } from '../utils/format'
 const filters = reactive({ sku: '', warehouseCode: '' })
 const pager = reactive({ current: 1, size: 20, total: 0 })
 const rows = ref([])
@@ -90,12 +90,31 @@ const currentRows = ref([])
 async function load() {
   loading.value = true
   try {
-    const page = pageResult(await forecastApi.replenish({ ...filters, ...pager }))
-    rows.value = page.records
-    pager.total = page.total
+    const data = await forecastApi.replenish({
+      warehouseCode: filters.warehouseCode || undefined,
+      horizon: 14,
+      serviceDays: 3
+    })
+    const list = Array.isArray(data) ? data : data?.records || []
+    const keyword = (filters.sku || '').trim()
+    const filtered = keyword
+      ? list.filter((row) => String(row.sku || '').includes(keyword))
+      : list
+    pager.total = filtered.length
+    const start = (pager.current - 1) * pager.size
+    rows.value = filtered.slice(start, start + pager.size)
   } finally {
     loading.value = false
   }
+}
+function search() {
+  pager.current = 1
+  load()
+}
+function resize(size) {
+  pager.size = size
+  pager.current = 1
+  load()
 }
 function toAction(row) {
   currentRows.value = [row]
