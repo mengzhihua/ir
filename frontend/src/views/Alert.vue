@@ -154,7 +154,7 @@ async function operate(row, action) {
 async function suggest(row) {
   await ElMessageBox.confirm('确认执行建议指令吗？', '操作确认')
   await alertApi.action(row.id)
-  ElMessage.success('建议指令已执行')
+  ElMessage.success('建议指令已执行（含跨系统协同）')
   load()
 }
 load()

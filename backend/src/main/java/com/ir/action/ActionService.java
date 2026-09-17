@@ -37,6 +37,7 @@ public class ActionService {
     private final WmsOrderSnapshotMapper wmsMapper;
     private final ShipmentSnapshotMapper shipmentMapper;
     private final ExtSnapshotMapper extMapper;
+    private final ActionEnricher enricher;
     private final ClientFactory clients;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
@@ -48,6 +49,7 @@ public class ActionService {
             WmsOrderSnapshotMapper wmsMapper,
             ShipmentSnapshotMapper shipmentMapper,
             ExtSnapshotMapper extMapper,
+            ActionEnricher enricher,
             ClientFactory clients,
             CodeGenerator codes,
             ObjectMapper objectMapper) {
@@ -57,6 +59,7 @@ public class ActionService {
         this.wmsMapper = wmsMapper;
         this.shipmentMapper = shipmentMapper;
         this.extMapper = extMapper;
+        this.enricher = enricher;
         this.clients = clients;
         this.codes = codes;
         this.objectMapper = objectMapper;
@@ -82,6 +85,7 @@ public class ActionService {
     }
 
     private CtAction create(Map<String, Object> request) {
+        request = enricher.enrich(request);
         String type = String.valueOf(request.get("type"));
         String targetKey = String.valueOf(request.get("targetKey"));
         Map<String, Object> params = request.get("params") instanceof Map
@@ -170,35 +174,35 @@ public class ActionService {
 
     public List<Map<String, Object>> types() {
         return Arrays.asList(
-                type("OMS_REROUTE_WAREHOUSE", "OMS", field("orderNo", "订单号", true),
+                type("OMS_REROUTE_WAREHOUSE", "OMS", "OMS改仓", field("orderNo", "订单号", true),
                         field("warehouseCode", "仓库编码", true)),
-                type("OMS_HOLD", "OMS", field("orderNo", "订单号", true)),
-                type("OMS_UNHOLD", "OMS", field("orderNo", "订单号", true)),
-                type("OMS_PRIORITIZE", "OMS", field("orderNo", "订单号", true),
+                type("OMS_HOLD", "OMS", "OMS挂起", field("orderNo", "订单号", true)),
+                type("OMS_UNHOLD", "OMS", "OMS解挂", field("orderNo", "订单号", true)),
+                type("OMS_PRIORITIZE", "OMS", "OMS加急", field("orderNo", "订单号", true),
                         field("priority", "优先级", true)),
-                type("OMS_AUTO_PROCESS", "OMS", field("orderNo", "订单号", true)),
-                type("OMS_CANCEL", "OMS", field("orderNo", "订单号", true)),
-                type("WMS_ALLOCATE", "WMS", field("orderCode", "出库单号", true)),
-                type("WMS_REPLENISH", "WMS", field("warehouseCode", "仓库编码", true)),
-                type("TMS_DISPATCH", "TMS", field("waybillId", "运单号", true)),
-                type("TMS_SYNC_TRACK", "TMS", field("waybillId", "运单号", true)),
-                type("TMS_SWITCH_CARRIER", "TMS", field("waybillId", "运单号", true),
+                type("OMS_AUTO_PROCESS", "OMS", "OMS自动处理", field("orderNo", "订单号", true)),
+                type("OMS_CANCEL", "OMS", "OMS取消", field("orderNo", "订单号", true)),
+                type("WMS_ALLOCATE", "WMS", "WMS分配", field("orderCode", "出库单号", true)),
+                type("WMS_REPLENISH", "WMS", "WMS仓内补货", field("warehouseCode", "仓库编码", true)),
+                type("TMS_DISPATCH", "TMS", "TMS调度", field("waybillId", "运单号", true)),
+                type("TMS_SYNC_TRACK", "TMS", "TMS同步轨迹", field("waybillId", "运单号", true)),
+                type("TMS_SWITCH_CARRIER", "TMS", "TMS换承运商", field("waybillId", "运单号", true),
                         field("carrierCode", "承运商编码", true)),
-                type("SRM_PURCHASE_SUGGEST", "SRM", field("sku", "SKU", true),
+                type("SRM_PURCHASE_SUGGEST", "SRM", "SRM采购建议", field("sku", "SKU", true),
                         field("qty", "建议数量", true)),
-                type("SRM_SUBMIT_PR", "SRM", field("code", "采购申请号", true)),
-                type("SRM_APPROVE_PR", "SRM", field("code", "采购申请号", true)),
-                type("SAP_CREATE_PR", "SAP", field("sku", "物料号", true),
+                type("SRM_SUBMIT_PR", "SRM", "SRM提交采购申请", field("code", "采购申请号", true)),
+                type("SRM_APPROVE_PR", "SRM", "SRM审批采购申请", field("code", "采购申请号", true)),
+                type("SAP_CREATE_PR", "SAP", "SAP创建采购申请", field("sku", "物料号", true),
                         field("qty", "数量", true)),
-                type("SAP_RELEASE_PR", "SAP", field("banfn", "采购申请号", true)),
-                type("SAP_RELEASE_MO", "SAP", field("aufnr", "生产订单号", true)),
-                type("BOM_EXPLODE", "BOM", field("bomNo", "BOM 编号", true)),
-                type("INV_SUBMIT_REQUEST", "INV", field("requestNo", "开票申请号", true)),
-                type("INV_APPROVE_REQUEST", "INV", field("requestNo", "开票申请号", true)),
-                type("CRM_ADVANCE_STAGE", "CRM", field("opportunityId", "商机ID", true)),
-                type("CRM_ESCALATE_CASE", "CRM", field("caseNo", "工单号", true)),
-                type("DMS_REPLENISH_SHORTAGE", "DMS", field("dealerCode", "经销商编码", true)),
-                type("OA_START_WORKFLOW", "OA", field("targetKey", "业务单号", true),
+                type("SAP_RELEASE_PR", "SAP", "SAP释放采购申请", field("banfn", "采购申请号", true)),
+                type("SAP_RELEASE_MO", "SAP", "SAP释放生产订单", field("aufnr", "生产订单号", true)),
+                type("BOM_EXPLODE", "BOM", "BOM展开", field("bomNo", "BOM 编号", true)),
+                type("INV_SUBMIT_REQUEST", "INV", "INV提交开票", field("requestNo", "开票申请号", true)),
+                type("INV_APPROVE_REQUEST", "INV", "INV审核开票", field("requestNo", "开票申请号", true)),
+                type("CRM_ADVANCE_STAGE", "CRM", "CRM推进商机", field("opportunityId", "商机ID", true)),
+                type("CRM_ESCALATE_CASE", "CRM", "CRM升级工单", field("caseNo", "工单号", true)),
+                type("DMS_REPLENISH_SHORTAGE", "DMS", "DMS缺货补货", field("dealerCode", "经销商编码", true)),
+                type("OA_START_WORKFLOW", "OA", "OA发起审批", field("targetKey", "业务单号", true),
                         field("definitionCode", "流程编码", false)));
     }
 
@@ -234,32 +238,90 @@ public class ActionService {
             }
         } else if (action.getTargetSystem() != null
                 && ClientFactory.ecosystemCode(action.getTargetSystem())) {
-            ExtSnapshot snapshot = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
-                    .eq(ExtSnapshot::getSourceSystem, action.getTargetSystem())
-                    .eq(ExtSnapshot::getBizKey, action.getTargetKey())
-                    .last("LIMIT 1"));
-            if (snapshot != null) {
-                if (action.getType().contains("SUBMIT")) {
-                    snapshot.setStatus("SUBMITTED");
-                } else if (action.getType().contains("APPROVE") || action.getType().contains("RELEASE")) {
-                    snapshot.setStatus("RELEASED");
-                } else if (action.getType().contains("ESCALATE")) {
-                    snapshot.setStatus("ESCALATED");
-                } else if (action.getType().contains("ADVANCE")) {
-                    snapshot.setStatus("NEEDS_ANALYSIS");
-                }
-                extMapper.updateById(snapshot);
-            }
+            mutateExt(action, params);
         }
+    }
+
+    private void mutateExt(CtAction action, Map<String, Object> params) {
+        ExtSnapshot snapshot = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
+                .eq(ExtSnapshot::getSourceSystem, action.getTargetSystem())
+                .eq(ExtSnapshot::getBizKey, action.getTargetKey())
+                .last("LIMIT 1"));
+        if (snapshot == null && params.get("sku") != null) {
+            snapshot = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
+                    .eq(ExtSnapshot::getSourceSystem, action.getTargetSystem())
+                    .eq(ExtSnapshot::getSku, String.valueOf(params.get("sku")))
+                    .last("LIMIT 1"));
+        }
+        if ("SAP_CREATE_PR".equals(action.getType())
+                || "SRM_PURCHASE_SUGGEST".equals(action.getType())
+                || "OA_START_WORKFLOW".equals(action.getType())
+                || "DMS_REPLENISH_SHORTAGE".equals(action.getType())) {
+            ExtSnapshot created = new ExtSnapshot();
+            created.setSourceSystem(action.getTargetSystem());
+            created.setDataType(createdType(action.getType()));
+            created.setBizKey(action.getActionNo());
+            created.setStatus(createdStatus(action.getType()));
+            created.setSku(params.get("sku") == null ? action.getTargetKey()
+                    : String.valueOf(params.get("sku")));
+            created.setQty(decimal(params.get("qty") != null ? params.get("qty") : params.get("suggestQty")));
+            created.setPlantCode(params.get("plantCode") == null ? null
+                    : String.valueOf(params.get("plantCode")));
+            created.setTitle(action.getType() + " " + action.getTargetKey());
+            created.setSyncedAt(LocalDateTime.now());
+            extMapper.insert(created);
+            return;
+        }
+        if (snapshot == null) {
+            return;
+        }
+        if (action.getType().contains("SUBMIT")) {
+            snapshot.setStatus("SUBMITTED");
+        } else if (action.getType().contains("APPROVE") || action.getType().contains("RELEASE")) {
+            snapshot.setStatus("RELEASED");
+        } else if (action.getType().contains("ESCALATE")) {
+            snapshot.setStatus("ESCALATED");
+        } else if (action.getType().contains("ADVANCE")) {
+            snapshot.setStatus("NEEDS_ANALYSIS");
+        }
+        extMapper.updateById(snapshot);
+    }
+
+    private static String createdType(String type) {
+        if ("SAP_CREATE_PR".equals(type) || "SRM_PURCHASE_SUGGEST".equals(type)) {
+            return "PR";
+        }
+        if ("OA_START_WORKFLOW".equals(type)) {
+            return "WF_INSTANCE";
+        }
+        if ("DMS_REPLENISH_SHORTAGE".equals(type)) {
+            return "REPLENISH";
+        }
+        return "ACTION";
+    }
+
+    private static String createdStatus(String type) {
+        if ("SRM_PURCHASE_SUGGEST".equals(type)) {
+            return "DRAFT";
+        }
+        if ("SAP_CREATE_PR".equals(type)) {
+            return "CREATED";
+        }
+        if ("OA_START_WORKFLOW".equals(type)) {
+            return "RUNNING";
+        }
+        return "DRAFT";
     }
 
     private Map<String, Object> type(
             String name,
             String system,
+            String label,
             Map<String, Object>... params) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("type", name);
         result.put("targetSystem", system);
+        result.put("label", label);
         result.put("params", Arrays.asList(params));
         return result;
     }

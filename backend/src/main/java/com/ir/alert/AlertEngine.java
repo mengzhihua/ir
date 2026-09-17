@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ir.action.ActionService;
+import com.ir.action.CoordinationService;
 import com.ir.action.CtAction;
 import com.ir.forecast.ForecastService;
 import com.ir.snapshot.CostRecord;
@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +40,7 @@ public class AlertEngine {
     private final ShipmentSnapshotMapper shipmentMapper;
     private final InventorySnapshotMapper inventoryMapper;
     private final ExtSnapshotMapper extMapper;
-    private final ActionService actions;
+    private final CoordinationService coordination;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
     private final CostRecordMapper costMapper;
@@ -53,7 +54,7 @@ public class AlertEngine {
             ShipmentSnapshotMapper shipmentMapper,
             InventorySnapshotMapper inventoryMapper,
             ExtSnapshotMapper extMapper,
-            ActionService actions,
+            CoordinationService coordination,
             CodeGenerator codes,
             ObjectMapper objectMapper,
             CostRecordMapper costMapper,
@@ -65,7 +66,7 @@ public class AlertEngine {
         this.shipmentMapper = shipmentMapper;
         this.inventoryMapper = inventoryMapper;
         this.extMapper = extMapper;
-        this.actions = actions;
+        this.coordination = coordination;
         this.codes = codes;
         this.objectMapper = objectMapper;
         this.costMapper = costMapper;
@@ -137,22 +138,29 @@ public class AlertEngine {
         return alert;
     }
 
-    public CtAction executeSuggested(Long id) {
+    public List<CtAction> executeSuggested(Long id) {
         CtAlert alert = alertMapper.selectById(id);
         if (alert == null) {
-            return null;
+            return new ArrayList<CtAction>();
         }
         if (alert.getSuggestedAction() == null || alert.getSuggestedAction().trim().isEmpty()) {
-            return null;
+            return new ArrayList<CtAction>();
         }
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("type", alert.getSuggestedAction());
         request.put("targetKey", alert.getTargetKey());
         request.put("alertId", id);
-        CtAction action = actions.createAndExecute(request);
-        alert.setActionId(action.getId());
-        alertMapper.updateById(alert);
-        return action;
+        if (alert.getWarehouseCode() != null) {
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("warehouseCode", alert.getWarehouseCode());
+            request.put("params", params);
+        }
+        List<CtAction> created = coordination.dispatch(request, true);
+        if (!created.isEmpty()) {
+            alert.setActionId(created.get(0).getId());
+            alertMapper.updateById(alert);
+        }
+        return created;
     }
 
     private void evaluateOrders(CtRule rule, Map<String, Object> params, LocalDateTime now) {

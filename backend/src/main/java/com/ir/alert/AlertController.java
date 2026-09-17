@@ -66,7 +66,7 @@ public class AlertController {
     }
 
     @PostMapping("/{id}/execute-suggested")
-    public R<CtAction> executeSuggested(@PathVariable Long id) {
+    public R<List<CtAction>> executeSuggested(@PathVariable Long id) {
         return R.ok(engine.executeSuggested(id));
     }
 

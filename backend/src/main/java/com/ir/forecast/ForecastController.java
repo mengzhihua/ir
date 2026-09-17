@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -55,8 +56,27 @@ public class ForecastController {
     }
 
     @PostMapping("/replenish/to-action")
-    public R<List<CtAction>> toAction(
-            @RequestBody List<Map<String, Object>> rows) {
+    @SuppressWarnings("unchecked")
+    public R<List<CtAction>> toAction(@RequestBody Object body) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        if (body instanceof List) {
+            for (Object item : (List<?>) body) {
+                if (item instanceof Map) {
+                    rows.add((Map<String, Object>) item);
+                }
+            }
+        } else if (body instanceof Map) {
+            Map<String, Object> map = (Map<String, Object>) body;
+            if (map.get("rows") instanceof List) {
+                for (Object item : (List<?>) map.get("rows")) {
+                    if (item instanceof Map) {
+                        rows.add((Map<String, Object>) item);
+                    }
+                }
+            } else {
+                rows.add(map);
+            }
+        }
         return R.ok(service.toActions(rows));
     }
 

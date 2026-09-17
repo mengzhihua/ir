@@ -3,7 +3,7 @@ package com.ir.sandbox;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ir.action.ActionService;
+import com.ir.action.CoordinationService;
 import com.ir.action.CtAction;
 import com.ir.common.CodeGenerator;
 import com.ir.snapshot.InventorySnapshotMapper;
@@ -31,7 +31,7 @@ public class SandboxService {
     private final OrderSnapshotMapper orderMapper;
     private final ShipmentSnapshotMapper shipmentMapper;
     private final SandboxEngine engine;
-    private final ActionService actions;
+    private final CoordinationService coordination;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
 
@@ -42,7 +42,7 @@ public class SandboxService {
             OrderSnapshotMapper orderMapper,
             ShipmentSnapshotMapper shipmentMapper,
             SandboxEngine engine,
-            ActionService actions,
+            CoordinationService coordination,
             CodeGenerator codes,
             ObjectMapper objectMapper) {
         this.scenarioMapper = scenarioMapper;
@@ -51,7 +51,7 @@ public class SandboxService {
         this.orderMapper = orderMapper;
         this.shipmentMapper = shipmentMapper;
         this.engine = engine;
-        this.actions = actions;
+        this.coordination = coordination;
         this.codes = codes;
         this.objectMapper = objectMapper;
     }
@@ -195,9 +195,10 @@ public class SandboxService {
                     continue;
                 }
                 String sku = String.valueOf(summary.get("sku"));
-                result.add(dispatch("SRM_PURCHASE_SUGGEST", sku,
-                        map("sku", sku, "qty", stockout, "suggestQty", stockout),
-                        expected, execute));
+                String warehouse = summary.get("warehouse") == null
+                        ? targetWarehouse : String.valueOf(summary.get("warehouse"));
+                result.addAll(coordination.replenish(
+                        sku, stockout, warehouse, expected, execute, null));
             }
         }
         return result;
@@ -334,7 +335,8 @@ public class SandboxService {
         request.put("targetKey", targetKey);
         request.put("params", params);
         request.put("expectedSaving", expectedSaving);
-        return execute ? actions.createAndExecute(request) : actions.createPending(request);
+        return execute ? coordination.dispatch(request, true).get(0)
+                : coordination.dispatch(request, false).get(0);
     }
 
     private List<OrderSnapshot> pendingOrders() {

@@ -31,7 +31,10 @@
         ><el-table-column prop="actionNo" label="指令号" width="180" /><el-table-column
           prop="type"
           label="类型"
-          width="180" /><el-table-column
+          width="200" /><el-table-column
+          prop="targetSystem"
+          label="系统"
+          width="90" /><el-table-column
           prop="targetKey"
           label="目标对象"
           width="180" /><el-table-column prop="status" label="状态" width="100"

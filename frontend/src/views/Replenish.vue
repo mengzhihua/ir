@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h2>补货建议</h2>
-        <p class="subtitle">将预测缺口转换为采购或仓内补货指令</p>
+        <p class="subtitle">将预测缺口同时转成 SRM 采购、SAP 申请、OA 审批和仓内补货</p>
       </div>
       <el-button @click="load">刷新</el-button>
     </div>
@@ -27,11 +27,14 @@
           label="SKU" /><el-table-column prop="warehouseCode" label="仓库" /><el-table-column
           prop="stockoutDate"
           label="预计缺货日期" /><el-table-column
-          prop="suggestedQty"
+          prop="suggestQty"
           label="建议数量"
           align="right" /><el-table-column
-          prop="serviceDays"
-          label="保障天数"
+          prop="available"
+          label="可用库存"
+          align="right" /><el-table-column
+          prop="safety"
+          label="安全库存"
           align="right" /><el-table-column label="操作"
           ><template #default="{ row }"
             ><el-button v-if="canWrite()" link type="primary" @click="toAction(row)"
@@ -54,7 +57,13 @@
       ><el-form label-width="110px"
         ><el-form-item label="指令类型"
           ><el-select v-model="actionType"
-            ><el-option label="SRM采购建议" value="SRM_PURCHASE_SUGGEST" /><el-option
+            ><el-option label="跨系统协同补货（SRM+SAP+OA+WMS）" value="COORDINATE_REPLENISH" /><el-option
+              label="SRM采购建议"
+              value="SRM_PURCHASE_SUGGEST" /><el-option
+              label="SAP创建采购申请"
+              value="SAP_CREATE_PR" /><el-option
+              label="OA发起审批"
+              value="OA_START_WORKFLOW" /><el-option
               label="WMS仓内补货"
               value="WMS_REPLENISH" /></el-select></el-form-item></el-form
       ><template #footer
@@ -76,7 +85,7 @@ const rows = ref([])
 const selected = ref([])
 const loading = ref(false)
 const visible = ref(false)
-const actionType = ref('SRM_PURCHASE_SUGGEST')
+const actionType = ref('COORDINATE_REPLENISH')
 const currentRows = ref([])
 async function load() {
   loading.value = true
@@ -100,7 +109,7 @@ async function submitAction() {
   for (const row of currentRows.value)
     await forecastApi.toAction({ ...row, type: actionType.value })
   visible.value = false
-  ElMessage.success('已生成待执行指令')
+  ElMessage.success('已生成跨系统协同指令')
 }
 load()
 </script>

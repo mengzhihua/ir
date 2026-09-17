@@ -8,6 +8,8 @@ import com.ir.alert.CtAlert;
 import com.ir.alert.CtAlertMapper;
 import com.ir.snapshot.CostRecord;
 import com.ir.snapshot.CostRecordMapper;
+import com.ir.snapshot.ExtSnapshot;
+import com.ir.snapshot.ExtSnapshotMapper;
 import com.ir.snapshot.OrderSnapshot;
 import com.ir.snapshot.OrderSnapshotMapper;
 import com.ir.snapshot.ShipmentSnapshot;
@@ -31,6 +33,7 @@ public class TraceService {
     private final WmsOrderSnapshotMapper wmsMapper;
     private final ShipmentSnapshotMapper shipmentMapper;
     private final CostRecordMapper costMapper;
+    private final ExtSnapshotMapper extMapper;
     private final CtAlertMapper alertMapper;
     private final CtActionMapper actionMapper;
 
@@ -39,12 +42,14 @@ public class TraceService {
             WmsOrderSnapshotMapper wmsMapper,
             ShipmentSnapshotMapper shipmentMapper,
             CostRecordMapper costMapper,
+            ExtSnapshotMapper extMapper,
             CtAlertMapper alertMapper,
             CtActionMapper actionMapper) {
         this.orderMapper = orderMapper;
         this.wmsMapper = wmsMapper;
         this.shipmentMapper = shipmentMapper;
         this.costMapper = costMapper;
+        this.extMapper = extMapper;
         this.alertMapper = alertMapper;
         this.actionMapper = actionMapper;
     }
@@ -97,16 +102,18 @@ public class TraceService {
         }
         WmsOrderSnapshot wms = wms(orderNo);
         ShipmentSnapshot shipment = shipment(orderNo);
+        List<ExtSnapshot> related = relatedExt(orderNo);
         Map<String, Object> result = row(
                 order, wms, shipment, stuckHours(order, wms, shipment));
-        result.put("timeline", timeline(order, wms, shipment));
+        result.put("timeline", timeline(order, wms, shipment, related));
         result.put("costs", costMapper.selectList(new LambdaQueryWrapper<CostRecord>()
                 .eq(CostRecord::getOrderNo, orderNo)
                 .orderByAsc(CostRecord::getBizDate)));
         result.put("alerts", alertMapper.selectList(new LambdaQueryWrapper<CtAlert>()
                 .eq(CtAlert::getTargetKey, orderNo)));
-        result.put("actions", actionMapper.selectList(new LambdaQueryWrapper<CtAction>()
-                .eq(CtAction::getTargetKey, orderNo)));
+        result.put("actions", relatedActions(orderNo, related));
+        result.put("ecosystem", related);
+        result.put("supplyRisks", supplyRisks());
         return result;
     }
 
@@ -134,7 +141,8 @@ public class TraceService {
     private List<Map<String, Object>> timeline(
             OrderSnapshot order,
             WmsOrderSnapshot wms,
-            ShipmentSnapshot shipment) {
+            ShipmentSnapshot shipment,
+            List<ExtSnapshot> related) {
         List<Map<String, Object>> result = new ArrayList<>();
         result.add(node("OMS", "ORDER", order.getOrderTime(),
                 order.getStatus(), order.getOrderNo()));
@@ -148,6 +156,41 @@ public class TraceService {
                     : shipment.getActualArriveTime();
             result.add(node("TMS", "WAYBILL", time,
                     shipment.getStatus(), shipment.getWaybillCode()));
+        }
+        for (ExtSnapshot row : related) {
+            result.add(node(row.getSourceSystem(), row.getDataType(), row.getSyncedAt(),
+                    row.getStatus(), row.getBizKey() + " " + (row.getTitle() == null ? "" : row.getTitle())));
+        }
+        return result;
+    }
+
+    private List<ExtSnapshot> relatedExt(String orderNo) {
+        List<ExtSnapshot> result = new ArrayList<>();
+        for (ExtSnapshot row : extMapper.selectList(null)) {
+            if (orderNo.equals(row.getBizKey())
+                    || orderNo.equals(row.getSku())
+                    || (row.getTitle() != null && row.getTitle().contains(orderNo))) {
+                result.add(row);
+            }
+        }
+        return result;
+    }
+
+    private List<ExtSnapshot> supplyRisks() {
+        return extMapper.selectList(new LambdaQueryWrapper<ExtSnapshot>()
+                .in(ExtSnapshot::getStatus, Arrays.asList("LOW", "SHORT", "DRAFT", "CREATED", "PENDING", "NEW"))
+                .orderByDesc(ExtSnapshot::getId)
+                .last("LIMIT 20"));
+    }
+
+    private List<CtAction> relatedActions(String orderNo, List<ExtSnapshot> related) {
+        List<CtAction> result = new ArrayList<>(actionMapper.selectList(
+                new LambdaQueryWrapper<CtAction>().eq(CtAction::getTargetKey, orderNo)));
+        for (ExtSnapshot row : related) {
+            for (CtAction action : actionMapper.selectList(new LambdaQueryWrapper<CtAction>()
+                    .eq(CtAction::getTargetKey, row.getBizKey()))) {
+                result.add(action);
+            }
         }
         return result;
     }

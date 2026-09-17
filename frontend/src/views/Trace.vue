@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h2>订单全链路追踪</h2>
-        <p class="subtitle">从 OMS 下单到 WMS 出库、TMS 运输和成本核算的完整视图</p>
+        <p class="subtitle">从 OMS 下单到 WMS 出库、TMS 运输，并带上 SAP / SRM / OA 等供应侧单据</p>
       </div>
       <el-button :icon="Refresh" @click="load">刷新</el-button>
     </div>
@@ -112,7 +112,7 @@
           }}</el-descriptions-item>
         </el-descriptions>
         <div class="drawer-section">
-          <h4>OMS → WMS → TMS → 成本时间线</h4>
+          <h4>OMS → WMS → TMS → 生态时间线</h4>
           <el-timeline>
             <el-timeline-item
               v-for="node in detail.timeline || []"
@@ -143,6 +143,29 @@
             </el-table-column>
           </el-table>
           <div class="drawer-total">成本合计：{{ formatMoney(detail.costTotal) }}</div>
+        </div>
+        <div class="drawer-section">
+          <h4>关联生态单据</h4>
+          <el-table :data="detail.ecosystem || []" size="small">
+            <el-table-column prop="sourceSystem" label="系统" width="90" />
+            <el-table-column prop="dataType" label="类型" width="120" />
+            <el-table-column prop="bizKey" label="单号" min-width="140" />
+            <el-table-column prop="status" label="状态" width="110" />
+            <el-table-column prop="sku" label="SKU" width="120" />
+            <el-table-column prop="title" label="摘要" min-width="160" />
+          </el-table>
+          <el-empty v-if="!detail.ecosystem?.length" description="本单暂无直接关联的生态单据" />
+        </div>
+        <div class="drawer-section">
+          <h4>供应侧风险</h4>
+          <el-table :data="detail.supplyRisks || []" size="small">
+            <el-table-column prop="sourceSystem" label="系统" width="90" />
+            <el-table-column prop="dataType" label="类型" width="120" />
+            <el-table-column prop="bizKey" label="单号" min-width="140" />
+            <el-table-column prop="status" label="状态" width="110" />
+            <el-table-column prop="sku" label="SKU/物料" width="120" />
+            <el-table-column prop="title" label="摘要" min-width="160" />
+          </el-table>
         </div>
         <div class="drawer-section">
           <h4>关联预警</h4>
@@ -353,7 +376,7 @@ async function openDetail(row) {
 
 async function executeSuggested(alert) {
   await alertApi.action(alert.id)
-  ElMessage.success('建议指令已执行')
+  ElMessage.success('建议指令已执行（含跨系统协同）')
   if (detail.value) {
     detail.value = await traceApi.detail(detail.value.orderNo)
   }

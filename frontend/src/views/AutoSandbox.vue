@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h2>系统自动沙盘</h2>
-        <p class="subtitle">按成本与效率策略网格批量推演，自动标出综合最优方案</p>
+        <p class="subtitle">按仓配、承运和供应策略网格批量推演，落地时会同时驱动 SRM / SAP / OA / WMS</p>
       </div>
       <el-button v-if="canWrite()" type="primary" :loading="running" @click="run">立即推演</el-button>
     </div>

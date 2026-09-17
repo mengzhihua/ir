@@ -127,6 +127,12 @@ public class AutoSandboxService {
                 params("BALANCED", null, 7, 1, 0.4, 0.6, mix(0.5, 0.3, 0.2))));
         result.add(candidate("自动·低安全库存 + 最低成本",
                 params("LOWEST_COST", null, 1, 5, 0.8, 0.2, mix(0.1, 0.2, 0.7))));
+        result.add(candidate("自动·供应前置（短交期拉动）",
+                params("BALANCED", null, 5, 1, 0.45, 0.55, mix(0.5, 0.3, 0.2))));
+        result.add(candidate("自动·ERP物料拉动",
+                params("NEAREST", null, 7, 2, 0.4, 0.6, mix(0.4, 0.3, 0.3))));
+        result.add(candidate("自动·经销商备件优先",
+                params("NEAREST", null, 6, 2, 0.35, 0.65, mix(0.6, 0.2, 0.2))));
         return result;
     }
 

@@ -3,7 +3,7 @@ package com.ir.forecast;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ir.action.ActionService;
+import com.ir.action.CoordinationService;
 import com.ir.action.CtAction;
 import com.ir.common.CodeGenerator;
 import com.ir.snapshot.InventorySnapshot;
@@ -29,7 +29,7 @@ public class ForecastService {
     private final InventorySnapshotMapper inventoryMapper;
     private final CtForecastMapper forecastMapper;
     private final ForecastEngine engine;
-    private final ActionService actions;
+    private final CoordinationService coordination;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
 
@@ -38,14 +38,14 @@ public class ForecastService {
             InventorySnapshotMapper inventoryMapper,
             CtForecastMapper forecastMapper,
             ForecastEngine engine,
-            ActionService actions,
+            CoordinationService coordination,
             CodeGenerator codes,
             ObjectMapper objectMapper) {
         this.salesMapper = salesMapper;
         this.inventoryMapper = inventoryMapper;
         this.forecastMapper = forecastMapper;
         this.engine = engine;
-        this.actions = actions;
+        this.coordination = coordination;
         this.codes = codes;
         this.objectMapper = objectMapper;
     }
@@ -158,11 +158,16 @@ public class ForecastService {
     public List<CtAction> toActions(List<Map<String, Object>> rows) {
         List<CtAction> result = new ArrayList<>();
         for (Map<String, Object> row : rows) {
-            Map<String, Object> request = new LinkedHashMap<>();
-            request.put("type", "SRM_PURCHASE_SUGGEST");
-            request.put("targetKey", row.get("sku"));
+            Map<String, Object> request = new LinkedHashMap<>(row);
+            Object type = row.get("type");
+            if (type == null || String.valueOf(type).trim().isEmpty()) {
+                request.put("type", "SRM_PURCHASE_SUGGEST");
+            }
+            if (request.get("targetKey") == null) {
+                request.put("targetKey", row.get("sku"));
+            }
             request.put("params", row);
-            result.add(actions.createAndExecute(request));
+            result.addAll(coordination.dispatch(request, true));
         }
         return result;
     }

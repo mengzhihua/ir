@@ -26,7 +26,7 @@ class IrIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.runNo").isString())
                 .andExpect(jsonPath("$.data.recommended.id").isNumber())
-                .andExpect(jsonPath("$.data.scenarios.length()").value(10))
+                .andExpect(jsonPath("$.data.scenarios.length()").value(13))
                 .andReturn().getResponse().getContentAsString();
         JsonNode data = mapper.readTree(body).get("data");
         long id = data.get("recommended").get("id").asLong();
@@ -35,7 +35,7 @@ class IrIntegrationTest {
                 .andExpect(jsonPath("$.data.recommended.id").value(id));
         mvc.perform(get("/api/sandbox/scenario/page?kind=AUTO&size=20").header("Authorization", "Bearer " + t))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.total").value(org.hamcrest.Matchers.greaterThanOrEqualTo(10)));
+                .andExpect(jsonPath("$.data.total").value(org.hamcrest.Matchers.greaterThanOrEqualTo(13)));
         mvc.perform(post("/api/sandbox/scenario/" + id + "/apply?execute=false")
                         .header("Authorization", "Bearer " + t))
                 .andExpect(status().isOk())
@@ -77,5 +77,63 @@ class IrIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.ecosystem.SAP").isMap())
                 .andExpect(jsonPath("$.data.kpi.sapLowStock").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
+    }
+
+    @Test void coordinationFansOutAcrossSapSrmOaAndTraceShowsRisks() throws Exception {
+        String t = token();
+        mvc.perform(post("/api/alert/evaluate").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk());
+        String alerts = mvc.perform(get("/api/alert/page?size=200").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        Long sapAlertId = null;
+        for (JsonNode row : mapper.readTree(alerts).get("data").get("records")) {
+            if ("SAP_LOW_STOCK".equals(row.get("ruleCode").asText())) {
+                sapAlertId = row.get("id").asLong();
+                break;
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertNotNull(sapAlertId, "应产生 SAP 低库存预警");
+        String executed = mvc.perform(post("/api/alert/" + sapAlertId + "/execute-suggested")
+                        .header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(3)))
+                .andReturn().getResponse().getContentAsString();
+        java.util.Set<String> types = new java.util.HashSet<>();
+        java.util.Set<String> systems = new java.util.HashSet<>();
+        for (JsonNode action : mapper.readTree(executed).get("data")) {
+            types.add(action.get("type").asText());
+            systems.add(action.get("targetSystem").asText());
+            if ("SAP_CREATE_PR".equals(action.get("type").asText())) {
+                org.junit.jupiter.api.Assertions.assertFalse(
+                        action.get("targetKey").asText().contains("/"),
+                        "SAP 物料号不应带着工厂/库位复合键");
+                JsonNode params = action.get("params");
+                if (params != null && params.isTextual()) {
+                    params = mapper.readTree(params.asText());
+                }
+                org.junit.jupiter.api.Assertions.assertNotNull(params);
+                org.junit.jupiter.api.Assertions.assertEquals("MAT-1000", params.get("sku").asText());
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(types.contains("SAP_CREATE_PR"));
+        org.junit.jupiter.api.Assertions.assertTrue(types.contains("SRM_PURCHASE_SUGGEST"));
+        org.junit.jupiter.api.Assertions.assertTrue(types.contains("OA_START_WORKFLOW"));
+        org.junit.jupiter.api.Assertions.assertTrue(systems.contains("SAP"));
+        org.junit.jupiter.api.Assertions.assertTrue(systems.contains("SRM"));
+        org.junit.jupiter.api.Assertions.assertTrue(systems.contains("OA"));
+
+        mvc.perform(post("/api/forecast/replenish/to-action").header("Authorization", "Bearer " + t)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":\"SKU001\",\"warehouseCode\":\"WH-SH\",\"qty\":8,\"suggestQty\":8}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(3)));
+
+        mvc.perform(get("/api/trace/SO000010").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.supplyRisks").isArray())
+                .andExpect(jsonPath("$.data.supplyRisks.length()").value(org.hamcrest.Matchers.greaterThan(0)))
+                .andExpect(jsonPath("$.data.ecosystem").isArray());
     }
 }
