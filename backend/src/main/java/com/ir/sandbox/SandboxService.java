@@ -159,35 +159,49 @@ public class SandboxService {
         List<CtAction> result = new ArrayList<>();
         BigDecimal expected = expectedSaving(baseline(), scenario);
 
+        int reroutes = 0;
         String targetWarehouse = preferredWarehouse(params);
         if (targetWarehouse != null) {
             for (OrderSnapshot order : pendingOrders()) {
+                if (reroutes >= 8) {
+                    break;
+                }
                 if (targetWarehouse.equals(order.getWarehouseCode())) {
                     continue;
                 }
                 result.add(dispatch("OMS_REROUTE_WAREHOUSE", order.getOrderNo(),
                         map("warehouseCode", targetWarehouse, "sku", firstSku()),
                         expected, execute));
+                reroutes++;
             }
         }
 
+        int switches = 0;
         String targetCarrier = dominantCarrier(params.getCarrierMix());
         String baseCarrier = dominantCarrier(baseParams.getCarrierMix());
         if (targetCarrier != null && !targetCarrier.equals(baseCarrier)) {
             for (ShipmentSnapshot shipment : openShipments()) {
+                if (switches >= 8) {
+                    break;
+                }
                 if (targetCarrier.equals(shipment.getCarrierCode())) {
                     continue;
                 }
                 result.add(dispatch("TMS_SWITCH_CARRIER", shipment.getWaybillCode(),
                         map("carrierCode", CarrierCodes.toTms(targetCarrier)),
                         expected, execute));
+                switches++;
             }
         }
 
         Map<String, Object> scenarioResult = result(scenario);
         Object summaries = scenarioResult.get("perSkuSummary");
+        int purchases = 0;
         if (summaries instanceof List) {
             for (Object row : (List<?>) summaries) {
+                if (purchases >= 8) {
+                    break;
+                }
                 if (!(row instanceof Map)) {
                     continue;
                 }
@@ -200,6 +214,7 @@ public class SandboxService {
                 result.add(dispatch("SRM_PURCHASE_SUGGEST", sku,
                         map("sku", sku, "qty", stockout, "suggestQty", stockout),
                         expected, execute));
+                purchases++;
             }
         }
         return result;
@@ -367,7 +382,12 @@ public class SandboxService {
         if ("SINGLE_WAREHOUSE".equals(params.getAllocationStrategy())) {
             return params.getSingleWarehouse() == null ? "WH-SH" : params.getSingleWarehouse();
         }
-        if ("LOWEST_COST".equals(params.getAllocationStrategy())) {
+        BigDecimal costW = params.getCostWeight() == null
+                ? BigDecimal.valueOf(0.5) : params.getCostWeight();
+        BigDecimal effW = params.getEfficiencyWeight() == null
+                ? BigDecimal.valueOf(0.5) : params.getEfficiencyWeight();
+        if ("LOWEST_COST".equals(params.getAllocationStrategy())
+                && costW.compareTo(effW) >= 0) {
             return "WH-SH";
         }
         return null;

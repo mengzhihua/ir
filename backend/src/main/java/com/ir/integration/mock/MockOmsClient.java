@@ -53,6 +53,8 @@ public class MockOmsClient implements OmsClient {
                 order.setStatus("HOLD");
             } else if ("OMS_UNHOLD".equals(command.getType())) {
                 order.setStatus("AUDITED");
+            } else if ("OMS_AUTO_PROCESS".equals(command.getType())) {
+                order.setStatus("ALLOCATED");
             } else if ("OMS_REROUTE_WAREHOUSE".equals(command.getType())
                     && command.getParams() != null
                     && command.getParams().get("warehouseCode") != null) {

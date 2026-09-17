@@ -228,6 +228,13 @@ public class ActionService {
                 order.setStatus("HOLD");
                 orderMapper.updateById(order);
             }
+        } else if ("OMS_AUTO_PROCESS".equals(action.getType())) {
+            OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
+                    .eq(OrderSnapshot::getOrderNo, action.getTargetKey()));
+            if (order != null) {
+                order.setStatus("ALLOCATED");
+                orderMapper.updateById(order);
+            }
         } else if ("OMS_UNHOLD".equals(action.getType())) {
             OrderSnapshot order = orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
                     .eq(OrderSnapshot::getOrderNo, action.getTargetKey()));

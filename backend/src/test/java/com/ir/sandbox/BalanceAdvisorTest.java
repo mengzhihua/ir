@@ -79,6 +79,37 @@ class BalanceAdvisorTest {
         assertTrue(advice.params().containsKey("carrierCode"));
     }
 
+    @Test
+    void auditedStuckHoldsWhenCostLeadsAndAutoProcessesWhenEfficiencyLeads() {
+        OrderSnapshot order = new OrderSnapshot();
+        order.setOrderNo("SO-STUCK");
+        order.setStatus("AUDITED");
+        order.setWarehouseCode("WH-SH");
+        assertEquals("OMS_HOLD", new BalanceAdvisor(BigDecimal.valueOf(0.8), BigDecimal.valueOf(0.2))
+                .adviseStuckOrder(order, "OMS_STUCK").getType());
+        assertEquals("OMS_AUTO_PROCESS", new BalanceAdvisor(BigDecimal.valueOf(0.2), BigDecimal.valueOf(0.8))
+                .adviseStuckOrder(order, "OMS_STUCK").getType());
+        assertEquals("OMS_PRIORITIZE", new BalanceAdvisor(BigDecimal.valueOf(0.5), BigDecimal.valueOf(0.5))
+                .adviseStuckOrder(order, "OMS_STUCK").getType());
+    }
+
+    @Test
+    void stockoutCostFirstSkipsWarehouseRush() {
+        java.util.List<BalanceAdvisor.Advice> cheap = new BalanceAdvisor(
+                BigDecimal.valueOf(0.8), BigDecimal.valueOf(0.2))
+                .adviseStockout("SKU001", "WH-SH", BigDecimal.TEN);
+        assertEquals(1, cheap.size());
+        assertEquals("SRM_PURCHASE_SUGGEST", cheap.get(0).getType());
+        assertEquals(new BigDecimal("15"), cheap.get(0).params().get("qty"));
+
+        java.util.List<BalanceAdvisor.Advice> fast = new BalanceAdvisor(
+                BigDecimal.valueOf(0.2), BigDecimal.valueOf(0.8))
+                .adviseStockout("SKU001", "WH-SH", BigDecimal.TEN);
+        assertEquals(2, fast.size());
+        assertEquals("WMS_REPLENISH", fast.get(1).getType());
+        assertEquals("WH-SH", fast.get(1).getTargetKey());
+    }
+
     private ShipmentSnapshot waybill(
             String code, String carrier, String status, String site) {
         ShipmentSnapshot shipment = new ShipmentSnapshot();

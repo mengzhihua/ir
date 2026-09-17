@@ -29,6 +29,9 @@ public class AutoSandboxService {
     @Value("${ir.sandbox.auto-apply:false}")
     private boolean autoApply;
 
+    @Value("${ir.sandbox.auto-queue:true}")
+    private boolean autoQueue;
+
     @Value("${ir.sandbox.auto-enabled:true}")
     private boolean autoEnabled;
 
@@ -49,8 +52,8 @@ public class AutoSandboxService {
         sandbox.markRecommended(rows, recommended == null ? null : recommended.getId());
 
         List<CtAction> actions = new ArrayList<>();
-        if (autoApply && recommended != null) {
-            actions.addAll(sandbox.apply(recommended.getId(), false));
+        if (recommended != null && (autoApply || autoQueue)) {
+            actions.addAll(sandbox.apply(recommended.getId(), autoApply));
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -60,6 +63,8 @@ public class AutoSandboxService {
         result.put("recommended", recommended);
         result.put("scenarios", rows);
         result.put("actions", actions);
+        result.put("autoQueue", autoQueue);
+        result.put("autoApply", autoApply);
         return result;
     }
 

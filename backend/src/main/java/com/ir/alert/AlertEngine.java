@@ -152,6 +152,9 @@ public class AlertEngine {
         if ("COST_OVERRUN".equals(alert.getType())) {
             return executeOverrun(alert);
         }
+        if ("LOW_STOCK".equals(alert.getType()) || "FORECAST_STOCKOUT".equals(alert.getType())) {
+            return executeStockout(alert);
+        }
         Map<String, Object> params = new LinkedHashMap<>();
         fillFromExt(alert, params);
         fillFromShipment(alert, params);
@@ -160,6 +163,15 @@ public class AlertEngine {
         if ("TMS_DELAY".equals(alert.getType())) {
             ShipmentSnapshot shipment = shipmentOf(alert.getTargetKey());
             BalanceAdvisor.Advice advice = balanceAdvisor.adviseDelay(shipment);
+            if (advice != null) {
+                type = advice.getType();
+                targetKey = advice.getTargetKey();
+                params.putAll(advice.params());
+            }
+        } else if ("ORDER_STUCK".equals(alert.getType())) {
+            OrderSnapshot order = orderOf(alert.getTargetKey());
+            BalanceAdvisor.Advice advice = balanceAdvisor.adviseStuckOrder(
+                    order, alert.getRuleCode());
             if (advice != null) {
                 type = advice.getType();
                 targetKey = advice.getTargetKey();
@@ -189,8 +201,16 @@ public class AlertEngine {
             if (expectedStatus.equals(order.getStatus())
                     && order.getOrderTime() != null
                     && Duration.between(order.getOrderTime(), now).toHours() > threshold) {
+                BalanceAdvisor.Advice advice = balanceAdvisor.adviseStuckOrder(
+                        order, rule.getCode());
+                String suggested = advice == null
+                        ? rule.getSuggestedAction() : advice.getType();
+                String detail = expectedStatus + " 超过 " + threshold + " 小时";
+                if (advice != null) {
+                    detail = detail + "，按成本/效率权重建议 " + advice.getType();
+                }
                 add(rule, "ORDER", order.getOrderNo(), order.getWarehouseCode(),
-                        "订单卡单", expectedStatus + " 超过 " + threshold + " 小时");
+                        "订单卡单", detail, suggested);
             }
         }
     }
@@ -303,7 +323,10 @@ public class AlertEngine {
                 String warehouse = String.valueOf(row.get("warehouseCode"));
                 add(rule, "SKU_WAREHOUSE", sku + "/" + warehouse,
                         warehouse, "预测即将缺货",
-                        "预计 " + stockout + " 缺货");
+                        "预计 " + stockout + " 缺货，"
+                                + (balanceAdvisor.costFirst()
+                                ? "成本优先只走采购建议、加大批量"
+                                : "兼顾时效，采购建议同时仓内补货"));
             }
         }
     }
@@ -312,7 +335,10 @@ public class AlertEngine {
         for (InventorySnapshot inventory : inventoryMapper.selectList(null)) {
             if (inventory.getQtyAvailable().compareTo(inventory.getSafetyQty()) < 0) {
                 add(rule, "SKU", inventory.getSku(), inventory.getWarehouseCode(),
-                        "低库存", "可用库存低于安全库存");
+                        "低库存", "可用库存低于安全库存，"
+                                + (balanceAdvisor.costFirst()
+                                ? "成本优先加大采购批量"
+                                : "兼顾时效，采购建议同时仓内补货"));
             }
         }
     }
@@ -479,6 +505,47 @@ public class AlertEngine {
         return primary;
     }
 
+    private CtAction executeStockout(CtAlert alert) {
+        String sku = alert.getTargetKey();
+        String warehouse = alert.getWarehouseCode();
+        if (sku != null && sku.contains("/")) {
+            String[] parts = sku.split("/", 2);
+            sku = parts[0];
+            if (warehouse == null || warehouse.trim().isEmpty()) {
+                warehouse = parts[1];
+            }
+        }
+        java.math.BigDecimal gap = java.math.BigDecimal.TEN;
+        InventorySnapshot inventory = inventoryMapper.selectOne(
+                new LambdaQueryWrapper<InventorySnapshot>()
+                        .eq(InventorySnapshot::getSku, sku)
+                        .eq(warehouse != null && !warehouse.trim().isEmpty(),
+                                InventorySnapshot::getWarehouseCode, warehouse)
+                        .last("LIMIT 1"));
+        if (inventory != null && inventory.getSafetyQty() != null
+                && inventory.getQtyAvailable() != null) {
+            gap = inventory.getSafetyQty().subtract(inventory.getQtyAvailable())
+                    .max(java.math.BigDecimal.ONE);
+        }
+        java.util.List<BalanceAdvisor.Advice> advice = balanceAdvisor.adviseStockout(
+                sku, warehouse, gap);
+        if (advice.isEmpty()) {
+            return null;
+        }
+        CtAction primary = null;
+        for (BalanceAdvisor.Advice item : advice) {
+            CtAction action = dispatch(item.getType(), item.getTargetKey(),
+                    item.params(), alert.getId());
+            if (primary == null) {
+                primary = action;
+            }
+        }
+        alert.setSuggestedAction(primary == null ? alert.getSuggestedAction() : primary.getType());
+        alert.setActionId(primary == null ? null : primary.getId());
+        alertMapper.updateById(alert);
+        return primary;
+    }
+
     private void fillFromShipment(CtAlert alert, Map<String, Object> params) {
         if (!"WAYBILL".equals(alert.getTargetType())) {
             return;
@@ -500,6 +567,15 @@ public class AlertEngine {
         }
         return shipmentMapper.selectOne(new LambdaQueryWrapper<ShipmentSnapshot>()
                 .eq(ShipmentSnapshot::getWaybillCode, waybill)
+                .last("LIMIT 1"));
+    }
+
+    private OrderSnapshot orderOf(String orderNo) {
+        if (orderNo == null || orderNo.trim().isEmpty()) {
+            return null;
+        }
+        return orderMapper.selectOne(new LambdaQueryWrapper<OrderSnapshot>()
+                .eq(OrderSnapshot::getOrderNo, orderNo)
                 .last("LIMIT 1"));
     }
 

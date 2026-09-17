@@ -45,15 +45,13 @@ public class BalanceAdvisor {
         String type = SYNC;
         String carrier = current;
         if (best != null && !best.equals(current)) {
-            boolean costFirst = nz(costWeight).compareTo(nz(efficiencyWeight)) > 0;
-            boolean effFirst = nz(efficiencyWeight).compareTo(nz(costWeight)) > 0;
-            if (costFirst && cheaper(best, current)) {
+            if (costFirst() && cheaper(best, current)) {
                 type = SWITCH;
                 carrier = best;
-            } else if (effFirst && faster(best, current)) {
+            } else if (efficiencyFirst() && faster(best, current)) {
                 type = SWITCH;
                 carrier = best;
-            } else if (!costFirst && !effFirst) {
+            } else if (!costFirst() && !efficiencyFirst()) {
                 type = SWITCH;
                 carrier = best;
             }
@@ -91,6 +89,69 @@ public class BalanceAdvisor {
         return result;
     }
 
+    public Advice adviseStuckOrder(OrderSnapshot order, String ruleCode) {
+        if (order == null || order.getOrderNo() == null) {
+            return null;
+        }
+        String type;
+        if ("AUDITED".equals(order.getStatus()) || "OMS_STUCK".equals(ruleCode)) {
+            if (costFirst()) {
+                type = "OMS_HOLD";
+            } else if (efficiencyFirst()) {
+                type = "OMS_AUTO_PROCESS";
+            } else {
+                type = "OMS_PRIORITIZE";
+            }
+        } else if (costFirst()) {
+            type = "OMS_HOLD";
+        } else {
+            type = "OMS_PRIORITIZE";
+        }
+        Advice advice = new Advice();
+        advice.type = type;
+        advice.targetKey = order.getOrderNo();
+        advice.warehouseCode = order.getWarehouseCode();
+        if ("OMS_PRIORITIZE".equals(type)) {
+            advice.priority = 10;
+            advice.remark = "IR 成本/效率权衡后加急";
+        }
+        if ("OMS_HOLD".equals(type)) {
+            advice.remark = "IR 成本优先，卡单先挂起";
+        }
+        return advice;
+    }
+
+    public List<Advice> adviseStockout(String sku, String warehouse, BigDecimal gap) {
+        List<Advice> result = new ArrayList<Advice>();
+        if (sku == null || sku.trim().isEmpty()) {
+            return result;
+        }
+        BigDecimal qty = scaleQty(gap);
+        Advice purchase = new Advice();
+        purchase.type = "SRM_PURCHASE_SUGGEST";
+        purchase.targetKey = sku.trim();
+        purchase.sku = sku.trim();
+        purchase.warehouseCode = warehouse;
+        purchase.qty = qty;
+        result.add(purchase);
+        if (!costFirst()) {
+            Advice replenish = new Advice();
+            replenish.type = "WMS_REPLENISH";
+            replenish.targetKey = warehouse == null ? "WH-SH" : warehouse;
+            replenish.warehouseCode = replenish.targetKey;
+            result.add(replenish);
+        }
+        return result;
+    }
+
+    public boolean costFirst() {
+        return nz(costWeight).compareTo(nz(efficiencyWeight)) > 0;
+    }
+
+    public boolean efficiencyFirst() {
+        return nz(efficiencyWeight).compareTo(nz(costWeight)) > 0;
+    }
+
     public String pickCarrier(String current) {
         return pickCarrier(current, candidates(null), costWeight, efficiencyWeight);
     }
@@ -106,12 +167,10 @@ public class BalanceAdvisor {
         if (cheaper.isEmpty()) {
             return from;
         }
-        boolean costFirst = nz(costWeight).compareTo(nz(efficiencyWeight)) > 0;
-        boolean effFirst = nz(efficiencyWeight).compareTo(nz(costWeight)) > 0;
-        if (costFirst) {
+        if (costFirst()) {
             return CarrierCodes.SELF01;
         }
-        if (effFirst) {
+        if (efficiencyFirst()) {
             return CarrierCodes.SF.equals(from) ? CarrierCodes.JD : from;
         }
         String step = CarrierCodes.oneStepCheaper(from);
@@ -193,6 +252,17 @@ public class BalanceAdvisor {
         return result;
     }
 
+    private BigDecimal scaleQty(BigDecimal gap) {
+        BigDecimal base = gap == null || gap.signum() <= 0 ? BigDecimal.TEN : gap;
+        if (costFirst()) {
+            return base.multiply(BigDecimal.valueOf(1.5)).setScale(0, java.math.RoundingMode.UP);
+        }
+        if (efficiencyFirst()) {
+            return base.setScale(0, java.math.RoundingMode.UP);
+        }
+        return base.multiply(BigDecimal.valueOf(1.2)).setScale(0, java.math.RoundingMode.UP);
+    }
+
     private Advice advice(String type, String waybill, String carrier) {
         Advice advice = new Advice();
         advice.type = type;
@@ -231,6 +301,11 @@ public class BalanceAdvisor {
         private String type;
         private String targetKey;
         private String carrierCode;
+        private String sku;
+        private String warehouseCode;
+        private String remark;
+        private Integer priority;
+        private BigDecimal qty;
 
         public String getType() {
             return type;
@@ -249,6 +324,23 @@ public class BalanceAdvisor {
             if (carrierCode != null) {
                 params.put("carrierCode", carrierCode);
                 params.put("waybillCode", targetKey);
+            }
+            if (sku != null) {
+                params.put("sku", sku);
+            }
+            if (warehouseCode != null) {
+                params.put("warehouseCode", warehouseCode);
+            }
+            if (qty != null) {
+                params.put("qty", qty);
+                params.put("suggestQty", qty);
+            }
+            if (priority != null) {
+                params.put("priority", priority);
+            }
+            if (remark != null) {
+                params.put("remark", remark);
+                params.put("reason", remark);
             }
             return params;
         }
