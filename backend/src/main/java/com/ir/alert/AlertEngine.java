@@ -145,12 +145,20 @@ public class AlertEngine {
         if (alert.getSuggestedAction() == null || alert.getSuggestedAction().trim().isEmpty()) {
             return null;
         }
+        Map<String, Object> params = new LinkedHashMap<>();
+        fillFromExt(alert, params);
+        String targetKey = actionKey(alert, params);
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("type", alert.getSuggestedAction());
-        request.put("targetKey", alert.getTargetKey());
+        request.put("targetKey", targetKey);
+        request.put("params", params);
         request.put("alertId", id);
         CtAction action = actions.createAndExecute(request);
-        alert.setActionId(action.getId());
+        if (action != null && "SUCCESS".equals(action.getStatus())
+                && "SAP_LOW_STOCK".equals(alert.getRuleCode())) {
+            fanOutPurchase(params, targetKey, id);
+        }
+        alert.setActionId(action == null ? null : action.getId());
         alertMapper.updateById(alert);
         return action;
     }
@@ -327,6 +335,80 @@ public class AlertEngine {
 
     private long number(Object value, long fallback) {
         return value == null ? fallback : Long.parseLong(String.valueOf(value));
+    }
+
+    private void fillFromExt(CtAlert alert, Map<String, Object> params) {
+        if (alert.getTargetKey() == null) {
+            return;
+        }
+        ExtSnapshot row = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
+                .eq(ExtSnapshot::getBizKey, alert.getTargetKey())
+                .eq(alert.getTargetType() != null && !alert.getTargetType().trim().isEmpty(),
+                        ExtSnapshot::getDataType, alert.getTargetType())
+                .last("LIMIT 1"));
+        if (row == null) {
+            return;
+        }
+        if (row.getSku() != null && !row.getSku().trim().isEmpty()) {
+            params.put("sku", row.getSku());
+            params.put("matnr", row.getSku());
+        }
+        if (row.getPlantCode() != null && !row.getPlantCode().trim().isEmpty()) {
+            params.put("plantCode", row.getPlantCode());
+            params.put("werks", row.getPlantCode());
+        }
+        params.put("qty", suggestQty(row.getQty()));
+        params.put("warehouseCode", com.ir.common.WarehouseCodes.fromPlant(row.getPlantCode()));
+        if (row.getTitle() != null) {
+            params.put("title", row.getTitle());
+        }
+    }
+
+    private String actionKey(CtAlert alert, Map<String, Object> params) {
+        String type = alert.getSuggestedAction();
+        if ("SAP_CREATE_PR".equals(type) || "SRM_PURCHASE_SUGGEST".equals(type)) {
+            Object sku = params.get("sku");
+            if (sku != null && !String.valueOf(sku).trim().isEmpty()) {
+                return String.valueOf(sku).trim();
+            }
+            String key = alert.getTargetKey();
+            if (key != null && key.contains("/")) {
+                return key.split("/")[0];
+            }
+        }
+        return alert.getTargetKey();
+    }
+
+    private java.math.BigDecimal suggestQty(java.math.BigDecimal onHand) {
+        java.math.BigDecimal target = java.math.BigDecimal.TEN;
+        if (onHand == null) {
+            return target;
+        }
+        java.math.BigDecimal gap = target.subtract(onHand);
+        return gap.signum() > 0 ? gap : java.math.BigDecimal.ONE;
+    }
+
+    private void fanOutPurchase(Map<String, Object> params, String sku, Long alertId) {
+        dispatch("SRM_PURCHASE_SUGGEST", sku, params, alertId);
+        Map<String, Object> oa = new LinkedHashMap<>(params);
+        oa.put("definitionCode", "GENERAL");
+        oa.put("title", "采购补货审批 " + sku);
+        oa.put("businessType", "SAP_PR");
+        oa.put("businessId", sku);
+        dispatch("OA_START_WORKFLOW", sku, oa, alertId);
+        String warehouse = String.valueOf(params.getOrDefault("warehouseCode", "WH-SH"));
+        Map<String, Object> wms = new LinkedHashMap<>();
+        wms.put("warehouseCode", warehouse);
+        dispatch("WMS_REPLENISH", warehouse, wms, alertId);
+    }
+
+    private void dispatch(String type, String targetKey, Map<String, Object> params, Long alertId) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("type", type);
+        request.put("targetKey", targetKey);
+        request.put("params", params);
+        request.put("alertId", alertId);
+        actions.createAndExecute(request);
     }
 
     private java.util.Set<String> stuckStatuses(Object value) {

@@ -39,6 +39,9 @@ public class MockWmsClient implements WmsClient {
 
     @Override
     public void execute(ActionCommand command) {
+        if ("WMS_REPLENISH".equals(command.getType())) {
+            return;
+        }
         for (WmsOrderSnapshot order : dataset.outbound()) {
             if (!command.getTargetKey().equals(order.getCode())
                     && !command.getTargetKey().equals(order.getExternalNo())) {
