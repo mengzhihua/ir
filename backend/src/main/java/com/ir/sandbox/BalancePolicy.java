@@ -37,8 +37,13 @@ public class BalancePolicy {
 
     @PostConstruct
     public void load() {
-        this.costWeight = read(COST_KEY, defaultCost);
-        this.efficiencyWeight = read(EFF_KEY, defaultEfficiency);
+        try {
+            this.costWeight = read(COST_KEY, defaultCost);
+            this.efficiencyWeight = read(EFF_KEY, defaultEfficiency);
+        } catch (RuntimeException ex) {
+            this.costWeight = clamp(defaultCost);
+            this.efficiencyWeight = clamp(defaultEfficiency);
+        }
     }
 
     public BigDecimal costWeight() {
@@ -90,11 +95,11 @@ public class BalancePolicy {
         CtSetting row = settings.selectOne(new LambdaQueryWrapper<CtSetting>()
                 .eq(CtSetting::getCode, code)
                 .last("LIMIT 1"));
-        if (row == null || row.getValue() == null || row.getValue().trim().isEmpty()) {
+        if (row == null || row.getSettingValue() == null || row.getSettingValue().trim().isEmpty()) {
             return clamp(fallback);
         }
         try {
-            return clamp(new BigDecimal(row.getValue().trim()));
+            return clamp(new BigDecimal(row.getSettingValue().trim()));
         } catch (NumberFormatException ex) {
             return clamp(fallback);
         }
@@ -107,10 +112,10 @@ public class BalancePolicy {
         if (row == null) {
             row = new CtSetting();
             row.setCode(code);
-            row.setValue(value.toPlainString());
+            row.setSettingValue(value.toPlainString());
             settings.insert(row);
         } else {
-            row.setValue(value.toPlainString());
+            row.setSettingValue(value.toPlainString());
             settings.updateById(row);
         }
     }

@@ -10,5 +10,5 @@ import lombok.EqualsAndHashCode;
 @TableName("ct_setting")
 public class CtSetting extends BaseEntity {
     private String code;
-    private String value;
+    private String settingValue;
 }
