@@ -41,6 +41,7 @@ export const sandboxApi = {
   baseline: () => http.post('/sandbox/baseline'),
   create: (data) => http.post('/sandbox/scenario', data),
   run: (id) => http.post(`/sandbox/scenario/${id}/run`),
+  auto: (data) => http.post('/sandbox/auto', data),
   page: (params) => http.get('/sandbox/scenario/page', { params }),
   get: (id) => http.get(`/sandbox/scenario/${id}`),
   compare: (ids) => http.get('/sandbox/compare', { params: { ids: ids.join(',') } }),

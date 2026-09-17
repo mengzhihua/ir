@@ -15,6 +15,24 @@ export const scenarioStatusLabels = {
   FAILED: '失败'
 }
 
+export const scenarioModeLabels = {
+  MANUAL: '人工沙盘',
+  AUTO: '系统自动推演'
+}
+
+export const allocationStrategyLabels = {
+  NEAREST: '就近分配',
+  LOWEST_COST: '最低成本',
+  BALANCED: '均衡分配',
+  SINGLE_WAREHOUSE: '单仓发货'
+}
+
+export const carrierProfileLabels = {
+  COST: '经济承运',
+  BALANCED: '均衡承运',
+  SERVICE: '优质承运'
+}
+
 export const alertStatusLabels = {
   OPEN: '待处理',
   ACKED: '已确认',
@@ -54,6 +72,10 @@ export const tagTypes = {
     RUN: 'success',
     DRAFT: 'info',
     FAILED: 'danger'
+  },
+  scenarioMode: {
+    MANUAL: 'info',
+    AUTO: 'primary'
   },
   alertStatus: {
     OPEN: 'danger',
