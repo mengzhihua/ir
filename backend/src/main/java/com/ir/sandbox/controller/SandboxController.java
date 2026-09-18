@@ -84,6 +84,15 @@ public class SandboxController {
         return R.ok(params);
     }
 
+    @PostMapping("/capital")
+    public R<Map<String, Object>> capital(@RequestBody(required = false) Map<String, Object> request) {
+        Object raw = request == null ? null : request.get("workingCapital");
+        java.math.BigDecimal amount = raw == null || String.valueOf(raw).trim().isEmpty()
+                ? new java.math.BigDecimal("100000000")
+                : new java.math.BigDecimal(String.valueOf(raw));
+        return R.ok(service.analyzeCapital(amount));
+    }
+
     @GetMapping("/compare")
     public R<List<Map<String, Object>>> compare(@RequestParam String ids) {
         return R.ok(service.compare(ids));

@@ -21,6 +21,12 @@ export const scenarioStatusLabels = {
   FAILED: '失败'
 }
 
+export const capitalVerdictLabels = {
+  RELIABLE: '可靠',
+  TIGHT: '偏紧',
+  INSUFFICIENT: '不足'
+}
+
 export const alertStatusLabels = {
   OPEN: '待处理',
   ACKED: '已确认',
@@ -62,6 +68,11 @@ export const tagTypes = {
     RUN: 'success',
     DRAFT: 'info',
     FAILED: 'danger'
+  },
+  capitalVerdict: {
+    RELIABLE: 'success',
+    TIGHT: 'warning',
+    INSUFFICIENT: 'danger'
   },
   alertStatus: {
     OPEN: 'danger',

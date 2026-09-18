@@ -5,7 +5,10 @@
         <h2>人工沙盘</h2>
         <p class="subtitle">手工设定需求、仓配和承运策略，评估成本与效率后再下发协同指令</p>
       </div>
-      <el-button v-if="canWrite()" type="primary" @click="openCreate">创建场景</el-button>
+      <div>
+        <el-button v-if="canWrite()" @click="analyzeCapital">推演 1 亿资金盘</el-button>
+        <el-button v-if="canWrite()" type="primary" @click="openCreate">创建场景</el-button>
+      </div>
     </div>
     <div class="grid-2">
       <div class="panel">
@@ -103,6 +106,22 @@
             <div class="label">综合分</div>
             <div class="value">{{ formatNumber(selected.balanceScore, 4) }}</div>
           </div>
+          <div class="stat">
+            <div class="label">资金盘</div>
+            <div class="value">{{ formatMoney(selected.workingCapital) }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">现金占用</div>
+            <div class="value">{{ percent(selected.capitalUtilization) }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">资金结论</div>
+            <div class="value">
+              <el-tag :type="tagTypes.capitalVerdict[selected.capitalVerdict]">
+                {{ labelOf(selected.capitalVerdict, capitalVerdictLabels) }}
+              </el-tag>
+            </div>
+          </div>
         </div>
         <div v-if="selected" class="grid-2">
           <Chart :option="typeOption" /><Chart :option="dailyOption" /><Chart
@@ -173,6 +192,11 @@
             :step="0.1" /></el-form-item
         ><el-form-item label="补货提前期"
           ><el-input-number v-model="form.params.replenishLeadDays" :min="0" /></el-form-item
+        ><el-form-item label="资金盘"
+          ><el-input-number
+            v-model="form.params.workingCapital"
+            :min="0"
+            :step="1000000" /></el-form-item
         ><el-divider content-position="left">承运</el-divider
         ><el-form-item label="承运商比例"
           ><el-table :data="carrierRows" size="small"
@@ -193,6 +217,42 @@
         ><el-button type="primary" :loading="saving" @click="save">创建场景</el-button></template
       ></el-dialog
     >
+    <el-dialog v-model="capitalDialog" title="1 亿资金盘推演" width="720px">
+      <div v-if="capitalResult">
+        <p>{{ capitalResult.reason }}</p>
+        <div class="stats">
+          <div class="stat">
+            <div class="label">结论</div>
+            <div class="value">
+              <el-tag :type="tagTypes.capitalVerdict[capitalResult.verdict]">
+                {{ labelOf(capitalResult.verdict, capitalVerdictLabels) }}
+              </el-tag>
+            </div>
+          </div>
+          <div class="stat">
+            <div class="label">资金盘</div>
+            <div class="value">{{ formatMoney(capitalResult.workingCapital) }}</div>
+          </div>
+        </div>
+        <el-table :data="capitalRows" size="small">
+          <el-table-column prop="name" label="情景" />
+          <el-table-column label="占用">
+            <template #default="{ row }">{{ percent(row.capitalUtilization) }}</template>
+          </el-table-column>
+          <el-table-column label="服务水平">
+            <template #default="{ row }">{{ percent(row.serviceLevel) }}</template>
+          </el-table-column>
+          <el-table-column label="缺货">
+            <template #default="{ row }">{{ formatNumber(row.stockoutUnits, 2) }}</template>
+          </el-table-column>
+          <el-table-column label="结论">
+            <template #default="{ row }">{{
+              labelOf(row.capitalVerdict, capitalVerdictLabels)
+            }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-dialog>
     <el-dialog v-model="actionDialog" title="已生成待执行动作" width="680px"
       ><el-table :data="pendingActions"
         ><el-table-column prop="type" label="类型" /><el-table-column
@@ -226,7 +286,7 @@ import {
   parseJson,
   percent
 } from '../utils/format'
-import { actionStatusLabels, labelOf, scenarioStatusLabels, tagTypes } from '../utils/labels'
+import { actionStatusLabels, capitalVerdictLabels, labelOf, scenarioStatusLabels, tagTypes } from '../utils/labels'
 const channels = ['TMALL', 'JD', 'DOUYIN', 'OFFLINE', 'API']
 const carriers = ['SF', 'JD', 'SELF01']
 const rows = ref([])
@@ -235,6 +295,8 @@ const loading = ref(false)
 const saving = ref(false)
 const visible = ref(false)
 const actionDialog = ref(false)
+const capitalDialog = ref(false)
+const capitalResult = ref(null)
 const pendingActions = ref([])
 const formRef = ref()
 const pager = reactive({ current: 1, size: 10, total: 0 })
@@ -246,6 +308,7 @@ const form = reactive({
     replenishLeadDays: 3,
     costWeight: 0.5,
     efficiencyWeight: 0.5,
+    workingCapital: 100000000,
     channelDemandMultiplier: {},
     carrierMix: {},
     carrierRate: {}
@@ -253,6 +316,13 @@ const form = reactive({
 })
 const rules = { name: [{ required: true, message: '请输入场景名称', trigger: 'blur' }] }
 const channelRows = computed(() => channels.map((key) => ({ key })))
+const capitalRows = computed(() => {
+  if (!capitalResult.value) return []
+  return [
+    { name: '常态 30 天', ...(capitalResult.value.baseline || {}) },
+    { name: '2 倍需求', ...(capitalResult.value.demand2x || {}) }
+  ]
+})
 const carrierRows = computed(() => carriers.map((key) => ({ key })))
 const typeOption = computed(() => ({
   tooltip: {},
@@ -347,6 +417,13 @@ async function openCreate() {
     form.params.carrierRate[key] = form.params.carrierRate[key] ?? 1
   })
   visible.value = true
+}
+async function analyzeCapital() {
+  capitalResult.value = await sandboxApi.capital({ workingCapital: 100000000 })
+  capitalDialog.value = true
+  ElMessage.success(
+    capitalResult.value?.reliable ? '1 亿资金盘推演完成，结论可靠' : '1 亿资金盘推演完成，需要关注资金压力'
+  )
 }
 async function save() {
   await formRef.value.validate()

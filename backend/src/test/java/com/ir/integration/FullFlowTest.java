@@ -46,7 +46,7 @@ class FullFlowTest {
         String token = token();
 
         JsonNode overview = get(token, "/api/tower/overview");
-        assertTrue(overview.path("kpi").has("otif"));
+        assertTrue(overview.path("kpi").has("otif30d"));
         assertTrue(overview.path("systems").size() >= 11);
         assertTrue(overview.path("ecosystem").has("SAP"));
 
@@ -143,6 +143,35 @@ class FullFlowTest {
         JsonNode still = get(token, "/api/alert/page?status=OPEN&size=100");
         assertEquals(0, countOpen(still, low.path("ruleCode").asText(), low.path("targetKey").asText()));
         assertEquals(0, countOpen(still, delay.path("ruleCode").asText(), delay.path("targetKey").asText()));
+
+        JsonNode systems = get(token, "/api/integration/system");
+        assertTrue(systems.size() >= 11);
+        post(token, "/api/integration/sync/SAP", null);
+
+        JsonNode auto = post(token, "/api/sandbox/auto/run", null);
+        assertTrue(auto.path("recommended").path("id").asLong() > 0);
+        JsonNode latest = get(token, "/api/sandbox/auto/latest");
+        assertEquals(auto.path("recommended").path("id").asLong(),
+                latest.path("recommended").path("id").asLong());
+        JsonNode pending = post(token,
+                "/api/sandbox/scenario/" + auto.path("recommended").path("id").asLong() + "/apply?execute=false",
+                null);
+        assertTrue(pending.isArray());
+
+        JsonNode cost = get(token, "/api/cost/summary?days=30");
+        assertTrue(cost.path("total").isNumber() || cost.path("byType").size() > 0);
+        JsonNode rec = get(token, "/api/tower/overview");
+        assertEquals(auto.path("recommended").path("id").asLong(),
+                rec.path("recommendation").path("id").asLong());
+
+        JsonNode capital = post(token, "/api/sandbox/capital",
+                "{\"workingCapital\":100000000}");
+        assertEquals("RELIABLE", capital.path("verdict").asText());
+        assertTrue(capital.path("reliable").asBoolean());
+        assertEquals(0, new BigDecimal("100000000").compareTo(capital.path("workingCapital").decimalValue()));
+        assertTrue(capital.path("baseline").path("capitalUtilization").decimalValue()
+                .compareTo(new BigDecimal("0.20")) < 0);
+        assertEquals("RELIABLE", capital.path("baseline").path("capitalVerdict").asText());
     }
 
     private void seedStuckOrder() {

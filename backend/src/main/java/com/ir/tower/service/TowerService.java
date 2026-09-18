@@ -197,6 +197,11 @@ public class TowerService {
             rec.put("costScore", recommendation.getCostScore());
             rec.put("efficiencyScore", recommendation.getEfficiencyScore());
             rec.put("balanceScore", recommendation.getBalanceScore());
+            Map<String, Object> recResult = sandbox.resultOf(recommendation);
+            rec.put("capitalVerdict", recResult.get("capitalVerdict"));
+            rec.put("capitalUtilization", recResult.get("capitalUtilization"));
+            rec.put("cashUsed", recResult.get("cashUsed"));
+            rec.put("workingCapital", recResult.get("workingCapital"));
             result.put("recommendation", rec);
         }
         return result;

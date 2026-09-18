@@ -40,6 +40,17 @@ public class SandboxEngine {
         private BigDecimal avgLeadDays = BigDecimal.ZERO;
         private List<Map<String, Object>> dailySeries = new ArrayList<>();
         private List<Map<String, Object>> perSkuSummary = new ArrayList<>();
+        private BigDecimal workingCapital = BigDecimal.ZERO;
+        private BigDecimal cashUsed = BigDecimal.ZERO;
+        private BigDecimal cashRemaining = BigDecimal.ZERO;
+        private BigDecimal purchaseCash = BigDecimal.ZERO;
+        private BigDecimal opsCash = BigDecimal.ZERO;
+        private BigDecimal deferredPurchaseQty = BigDecimal.ZERO;
+        private BigDecimal capitalShortage = BigDecimal.ZERO;
+        private BigDecimal capitalUtilization = BigDecimal.ZERO;
+        private Boolean capitalFeasible = Boolean.TRUE;
+        private String capitalVerdict = "RELIABLE";
+        private String capitalReason = "";
     }
 
     public Result run(ScenarioParams params, BaselineData baseline) {
@@ -48,6 +59,7 @@ public class SandboxEngine {
         int days = Math.max(1, params.getHorizonDays());
         Map<String, BigDecimal> stock = initialStock(params, baseline);
         Map<Integer, Map<String, BigDecimal>> arrivals = new LinkedHashMap<>();
+        Cash cash = new Cash(params.getWorkingCapital());
         BigDecimal totalDemand = BigDecimal.ZERO;
         BigDecimal totalFulfilled = BigDecimal.ZERO;
         BigDecimal totalStockout = BigDecimal.ZERO;
@@ -126,8 +138,9 @@ public class SandboxEngine {
                     }
                 }
 
+                spendOps(cash, dayFreight.add(dayHandling).add(dayPackaging));
                 scheduleReplenishment(params, sku, averageDemand, day,
-                        stock, arrivals);
+                        stock, arrivals, cash);
                 BigDecimal penalty = stockout.multiply(
                         params.getStockoutPenaltyPerUnit());
                 BigDecimal storage = storageCost(params, sku, stock);
@@ -181,6 +194,7 @@ public class SandboxEngine {
         roundMap(result.getCostByType(), 2);
         roundMap(result.getCostByWarehouse(), 2);
         roundMap(result.getCostByCarrier(), 2);
+        finishCapital(result, params, cash);
         return result;
     }
 
@@ -204,7 +218,8 @@ public class SandboxEngine {
             BigDecimal averageDemand,
             int day,
             Map<String, BigDecimal> stock,
-            Map<Integer, Map<String, BigDecimal>> arrivals) {
+            Map<Integer, Map<String, BigDecimal>> arrivals,
+            Cash cash) {
         if (averageDemand.signum() <= 0) {
             return;
         }
@@ -221,6 +236,7 @@ public class SandboxEngine {
                         BigDecimal.valueOf(params.getSafetyDays()));
                 BigDecimal quantity = target.subtract(available)
                         .subtract(outstanding).max(BigDecimal.ZERO);
+                quantity = affordPurchase(params, cash, quantity);
                 if (quantity.signum() > 0) {
                     int arrivalDay = day + Math.max(0,
                             params.getReplenishLeadDays());
@@ -232,6 +248,89 @@ public class SandboxEngine {
                                     BigDecimal.ZERO).add(quantity));
                 }
             }
+        }
+    }
+
+    private BigDecimal affordPurchase(
+            ScenarioParams params, Cash cash, BigDecimal quantity) {
+        if (quantity.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal unit = params.getPurchaseCostPerUnit();
+        if (unit == null || unit.signum() <= 0) {
+            return quantity;
+        }
+        BigDecimal need = quantity.multiply(unit);
+        if (need.compareTo(cash.remaining) <= 0) {
+            cash.remaining = cash.remaining.subtract(need);
+            cash.purchase = cash.purchase.add(need);
+            return quantity;
+        }
+        BigDecimal affordable = cash.remaining.divide(unit, 6, RoundingMode.DOWN)
+                .max(BigDecimal.ZERO);
+        BigDecimal bought = affordable.min(quantity);
+        BigDecimal spent = bought.multiply(unit);
+        cash.deferredQty = cash.deferredQty.add(quantity.subtract(bought));
+        cash.shortage = cash.shortage.add(need.subtract(spent));
+        cash.purchase = cash.purchase.add(spent);
+        cash.remaining = cash.remaining.subtract(spent);
+        return bought;
+    }
+
+    private void spendOps(Cash cash, BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            return;
+        }
+        if (amount.compareTo(cash.remaining) <= 0) {
+            cash.remaining = cash.remaining.subtract(amount);
+            cash.ops = cash.ops.add(amount);
+            return;
+        }
+        cash.shortage = cash.shortage.add(amount.subtract(cash.remaining));
+        cash.ops = cash.ops.add(cash.remaining);
+        cash.remaining = BigDecimal.ZERO;
+    }
+
+    private void finishCapital(Result result, ScenarioParams params, Cash cash) {
+        BigDecimal capital = params.getWorkingCapital() == null
+                ? BigDecimal.ZERO : params.getWorkingCapital();
+        BigDecimal used = cash.purchase.add(cash.ops);
+        result.setWorkingCapital(round(capital, 2));
+        result.setPurchaseCash(round(cash.purchase, 2));
+        result.setOpsCash(round(cash.ops, 2));
+        result.setCashUsed(round(used, 2));
+        result.setCashRemaining(round(cash.remaining, 2));
+        result.setDeferredPurchaseQty(round(cash.deferredQty, 2));
+        result.setCapitalShortage(round(cash.shortage, 2));
+        BigDecimal utilization = capital.signum() == 0
+                ? BigDecimal.ONE
+                : used.divide(capital, 6, RoundingMode.HALF_UP);
+        result.setCapitalUtilization(round(utilization, 4));
+        boolean feasible = cash.shortage.signum() == 0
+                && cash.deferredQty.signum() == 0
+                && used.compareTo(capital) <= 0;
+        result.setCapitalFeasible(feasible);
+        if (!feasible) {
+            result.setCapitalVerdict("INSUFFICIENT");
+            result.setCapitalReason("资金盘覆盖不了采购或履约现金，补货被推迟或出现现金缺口");
+        } else if (utilization.compareTo(new BigDecimal("0.80")) >= 0) {
+            result.setCapitalVerdict("TIGHT");
+            result.setCapitalReason("资金盘能撑住，但现金占用已超过 80%");
+        } else {
+            result.setCapitalVerdict("RELIABLE");
+            result.setCapitalReason("资金盘覆盖履约与补货现金，占用低于 80%");
+        }
+    }
+
+    private static final class Cash {
+        private BigDecimal remaining;
+        private BigDecimal purchase = BigDecimal.ZERO;
+        private BigDecimal ops = BigDecimal.ZERO;
+        private BigDecimal deferredQty = BigDecimal.ZERO;
+        private BigDecimal shortage = BigDecimal.ZERO;
+
+        private Cash(BigDecimal capital) {
+            this.remaining = capital == null ? BigDecimal.ZERO : capital;
         }
     }
 
