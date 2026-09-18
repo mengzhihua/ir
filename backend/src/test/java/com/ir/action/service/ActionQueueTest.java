@@ -190,6 +190,39 @@ class ActionQueueTest {
     }
 
     @Test
+    void syncTrackByOrderWritesEveryMatchingWaybill() {
+        ShipmentSnapshot first = new ShipmentSnapshot();
+        first.setWaybillCode("WB-IR-ORDER-1");
+        first.setSourceNo("SO-IR-MULTI");
+        first.setCarrierCode("SF");
+        first.setStatus("DISPATCHED");
+        first.setFromSiteCode("WH01");
+        first.setExceptionFlag(true);
+        first.setPlannedArriveTime(LocalDateTime.now().minusHours(3));
+        first.setFreightAmount(new BigDecimal("18"));
+        shipmentMapper.insert(first);
+        ShipmentSnapshot second = new ShipmentSnapshot();
+        second.setWaybillCode("WB-IR-ORDER-2");
+        second.setSourceNo("SO-IR-MULTI");
+        second.setCarrierCode("JD");
+        second.setStatus("CREATED");
+        second.setFromSiteCode("WH02");
+        second.setExceptionFlag(true);
+        second.setPlannedArriveTime(LocalDateTime.now().minusHours(5));
+        second.setFreightAmount(new BigDecimal("22"));
+        shipmentMapper.insert(second);
+        CtAction action = actions.createAndExecute(
+                pending("TMS_SYNC_TRACK", "SO-IR-MULTI", null));
+        assertEquals("SUCCESS", action.getStatus());
+        ShipmentSnapshot one = shipmentMapper.selectById(first.getId());
+        ShipmentSnapshot two = shipmentMapper.selectById(second.getId());
+        assertEquals("IN_TRANSIT", one.getStatus());
+        assertEquals("IN_TRANSIT", two.getStatus());
+        assertEquals(Boolean.FALSE, one.getExceptionFlag());
+        assertEquals(Boolean.FALSE, two.getExceptionFlag());
+    }
+
+    @Test
     void savingActualIgnoresEstimatedWithoutWriteback() {
         Map<String, Object> before = costService.saving();
         BigDecimal actualBefore = new BigDecimal(String.valueOf(before.get("actual")));

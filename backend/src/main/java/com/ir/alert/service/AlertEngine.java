@@ -31,6 +31,7 @@ import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -85,10 +86,12 @@ public class AlertEngine {
     @Transactional
     public synchronized List<CtAlert> evaluate() {
         Set<String> active = new HashSet<>();
+        Set<String> evaluatedRules = new HashSet<>();
         List<CtRule> rules = ruleMapper.selectList(
                 new LambdaQueryWrapper<CtRule>().eq(CtRule::getEnabled, true));
         LocalDateTime now = LocalDateTime.now();
         for (CtRule rule : rules) {
+            evaluatedRules.add(rule.getCode());
             Map<String, Object> params = params(rule.getParamsJson());
             if ("ORDER_STUCK".equals(rule.getType())) {
                 evaluateOrders(rule, params, now, active);
@@ -106,7 +109,7 @@ public class AlertEngine {
                 evaluateExt(rule, params, active);
             }
         }
-        resolveCleared(active);
+        resolveCleared(active, evaluatedRules);
         return all();
     }
 
@@ -260,6 +263,9 @@ public class AlertEngine {
         boolean exceptionOnly = String.valueOf(rule.getParamsJson())
                 .contains("\"exception\":true");
         for (ShipmentSnapshot shipment : shipmentMapper.selectList(null)) {
+            if (terminalStatus(shipment.getStatus())) {
+                continue;
+            }
             if ((exceptionOnly && !Boolean.TRUE.equals(shipment.getExceptionFlag()))
                     || (!exceptionOnly && shipment.getPlannedArriveTime() == null)) {
                 continue;
@@ -267,8 +273,7 @@ public class AlertEngine {
             if ((exceptionOnly && Boolean.TRUE.equals(shipment.getExceptionFlag()))
                     || (shipment.getPlannedArriveTime() != null
                     && shipment.getPlannedArriveTime().isBefore(now)
-                    && !"DELIVERED".equals(shipment.getStatus())
-                    && !"CLOSED".equals(shipment.getStatus()))) {
+                    && !terminalStatus(shipment.getStatus()))) {
                 String suggested = rule.getSuggestedAction();
                 String detail = exceptionOnly ? "运单异常，先拉轨迹" : "计划到达时间已过";
                 if (!exceptionOnly) {
@@ -374,7 +379,9 @@ public class AlertEngine {
             java.math.BigDecimal inTransit = inbound.getOrDefault(
                     inventory.getSku(), java.math.BigDecimal.ZERO);
             if (available.add(inTransit).compareTo(safety) < 0) {
-                add(rule, "SKU", inventory.getSku(), inventory.getWarehouseCode(),
+                add(rule, "SKU_WAREHOUSE",
+                        inventory.getSku() + "/" + inventory.getWarehouseCode(),
+                        inventory.getWarehouseCode(),
                         "低库存", "可用+在途仍低于安全库存（在途 "
                                 + inTransit + "），"
                                 + (balanceAdvisor.costFirst()
@@ -430,6 +437,16 @@ public class AlertEngine {
             }
             return;
         }
+        CtAlert handled = alertMapper.selectOne(new LambdaQueryWrapper<CtAlert>()
+                .eq(CtAlert::getRuleCode, rule.getCode())
+                .eq(CtAlert::getTargetKey, targetKey)
+                .eq(CtAlert::getStatus, "RESOLVED")
+                .isNotNull(CtAlert::getActionId)
+                .orderByDesc(CtAlert::getId)
+                .last("LIMIT 1"));
+        if (handled != null) {
+            return;
+        }
         CtAlert alert = new CtAlert();
         alert.setAlertNo(codes.next("ALT"));
         alert.setRuleCode(rule.getCode());
@@ -455,12 +472,23 @@ public class AlertEngine {
         alertMapper.updateById(alert);
     }
 
-    private void resolveCleared(Set<String> active) {
-        List<CtAlert> open = alertMapper.selectList(
-                new LambdaQueryWrapper<CtAlert>().eq(CtAlert::getStatus, "OPEN"));
-        for (CtAlert alert : open) {
-            if (!active.contains(activeKey(alert.getRuleCode(), alert.getTargetKey()))) {
+    private void resolveCleared(Set<String> active, Set<String> evaluatedRules) {
+        if (evaluatedRules == null || evaluatedRules.isEmpty()) {
+            return;
+        }
+        List<CtAlert> rows = alertMapper.selectList(
+                new LambdaQueryWrapper<CtAlert>()
+                        .in(CtAlert::getStatus, Arrays.asList("OPEN", "RESOLVED"))
+                        .in(CtAlert::getRuleCode, evaluatedRules));
+        for (CtAlert alert : rows) {
+            if (active.contains(activeKey(alert.getRuleCode(), alert.getTargetKey()))) {
+                continue;
+            }
+            if ("OPEN".equals(alert.getStatus())) {
                 close(alert);
+            } else if (alert.getActionId() != null) {
+                alert.setActionId(null);
+                alertMapper.updateById(alert);
             }
         }
     }
@@ -473,6 +501,12 @@ public class AlertEngine {
         alert.setStatus("RESOLVED");
         alert.setResolvedAt(LocalDateTime.now());
         alertMapper.updateById(alert);
+    }
+
+    private boolean terminalStatus(String status) {
+        return "DELIVERED".equals(status)
+                || "CLOSED".equals(status)
+                || "CANCELLED".equals(status);
     }
 
     private String activeKey(String ruleCode, String targetKey) {
