@@ -187,9 +187,8 @@ class FullFlowTest {
                 "{\"workingCapital\":100000000}");
         assertEquals("MANUAL", adopted.path("kind").asText());
         assertTrue(adopted.path("id").asLong() > 0);
-        assertTrue(adopted.path("name").asText().startsWith("\u8d44\u91d1\u76d8\u63a8\u8350"));
-        JsonNode adoptedParams = mapper.readTree(adopted.path("paramsJson").asText());
-        assertEquals(1, adoptedParams.path("replenishLeadDays").asInt());
+        assertEquals(1, adopted.path("params").path("replenishLeadDays").asInt());
+        assertEquals("BALANCED", adopted.path("params").path("allocationStrategy").asText());
     }
 
     private void seedStuckOrder() {
