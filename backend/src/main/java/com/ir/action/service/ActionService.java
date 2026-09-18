@@ -352,6 +352,12 @@ public class ActionService {
                     params.put("actualSaving", fromFreight.subtract(toFreight));
                 }
             }
+        } else if ("TMS_SYNC_TRACK".equals(action.getType())
+                || "TMS_DISPATCH".equals(action.getType())) {
+            ShipmentSnapshot shipment = shipmentOf(action.getTargetKey());
+            if (shipment != null) {
+                applyTmsTrack(action.getType(), shipment, params);
+            }
         } else if (action.getTargetSystem() != null
                 && ClientFactory.ecosystemCode(action.getTargetSystem())) {
             ExtSnapshot snapshot = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
@@ -528,5 +534,62 @@ public class ActionService {
         } catch (Exception ex) {
             return new LinkedHashMap<>();
         }
+    }
+
+    private ShipmentSnapshot shipmentOf(String key) {
+        if (key == null || key.trim().isEmpty()) {
+            return null;
+        }
+        ShipmentSnapshot shipment = shipmentMapper.selectOne(
+                new LambdaQueryWrapper<ShipmentSnapshot>()
+                        .eq(ShipmentSnapshot::getWaybillCode, key)
+                        .last("LIMIT 1"));
+        if (shipment != null) {
+            return shipment;
+        }
+        return shipmentMapper.selectOne(new LambdaQueryWrapper<ShipmentSnapshot>()
+                .eq(ShipmentSnapshot::getSourceNo, key)
+                .last("LIMIT 1"));
+    }
+
+    private void applyTmsTrack(String type, ShipmentSnapshot shipment, Map<String, Object> params) {
+        if (terminalStatus(shipment.getStatus())) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        String fromStatus = shipment.getStatus();
+        Boolean fromException = shipment.getExceptionFlag();
+        LocalDateTime fromEta = shipment.getPlannedArriveTime();
+        if ("TMS_DISPATCH".equals(type)) {
+            if (fromStatus == null || "CREATED".equals(fromStatus)) {
+                shipment.setStatus("DISPATCHED");
+            }
+        } else {
+            shipment.setStatus("IN_TRANSIT");
+            shipment.setExceptionFlag(false);
+            if (fromEta == null || !fromEta.isAfter(now)) {
+                shipment.setPlannedArriveTime(now.plusHours(6));
+            }
+            shipment.setSyncedAt(now);
+        }
+        shipmentMapper.updateById(shipment);
+        if (fromStatus != null) {
+            params.put("fromStatus", fromStatus);
+        }
+        if (fromException != null) {
+            params.put("fromExceptionFlag", fromException);
+        }
+        if (fromEta != null) {
+            params.put("fromPlannedArriveTime", fromEta.toString());
+        }
+        if (shipment.getPlannedArriveTime() != null) {
+            params.put("plannedArriveTime", shipment.getPlannedArriveTime().toString());
+        }
+    }
+
+    private boolean terminalStatus(String status) {
+        return "DELIVERED".equals(status)
+                || "CLOSED".equals(status)
+                || "CANCELLED".equals(status);
     }
 }

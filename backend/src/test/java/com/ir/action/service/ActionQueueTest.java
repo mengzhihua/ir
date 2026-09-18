@@ -18,6 +18,7 @@ import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -144,6 +145,44 @@ class ActionQueueTest {
     }
 
     @Test
+    void syncTrackClearsExceptionAndRefreshesEta() {
+        ShipmentSnapshot shipment = shipmentMapper.selectOne(
+                new LambdaQueryWrapper<ShipmentSnapshot>()
+                        .eq(ShipmentSnapshot::getExceptionFlag, true)
+                        .last("LIMIT 1"));
+        assertNotNull(shipment);
+        CtAction action = actions.createAndExecute(
+                pending("TMS_SYNC_TRACK", shipment.getWaybillCode(), null));
+        assertEquals("SUCCESS", action.getStatus());
+        ShipmentSnapshot updated = shipmentMapper.selectById(shipment.getId());
+        assertEquals("IN_TRANSIT", updated.getStatus());
+        assertEquals(Boolean.FALSE, updated.getExceptionFlag());
+        assertNotNull(updated.getPlannedArriveTime());
+        assertTrue(updated.getPlannedArriveTime().isAfter(LocalDateTime.now()));
+        assertNotNull(updated.getSyncedAt());
+        assertTrue(action.getParamsJson().contains("fromExceptionFlag"));
+    }
+
+    @Test
+    void dispatchWritesCreatedWaybillToDispatched() {
+        ShipmentSnapshot shipment = new ShipmentSnapshot();
+        shipment.setWaybillCode("WB-IR-DISPATCH");
+        shipment.setSourceNo("SO-IR-DISPATCH");
+        shipment.setCarrierCode("SF");
+        shipment.setStatus("CREATED");
+        shipment.setFromSiteCode("WH01");
+        shipment.setFreightAmount(new BigDecimal("20"));
+        shipment.setExceptionFlag(false);
+        shipmentMapper.insert(shipment);
+        CtAction action = actions.createAndExecute(
+                pending("TMS_DISPATCH", "WB-IR-DISPATCH", null));
+        assertEquals("SUCCESS", action.getStatus());
+        ShipmentSnapshot updated = shipmentMapper.selectById(shipment.getId());
+        assertEquals("DISPATCHED", updated.getStatus());
+        assertEquals("CREATED", paramText(action, "fromStatus"));
+    }
+
+    @Test
     void savingActualIgnoresEstimatedWithoutWriteback() {
         Map<String, Object> before = costService.saving();
         BigDecimal actualBefore = new BigDecimal(String.valueOf(before.get("actual")));
@@ -193,12 +232,16 @@ class ActionQueueTest {
     }
 
     private BigDecimal paramDecimal(CtAction action, String key) {
+        return new BigDecimal(paramText(action, key));
+    }
+
+    private String paramText(CtAction action, String key) {
         try {
             Map<String, Object> params = objectMapper.readValue(
                     action.getParamsJson(),
                     new TypeReference<Map<String, Object>>() {
                     });
-            return new BigDecimal(String.valueOf(params.get(key)));
+            return String.valueOf(params.get(key));
         } catch (Exception ex) {
             throw new IllegalStateException(ex);
         }
