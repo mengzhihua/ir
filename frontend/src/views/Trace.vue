@@ -176,7 +176,7 @@
             <el-table-column label="操作" width="150">
               <template #default="{ row }">
                 <el-button
-                  v-if="row.suggestedAction"
+                  v-if="row.status === 'OPEN' && row.suggestedAction"
                   link
                   type="primary"
                   :disabled="!canWrite()"
@@ -370,8 +370,16 @@ async function openDetail(row) {
 }
 
 async function executeSuggested(alert) {
-  await alertApi.action(alert.id)
-  ElMessage.success('建议指令已执行')
+  const result = await alertApi.action(alert.id)
+  if (!result) {
+    ElMessage.error('指令不存在')
+  } else if (result.status === 'FAILED') {
+    ElMessage.error(result.result || '指令执行失败')
+  } else if (result.status === 'SUCCESS') {
+    ElMessage.success('建议已执行，预警已关闭')
+  } else {
+    ElMessage.warning(result.result || '指令当前不可执行')
+  }
   if (detail.value) {
     detail.value = await traceApi.detail(detail.value.orderNo)
   }

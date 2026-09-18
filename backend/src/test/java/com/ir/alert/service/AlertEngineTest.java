@@ -10,10 +10,13 @@ import com.ir.alert.entity.CtAlert;
 import com.ir.alert.mapper.CtAlertMapper;
 import com.ir.sandbox.service.BalanceAdvisor;
 import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.entity.WmsOrderSnapshot;
 import com.ir.snapshot.mapper.OrderSnapshotMapper;
+import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
 import java.util.HashSet;
 import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
@@ -27,6 +30,8 @@ class AlertEngineTest {
     private CtActionMapper actionMapper;
     @Autowired
     private OrderSnapshotMapper orderMapper;
+    @Autowired
+    private WmsOrderSnapshotMapper wmsMapper;
 
     @Test
     void stuckOrderRuleFiresAndIsIdempotent() {
@@ -79,6 +84,7 @@ class AlertEngineTest {
         assertTrue(types.contains("SRM_PURCHASE_SUGGEST"));
         assertTrue(types.contains("OA_START_WORKFLOW"));
         assertTrue(types.contains("WMS_REPLENISH"));
+        assertResolved(sap);
     }
 
     @Test
@@ -104,6 +110,7 @@ class AlertEngineTest {
                 action.getExpectedSaving().compareTo(java.math.BigDecimal.ZERO) > 0);
         org.junit.jupiter.api.Assertions.assertTrue(
                 action.getParamsJson() != null && action.getParamsJson().contains("actualSaving"));
+        assertResolved(overrun);
     }
 
     @Test
@@ -130,6 +137,7 @@ class AlertEngineTest {
                     action.getExpectedSaving() == null
                             || action.getExpectedSaving().compareTo(java.math.BigDecimal.ZERO) == 0);
         }
+        assertResolved(delay);
     }
 
     @Test
@@ -149,6 +157,7 @@ class AlertEngineTest {
                         .eq(OrderSnapshot::getOrderNo, action.getTargetKey()));
         org.junit.jupiter.api.Assertions.assertNotNull(order);
         assertEquals(Integer.valueOf(10), order.getPriority());
+        assertResolved(stuck);
     }
 
     @Test
@@ -179,5 +188,62 @@ class AlertEngineTest {
         });
         assertTrue(types.contains("SRM_PURCHASE_SUGGEST"));
         assertTrue(types.contains("WMS_REPLENISH"));
+        assertResolved(low);
+    }
+
+    @Test
+    void wmsAllocateResolvesStuckAndEvaluateDoesNotReopen() {
+        alertEngine.evaluate();
+        CtAlert stuck = alertMapper.selectList(null).stream()
+                .filter(a -> "WMS_STUCK".equals(a.getRuleCode()) && "OPEN".equals(a.getStatus()))
+                .findFirst().orElse(null);
+        assertNotNull(stuck);
+        CtAction action = alertEngine.executeSuggested(stuck.getId());
+        assertNotNull(action);
+        assertEquals("WMS_ALLOCATE", action.getType());
+        assertEquals("SUCCESS", action.getStatus());
+        assertResolved(stuck);
+        WmsOrderSnapshot outbound = wmsMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<WmsOrderSnapshot>()
+                        .eq(WmsOrderSnapshot::getCode, action.getTargetKey()));
+        assertNotNull(outbound);
+        assertEquals("ALLOCATED", outbound.getStatus());
+        alertEngine.evaluate();
+        long stillOpen = alertMapper.selectList(null).stream()
+                .filter(a -> "WMS_STUCK".equals(a.getRuleCode())
+                        && stuck.getTargetKey().equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(0, stillOpen);
+    }
+
+    @Test
+    void evaluateResolvesStuckAlertWhenOrderLeavesAudited() {
+        alertEngine.evaluate();
+        CtAlert stuck = alertMapper.selectList(null).stream()
+                .filter(a -> "OMS_STUCK".equals(a.getRuleCode()) && "OPEN".equals(a.getStatus()))
+                .findFirst().orElse(null);
+        assertNotNull(stuck);
+        OrderSnapshot order = orderMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OrderSnapshot>()
+                        .eq(OrderSnapshot::getOrderNo, stuck.getTargetKey()));
+        assertNotNull(order);
+        order.setStatus("ALLOCATED");
+        orderMapper.updateById(order);
+        alertEngine.evaluate();
+        assertResolved(stuck);
+        long stillOpen = alertMapper.selectList(null).stream()
+                .filter(a -> "OMS_STUCK".equals(a.getRuleCode())
+                        && stuck.getTargetKey().equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(0, stillOpen);
+    }
+
+    private void assertResolved(CtAlert before) {
+        CtAlert after = alertMapper.selectById(before.getId());
+        assertNotNull(after);
+        assertEquals("RESOLVED", after.getStatus());
+        assertNotNull(after.getResolvedAt());
     }
 }

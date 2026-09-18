@@ -90,7 +90,7 @@
               >忽略</el-button
             >
             <el-button
-              v-if="canWrite() && row.suggestedAction"
+              v-if="canWrite() && row.status === 'OPEN' && row.suggestedAction"
               link
               type="primary"
               @click="suggest(row)"
@@ -158,9 +158,28 @@ async function operate(row, action) {
 }
 async function suggest(row) {
   await ElMessageBox.confirm('确认执行建议指令吗？', '操作确认')
-  await alertApi.action(row.id)
-  ElMessage.success('建议指令已执行')
+  const result = await alertApi.action(row.id)
+  notifyAction(result)
   load()
+}
+function notifyAction(result) {
+  if (!result) {
+    ElMessage.error('指令不存在')
+    return
+  }
+  if (result.status === 'FAILED') {
+    ElMessage.error(result.result || '指令执行失败')
+    return
+  }
+  if (result.status === 'SUCCESS') {
+    ElMessage.success('建议已执行，预警已关闭')
+    return
+  }
+  if (result.status === 'RUNNING') {
+    ElMessage.info('指令正在执行')
+    return
+  }
+  ElMessage.warning(result.result || '指令当前不可执行')
 }
 load()
 </script>
