@@ -145,6 +145,8 @@ public class BalanceAdvisor {
             replenish.type = "WMS_REPLENISH";
             replenish.targetKey = warehouse == null ? "WH-SH" : warehouse;
             replenish.warehouseCode = replenish.targetKey;
+            replenish.sku = sku.trim();
+            replenish.qty = qty;
             result.add(replenish);
         }
         return result;

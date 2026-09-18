@@ -187,7 +187,7 @@ public class ForecastService {
         return result;
     }
 
-    Map<String, BigDecimal> inboundBySku() {
+    public Map<String, BigDecimal> inboundBySku() {
         Map<String, BigDecimal> po = new HashMap<>();
         Map<String, BigDecimal> asn = new HashMap<>();
         List<ExtSnapshot> rows = extMapper.selectList(new LambdaQueryWrapper<ExtSnapshot>()
