@@ -1,11 +1,10 @@
 package com.ir.integration.http;
 
-import com.ir.integration.client.BmsClient;
-import com.ir.integration.client.IntegrationException;
-import com.ir.snapshot.CostRecord;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestTemplate;
-
+import com.ir.integration.client.BmsClient;
+import com.ir.integration.client.IntegrationException;
+import com.ir.snapshot.entity.CostRecord;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,11 +28,12 @@ public class HttpBmsClient implements BmsClient {
         List<CostRecord> result = new ArrayList<>();
         for (Map<String, Object> row : HttpSupport.rows(HttpSupport.getMap(http, url, headers))) {
             CostRecord cost = new CostRecord();
-            cost.setBizDate(LocalDate.parse(HttpSupport.string(row, "bizDate", "date")));
+            cost.setBizDate(HttpSupport.localDate(row, "bizDate", "date"));
             cost.setOrderNo(HttpSupport.string(row, "orderNo"));
             cost.setWarehouseCode(HttpSupport.string(row, "warehouseCode"));
             cost.setCarrierCode(HttpSupport.string(row, "carrierCode"));
-            cost.setCostType(HttpSupport.string(row, "costType"));
+            String costType = HttpSupport.string(row, "costType");
+            cost.setCostType("TRANSPORT".equals(costType) ? "FREIGHT" : costType);
             cost.setAmount(java.math.BigDecimal.valueOf(HttpSupport.doubleValue(row, "amount")));
             cost.setSourceSystem("BMS");
             cost.setRemark(HttpSupport.string(row, "remark"));

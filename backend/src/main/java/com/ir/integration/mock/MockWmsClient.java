@@ -1,11 +1,10 @@
 package com.ir.integration.mock;
 
+import org.springframework.stereotype.Component;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.WmsClient;
-import com.ir.snapshot.InventorySnapshot;
-import com.ir.snapshot.WmsOrderSnapshot;
-import org.springframework.stereotype.Component;
-
+import com.ir.snapshot.entity.InventorySnapshot;
+import com.ir.snapshot.entity.WmsOrderSnapshot;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +38,12 @@ public class MockWmsClient implements WmsClient {
 
     @Override
     public void execute(ActionCommand command) {
+        if ("WMS_REPLENISH".equals(command.getType())) {
+            if (command.getTargetKey() != null && command.getTargetKey().startsWith("WH-FAIL")) {
+                throw new IllegalStateException("仓内补货失败");
+            }
+            return;
+        }
         for (WmsOrderSnapshot order : dataset.outbound()) {
             if (!command.getTargetKey().equals(order.getCode())
                     && !command.getTargetKey().equals(order.getExternalNo())) {

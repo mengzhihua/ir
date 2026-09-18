@@ -30,8 +30,10 @@ export const alertStatusLabels = {
 
 export const actionStatusLabels = {
   PENDING: '待执行',
+  RUNNING: '执行中',
   SUCCESS: '成功',
-  FAILED: '失败'
+  FAILED: '失败',
+  SUPERSEDED: '已作废'
 }
 
 export const severityLabels = {
@@ -69,14 +71,44 @@ export const tagTypes = {
   },
   actionStatus: {
     PENDING: 'warning',
+    RUNNING: 'primary',
     SUCCESS: 'success',
-    FAILED: 'danger'
+    FAILED: 'danger',
+    SUPERSEDED: 'info'
   },
   severity: {
     HIGH: 'danger',
     MEDIUM: 'warning',
     LOW: 'info'
   }
+}
+
+export const actionTypeLabels = {
+  OMS_HOLD: '挂起订单',
+  OMS_UNHOLD: '恢复订单',
+  OMS_PRIORITIZE: '订单加急',
+  OMS_AUTO_PROCESS: '自动过审',
+  OMS_CANCEL: '取消订单',
+  OMS_REROUTE_WAREHOUSE: '改仓发货',
+  WMS_ALLOCATE: '仓内分配',
+  WMS_REPLENISH: '仓内补货',
+  TMS_DISPATCH: '调度发运',
+  TMS_SYNC_TRACK: '同步轨迹',
+  TMS_SWITCH_CARRIER: '更换承运商',
+  SRM_PURCHASE_SUGGEST: '采购建议',
+  SRM_SUBMIT_PR: '提交采购申请',
+  SRM_APPROVE_PR: '批准采购申请',
+  SAP_CREATE_PR: 'ERP 创建采购申请',
+  SAP_RELEASE_PR: 'ERP 释放采购申请',
+  SAP_RELEASE_MO: 'ERP 释放生产订单',
+  BOM_EXPLODE: 'BOM 展开',
+  INV_SUBMIT_REQUEST: '提交开票',
+  INV_APPROVE_REQUEST: '批准开票',
+  CRM_ADVANCE_STAGE: '推进商机',
+  CRM_ESCALATE_CASE: '升级工单',
+  DMS_REPLENISH_SHORTAGE: '经销商补货',
+  OA_START_WORKFLOW: '发起审批',
+  OA_APPROVE_TASK: '完成待办'
 }
 
 export function labelOf(value, labels) {

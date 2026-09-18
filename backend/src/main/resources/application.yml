@@ -35,6 +35,7 @@ ir:
     auto-on-startup: ${IR_SANDBOX_AUTO_ON_STARTUP:true}
     auto-enabled: ${IR_SANDBOX_AUTO_ENABLED:true}
     auto-apply: ${IR_SANDBOX_AUTO_APPLY:false}
+    auto-queue: ${IR_SANDBOX_AUTO_QUEUE:true}
     cost-weight: ${IR_SANDBOX_COST_WEIGHT:0.5}
     efficiency-weight: ${IR_SANDBOX_EFFICIENCY_WEIGHT:0.5}
   http:

@@ -1,20 +1,18 @@
 package com.ir.integration;
 
-import com.ir.integration.client.ActionCommand;
-import com.ir.integration.client.ClientFactory;
-import com.ir.integration.entity.CtSystem;
-import com.ir.integration.mock.MockEcosystemClient;
-import com.ir.snapshot.OrderSnapshot;
-import com.ir.snapshot.ShipmentSnapshot;
-import com.ir.snapshot.WmsOrderSnapshot;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
-
+import com.ir.integration.client.ActionCommand;
+import com.ir.integration.client.ClientFactory;
+import com.ir.integration.entity.CtSystem;
+import com.ir.integration.mock.MockEcosystemClient;
+import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.entity.ShipmentSnapshot;
+import com.ir.snapshot.entity.WmsOrderSnapshot;
 import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
@@ -33,7 +31,7 @@ class HttpOtwbContractTest {
                 .andRespond(withSuccess(
                         "{\"code\":0,\"data\":{\"system\":\"OMS\",\"orders\":[{"
                                 + "\"orderNo\":\"IR-SO-STUCK\",\"status\":\"AUDITED\","
-                                + "\"warehouseCode\":\"WH-SH\",\"qty\":2,"
+                                + "\"warehouseCode\":\"WH-SH\",\"qty\":2,\"priority\":10,"
                                 + "\"orderTime\":\"2026-09-16 22:00:00\"}],"
                                 + "\"inventory\":[{\"sku\":\"SKU001\",\"warehouseCode\":\"WH-SH\","
                                 + "\"qtyOnHand\":500,\"qtyAvailable\":500,\"safetyQty\":10}],"
@@ -54,6 +52,7 @@ class HttpOtwbContractTest {
         assertEquals(1, orders.size());
         assertEquals("IR-SO-STUCK", orders.get(0).getOrderNo());
         assertEquals("AUDITED", orders.get(0).getStatus());
+        assertEquals(Integer.valueOf(10), orders.get(0).getPriority());
 
         ActionCommand command = new ActionCommand();
         command.setType("OMS_HOLD");

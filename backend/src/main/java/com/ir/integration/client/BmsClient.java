@@ -1,6 +1,6 @@
 package com.ir.integration.client;
 
-import com.ir.snapshot.CostRecord;
+import com.ir.snapshot.entity.CostRecord;
 import java.time.LocalDate;
 import java.util.List;
 

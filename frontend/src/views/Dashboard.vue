@@ -7,6 +7,40 @@
       </div>
       <el-button type="primary" :loading="loading" @click="load">刷新数据</el-button>
     </div>
+    <div class="panel policy-panel">
+      <div class="panel-title">
+        <h3>成本 / 效率策略</h3>
+        <div>
+          <el-tag :type="stanceType">{{ stanceLabel }}</el-tag>
+          <el-button
+            v-if="canWrite()"
+            type="primary"
+            :loading="saving"
+            style="margin-left: 8px"
+            @click="savePolicy"
+            >保存并重评预警</el-button
+          >
+        </div>
+      </div>
+      <p class="muted">
+        拖动滑块改变控制塔立场。成本侧重会挂起卡单、换便宜承运商、加大采购批量；效率侧重会自动过审、追更快运力、仓内补货。
+      </p>
+      <div class="policy-row">
+        <span>效率</span>
+        <el-slider
+          v-model="costPercent"
+          :disabled="!canWrite()"
+          :show-tooltip="true"
+          :format-tooltip="policyTip"
+        />
+        <span>成本</span>
+      </div>
+      <div class="muted">
+        成本权重 {{ (costPercent / 100).toFixed(2) }} · 效率权重
+        {{ ((100 - costPercent) / 100).toFixed(2) }}
+        <template v-if="carrierSummary"> · 在途承运 {{ carrierSummary }}</template>
+      </div>
+    </div>
     <div class="stats">
       <div
         v-for="item in cards"
@@ -144,7 +178,9 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { towerApi } from '../api'
+import { ElMessage } from 'element-plus'
+import { sandboxApi, towerApi } from '../api'
+import { canWrite } from '../auth'
 import Chart from '../components/Chart.vue'
 import { formatDate, formatMoney, formatNumber, percent } from '../utils/format'
 import { labelOf, severityLabels, systemModeLabels, tagTypes } from '../utils/labels'
@@ -158,8 +194,33 @@ const overview = reactive({
   alertsTop: [],
   systems: [],
   recommendation: null,
-  ecosystem: {}
+  ecosystem: {},
+  policy: { costWeight: 0.5, efficiencyWeight: 0.5, stance: 'BALANCED' }
 })
+const saving = ref(false)
+const costPercent = ref(50)
+
+const stanceLabel = computed(() => {
+  const stance = overview.policy?.stance
+  if (stance === 'COST') return '成本优先'
+  if (stance === 'EFFICIENCY') return '效率优先'
+  return '均衡'
+})
+const stanceType = computed(() => {
+  const stance = overview.policy?.stance
+  if (stance === 'COST') return 'warning'
+  if (stance === 'EFFICIENCY') return 'success'
+  return 'info'
+})
+const carrierSummary = computed(() => {
+  const mix = overview.kpi?.carrierMix || {}
+  return Object.entries(mix)
+    .map(([code, count]) => `${code} ${count}`)
+    .join(' / ')
+})
+function policyTip(value) {
+  return `成本 ${((value || 0) / 100).toFixed(2)} / 效率 ${((100 - (value || 0)) / 100).toFixed(2)}`
+}
 
 const cards = computed(() => [
   { label: '今日订单', value: formatNumber(overview.kpi.todayOrders, 0), color: '#409eff' },
@@ -168,6 +229,7 @@ const cards = computed(() => [
   { label: '延迟运单', value: formatNumber(overview.kpi.delayedShipments, 0), color: '#f56c6c' },
   { label: '低库存SKU', value: formatNumber(overview.kpi.lowStockSkus, 0), color: '#f56c6c' },
   { label: '开放预警', value: formatNumber(overview.kpi.openAlerts, 0), color: '#f56c6c' },
+  { label: '待执行指令', value: formatNumber(overview.kpi.pendingActions, 0), color: '#e6a23c' },
   { label: '30日总成本', value: formatMoney(overview.kpi.totalCost30d), color: '#409eff' },
   { label: '单均成本', value: formatMoney(overview.kpi.costPerOrder30d), color: '#409eff' },
   { label: 'OTIF', value: percent(overview.kpi.otif30d), color: '#67c23a' },
@@ -245,8 +307,27 @@ async function load() {
   loading.value = true
   try {
     Object.assign(overview, await towerApi.overview())
+    const cost = Number(overview.policy?.costWeight)
+    if (!Number.isNaN(cost)) {
+      costPercent.value = Math.round(cost * 100)
+    }
   } finally {
     loading.value = false
+  }
+}
+
+async function savePolicy() {
+  saving.value = true
+  try {
+    await sandboxApi.savePolicy({
+      costWeight: costPercent.value / 100,
+      efficiencyWeight: (100 - costPercent.value) / 100,
+      reevaluate: true
+    })
+    ElMessage.success('策略已保存，预警建议已按新权重重算')
+    await load()
+  } finally {
+    saving.value = false
   }
 }
 
@@ -279,6 +360,19 @@ load()
 
 .health i.ok {
   background: #67c23a;
+}
+
+.policy-panel {
+  margin-bottom: 16px;
+}
+
+.policy-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  gap: 12px;
+  align-items: center;
+  max-width: 640px;
+  margin: 8px 0 4px;
 }
 
 @media (max-width: 1200px) {
