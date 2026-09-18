@@ -162,6 +162,7 @@
           <h4>关联预警</h4>
           <el-table :data="detail.alerts || []" size="small">
             <el-table-column prop="title" label="预警" min-width="180" />
+            <el-table-column prop="targetKey" label="对象" width="140" />
             <el-table-column label="等级"
               ><template #default="{ row }">{{
                 labelOf(row.severity, severityLabels)
@@ -192,6 +193,7 @@
           <el-table :data="detail.actions || []" size="small">
             <el-table-column prop="actionNo" label="指令号" />
             <el-table-column prop="type" label="类型" />
+            <el-table-column prop="targetKey" label="对象" width="140" />
             <el-table-column label="状态"
               ><template #default="{ row }">{{
                 labelOf(row.status, actionStatusLabels)
