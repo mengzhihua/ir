@@ -34,7 +34,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -465,10 +464,6 @@ public class AlertEngine {
         alert.setStatus("OPEN");
         alert.setSuggestedAction(suggested);
         alertMapper.insert(alert);
-    }
-
-    private void finishExecute(CtAlert alert, String suggested, CtAction action) {
-        finishBatch(alert, suggested, Collections.singletonList(action));
     }
 
     private CtAction finishBatch(CtAlert alert, String suggested, List<CtAction> batch) {
