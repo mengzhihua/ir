@@ -10,6 +10,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import com.ir.snapshot.entity.InventorySnapshot;
 import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.entity.ShipmentSnapshot;
@@ -21,8 +23,6 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -221,7 +221,7 @@ class FullFlowTest {
     }
 
     private String token() throws Exception {
-        String body = mvc.perform(post("/api/auth/login")
+        String body = mvc.perform(MockMvcRequestBuilders.post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"admin\",\"password\":\"admin123\"}"))
                 .andExpect(status().isOk())
@@ -230,7 +230,7 @@ class FullFlowTest {
     }
 
     private JsonNode get(String token, String url) throws Exception {
-        MvcResult result = mvc.perform(get(url).header("Authorization", "Bearer " + token))
+        MvcResult result = mvc.perform(MockMvcRequestBuilders.get(url).header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andReturn();
@@ -238,8 +238,8 @@ class FullFlowTest {
     }
 
     private JsonNode post(String token, String url, String json) throws Exception {
-        org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request =
-                post(url).header("Authorization", "Bearer " + token);
+        MockHttpServletRequestBuilder request =
+                MockMvcRequestBuilders.post(url).header("Authorization", "Bearer " + token);
         if (json != null) {
             request = request.contentType(MediaType.APPLICATION_JSON).content(json);
         }
