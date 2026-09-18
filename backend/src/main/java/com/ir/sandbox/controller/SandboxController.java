@@ -126,7 +126,9 @@ public class SandboxController {
         java.math.BigDecimal cost = decimal(request.get("costWeight"), policy.costWeight());
         java.math.BigDecimal efficiency = decimal(
                 request.get("efficiencyWeight"), policy.efficiencyWeight());
-        Map<String, Object> snapshot = policy.update(cost, efficiency);
+        Integer safety = intOrNull(request.get("safetyDays"));
+        Integer lead = intOrNull(request.get("replenishLeadDays"));
+        Map<String, Object> snapshot = policy.update(cost, efficiency, safety, lead);
         snapshot.put("superseded", actions.supersedeOpposing(policy.stance()));
         if (truthy(request.get("reevaluate"))) {
             snapshot.put("alerts", alerts.evaluate().size());
@@ -146,6 +148,13 @@ public class SandboxController {
             return fallback;
         }
         return new java.math.BigDecimal(String.valueOf(value));
+    }
+
+    private Integer intOrNull(Object value) {
+        if (value == null || String.valueOf(value).trim().isEmpty()) {
+            return null;
+        }
+        return new java.math.BigDecimal(String.valueOf(value)).intValue();
     }
 
     private boolean truthy(Object value) {
