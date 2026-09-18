@@ -7,6 +7,7 @@ import com.ir.action.entity.CtAction;
 import com.ir.action.service.ActionService;
 import com.ir.common.CodeGenerator;
 import com.ir.sandbox.engine.ScenarioParams;
+import com.ir.sandbox.engine.ServiceFirstPicker;
 import com.ir.sandbox.entity.CtScenario;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -104,7 +105,14 @@ public class AutoSandboxService {
     }
 
     private CtScenario pickRecommended(List<CtScenario> rows) {
-        CtScenario best = null;
+        CtScenario best = ServiceFirstPicker.pickByCash(
+                rows,
+                CtScenario::getServiceLevel,
+                CtScenario::getStockoutUnits,
+                sandbox::cashUsedOf);
+        if (best != null) {
+            return best;
+        }
         for (CtScenario row : rows) {
             if (best == null
                     || nz(row.getBalanceScore()).compareTo(nz(best.getBalanceScore())) > 0) {

@@ -4,7 +4,7 @@
       <div>
         <h2>系统自动沙盘</h2>
         <p class="subtitle">
-          按成本与效率策略网格批量推演，自动标出综合最优方案
+          按成本与效率策略网格批量推演，先保服务水平再选占用现金最低的方案
           <template v-if="latest.stance">
             · 当前立场 {{ stanceLabel }}（成本 {{ Number(latest.costWeight || 0).toFixed(2) }} /
             效率 {{ Number(latest.efficiencyWeight || 0).toFixed(2) }}）
@@ -17,6 +17,10 @@
       <div class="stat">
         <div class="label">推荐方案</div>
         <div class="value">{{ recommended.name }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">占用现金</div>
+        <div class="value">{{ formatMoney(recommended.result?.cashUsed || recommended.cashUsed) }}</div>
       </div>
       <div class="stat">
         <div class="label">综合分</div>
@@ -43,6 +47,9 @@
               {{ row.name }}
               <el-tag v-if="row.recommended" type="success" size="small" class="rec-tag">推荐</el-tag>
             </template>
+          </el-table-column>
+          <el-table-column label="占用现金" align="right" width="120">
+            <template #default="{ row }">{{ formatMoney(row.result?.cashUsed || row.cashUsed) }}</template>
           </el-table-column>
           <el-table-column label="总成本" align="right" width="120">
             <template #default="{ row }">{{ formatMoney(row.totalCost) }}</template>

@@ -10,6 +10,7 @@ import com.ir.alert.mapper.CtAlertMapper;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSystemMapper;
 import com.ir.sandbox.entity.CtScenario;
+import com.ir.sandbox.engine.ScenarioParams;
 import com.ir.sandbox.service.BalancePolicy;
 import com.ir.sandbox.service.SandboxService;
 import com.ir.snapshot.entity.CostRecord;
@@ -202,6 +203,12 @@ public class TowerService {
             rec.put("capitalUtilization", recResult.get("capitalUtilization"));
             rec.put("cashUsed", recResult.get("cashUsed"));
             rec.put("workingCapital", recResult.get("workingCapital"));
+            ScenarioParams recParams = sandbox.paramsOf(recommendation);
+            if (recParams != null) {
+                rec.put("safetyDays", recParams.getSafetyDays());
+                rec.put("replenishLeadDays", recParams.getReplenishLeadDays());
+                rec.put("allocationStrategy", recParams.getAllocationStrategy());
+            }
             result.put("recommendation", rec);
         }
         return result;

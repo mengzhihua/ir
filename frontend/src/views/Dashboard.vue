@@ -133,6 +133,17 @@
             </div>
           </div>
           <div class="stat">
+            <div class="label">占用现金</div>
+            <div class="value">{{ formatMoney(overview.recommendation.cashUsed) }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">补货策略</div>
+            <div class="value">
+              安全 {{ overview.recommendation.safetyDays ?? '-' }} /
+              提前期 {{ overview.recommendation.replenishLeadDays ?? '-' }} 天
+            </div>
+          </div>
+          <div class="stat">
             <div class="label">总成本</div>
             <div class="value">{{ formatMoney(overview.recommendation.totalCost) }}</div>
           </div>

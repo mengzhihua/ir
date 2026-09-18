@@ -12,6 +12,7 @@ import com.ir.sandbox.engine.BalanceScorer;
 import com.ir.sandbox.engine.BaselineData;
 import com.ir.sandbox.engine.SandboxEngine;
 import com.ir.sandbox.engine.ScenarioParams;
+import com.ir.sandbox.engine.ServiceFirstPicker;
 import com.ir.sandbox.entity.CtScenario;
 import com.ir.sandbox.mapper.CtScenarioMapper;
 import com.ir.snapshot.entity.OrderSnapshot;
@@ -356,8 +357,35 @@ public class SandboxService {
         }
         return scenarioMapper.selectList(new LambdaQueryWrapper<CtScenario>()
                 .eq(CtScenario::getRunNo, runNo)
-                .orderByDesc(CtScenario::getBalanceScore)
+                .orderByDesc(CtScenario::getRecommended)
                 .orderByAsc(CtScenario::getId));
+    }
+
+    public BigDecimal cashUsedOf(CtScenario scenario) {
+        return decimal(resultOf(scenario).get("cashUsed"));
+    }
+
+    public ScenarioParams paramsOf(CtScenario scenario) {
+        if (scenario == null || scenario.getParamsJson() == null) {
+            return new ScenarioParams();
+        }
+        return read(scenario.getParamsJson(), ScenarioParams.class);
+    }
+
+    public ScenarioParams manualDefaults() {
+        ScenarioParams params = new ScenarioParams();
+        CtScenario recommended = latestRecommendedAuto();
+        if (recommended == null || recommended.getParamsJson() == null) {
+            return params;
+        }
+        ScenarioParams source = read(recommended.getParamsJson(), ScenarioParams.class);
+        params.setSafetyDays(source.getSafetyDays());
+        params.setReplenishLeadDays(source.getReplenishLeadDays());
+        params.setAllocationStrategy(source.getAllocationStrategy());
+        if (source.getCarrierMix() != null && !source.getCarrierMix().isEmpty()) {
+            params.setCarrierMix(source.getCarrierMix());
+        }
+        return params;
     }
 
     public CtScenario latestRecommendedAuto() {
@@ -717,24 +745,17 @@ public class SandboxService {
     }
 
     private Map<String, Object> pickPlay(List<Map<String, Object>> playbook) {
-        Map<String, Object> best = null;
-        BigDecimal bestCash = null;
+        List<Map<String, Object>> baselinePlays = new ArrayList<>();
         for (Map<String, Object> row : playbook) {
-            if (decimal(row.get("demandMultiplier")).compareTo(BigDecimal.ONE) != 0) {
-                continue;
-            }
-            if (decimal(row.get("serviceLevel")).compareTo(new BigDecimal("0.995")) < 0) {
-                continue;
-            }
-            if (decimal(row.get("stockoutUnits")).signum() > 0) {
-                continue;
-            }
-            BigDecimal cash = decimal(row.get("cashUsed"));
-            if (best == null || cash.compareTo(bestCash) < 0) {
-                best = row;
-                bestCash = cash;
+            if (decimal(row.get("demandMultiplier")).compareTo(BigDecimal.ONE) == 0) {
+                baselinePlays.add(row);
             }
         }
+        Map<String, Object> best = ServiceFirstPicker.pickByCash(
+                baselinePlays,
+                row -> decimal(row.get("serviceLevel")),
+                row -> decimal(row.get("stockoutUnits")),
+                row -> decimal(row.get("cashUsed")));
         if (best == null && !playbook.isEmpty()) {
             best = playbook.get(0);
         }

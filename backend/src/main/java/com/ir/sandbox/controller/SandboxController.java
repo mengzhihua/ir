@@ -78,7 +78,7 @@ public class SandboxController {
 
     @GetMapping("/defaults")
     public R<ScenarioParams> defaults() {
-        ScenarioParams params = new ScenarioParams();
+        ScenarioParams params = service.manualDefaults();
         params.setCostWeight(policy.costWeight());
         params.setEfficiencyWeight(policy.efficiencyWeight());
         return R.ok(params);
