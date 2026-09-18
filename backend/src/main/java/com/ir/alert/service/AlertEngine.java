@@ -30,9 +30,11 @@ import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class AlertEngine {
@@ -81,27 +83,29 @@ public class AlertEngine {
 
     @Transactional
     public synchronized List<CtAlert> evaluate() {
+        Set<String> active = new HashSet<>();
         List<CtRule> rules = ruleMapper.selectList(
                 new LambdaQueryWrapper<CtRule>().eq(CtRule::getEnabled, true));
         LocalDateTime now = LocalDateTime.now();
         for (CtRule rule : rules) {
             Map<String, Object> params = params(rule.getParamsJson());
             if ("ORDER_STUCK".equals(rule.getType())) {
-                evaluateOrders(rule, params, now);
+                evaluateOrders(rule, params, now, active);
             } else if ("WMS_STUCK".equals(rule.getType())) {
-                evaluateWms(rule, params, now);
+                evaluateWms(rule, params, now, active);
             } else if ("TMS_DELAY".equals(rule.getType())) {
-                evaluateShipments(rule, now);
+                evaluateShipments(rule, now, active);
             } else if ("LOW_STOCK".equals(rule.getType())) {
-                evaluateInventory(rule);
+                evaluateInventory(rule, active);
             } else if ("COST_OVERRUN".equals(rule.getType())) {
-                evaluateCost(rule, params);
+                evaluateCost(rule, params, active);
             } else if ("FORECAST_STOCKOUT".equals(rule.getType())) {
-                evaluateForecast(rule, params);
+                evaluateForecast(rule, params, active);
             } else if ("EXT_STATUS".equals(rule.getType())) {
-                evaluateExt(rule, params);
+                evaluateExt(rule, params, active);
             }
         }
+        resolveCleared(active);
         return all();
     }
 
@@ -202,13 +206,12 @@ public class AlertEngine {
                 && "SAP_LOW_STOCK".equals(alert.getRuleCode())) {
             fanOutPurchase(params, targetKey, id);
         }
-        alert.setSuggestedAction(type);
-        alert.setActionId(action == null ? null : action.getId());
-        alertMapper.updateById(alert);
+        finishExecute(alert, type, action);
         return action;
     }
 
-    private void evaluateOrders(CtRule rule, Map<String, Object> params, LocalDateTime now) {
+    private void evaluateOrders(
+            CtRule rule, Map<String, Object> params, LocalDateTime now, Set<String> active) {
         String expectedStatus = String.valueOf(params.get("status"));
         long threshold = number(params.get("hours"), 4L);
         for (OrderSnapshot order : orderMapper.selectList(null)) {
@@ -224,12 +227,13 @@ public class AlertEngine {
                     detail = detail + "，按成本/效率权重建议 " + advice.getType();
                 }
                 add(rule, "ORDER", order.getOrderNo(), order.getWarehouseCode(),
-                        "订单卡单", detail, suggested);
+                        "订单卡单", detail, suggested, active);
             }
         }
     }
 
-    private void evaluateWms(CtRule rule, Map<String, Object> params, LocalDateTime now) {
+    private void evaluateWms(
+            CtRule rule, Map<String, Object> params, LocalDateTime now, Set<String> active) {
         long threshold = number(params.get("hours"), 6L);
         java.util.Set<String> statuses = stuckStatuses(params.get("status"));
         for (WmsOrderSnapshot outbound : wmsMapper.selectList(null)) {
@@ -246,12 +250,12 @@ public class AlertEngine {
                     detail = detail + "，按成本/效率权重建议 " + advice.getType();
                 }
                 add(rule, "ORDER", outbound.getCode(), outbound.getWarehouseCode(),
-                        "WMS 拣货卡单", detail, suggested);
+                        "WMS 拣货卡单", detail, suggested, active);
             }
         }
     }
 
-    private void evaluateShipments(CtRule rule, LocalDateTime now) {
+    private void evaluateShipments(CtRule rule, LocalDateTime now, Set<String> active) {
         boolean exceptionOnly = String.valueOf(rule.getParamsJson())
                 .contains("\"exception\":true");
         for (ShipmentSnapshot shipment : shipmentMapper.selectList(null)) {
@@ -280,12 +284,12 @@ public class AlertEngine {
                 }
                 add(rule, "WAYBILL", shipment.getWaybillCode(),
                         com.ir.common.WarehouseCodes.toOms(shipment.getFromSiteCode()),
-                        "运输到达延迟", detail, suggested);
+                        "运输到达延迟", detail, suggested, active);
             }
         }
     }
 
-    private void evaluateCost(CtRule rule, Map<String, Object> params) {
+    private void evaluateCost(CtRule rule, Map<String, Object> params, Set<String> active) {
         LocalDate from = LocalDate.now().minusDays(number(
                 params.get("days"), 7L) - 1L);
         java.util.Map<String, java.math.BigDecimal> amountByWarehouse =
@@ -326,12 +330,12 @@ public class AlertEngine {
                         "仓库成本超标", "近 " + params.getOrDefault(
                                 "days", 7) + " 天单均成本 " + perOrder
                                 + "，按成本/效率权重建议换承运商 " + recommended,
-                        rule.getSuggestedAction());
+                        rule.getSuggestedAction(), active);
             }
         }
     }
 
-    private void evaluateForecast(CtRule rule, Map<String, Object> params) {
+    private void evaluateForecast(CtRule rule, Map<String, Object> params, Set<String> active) {
         int horizon = (int) number(params.get("horizon"),
                 number(params.get("days"), 14L));
         int serviceDays = (int) number(params.get("serviceDays"), 3L);
@@ -353,24 +357,26 @@ public class AlertEngine {
                         "预计 " + stockout + " 缺货，"
                                 + (balanceAdvisor.costFirst()
                                 ? "成本优先只走采购建议、加大批量"
-                                : "兼顾时效，采购建议同时仓内补货"));
+                                : "兼顾时效，采购建议同时仓内补货"),
+                        rule.getSuggestedAction(), active);
             }
         }
     }
 
-    private void evaluateInventory(CtRule rule) {
+    private void evaluateInventory(CtRule rule, Set<String> active) {
         for (InventorySnapshot inventory : inventoryMapper.selectList(null)) {
             if (inventory.getQtyAvailable().compareTo(inventory.getSafetyQty()) < 0) {
                 add(rule, "SKU", inventory.getSku(), inventory.getWarehouseCode(),
                         "低库存", "可用库存低于安全库存，"
                                 + (balanceAdvisor.costFirst()
                                 ? "成本优先加大采购批量"
-                                : "兼顾时效，采购建议同时仓内补货"));
+                                : "兼顾时效，采购建议同时仓内补货"),
+                        rule.getSuggestedAction(), active);
             }
         }
     }
 
-    private void evaluateExt(CtRule rule, Map<String, Object> params) {
+    private void evaluateExt(CtRule rule, Map<String, Object> params, Set<String> active) {
         String system = String.valueOf(params.getOrDefault("system", ""));
         String dataType = String.valueOf(params.getOrDefault("dataType", ""));
         String status = String.valueOf(params.getOrDefault("status", ""));
@@ -380,7 +386,8 @@ public class AlertEngine {
             if (status.equals(row.getStatus())) {
                 add(rule, dataType, row.getBizKey(), row.getPlantCode(),
                         rule.getName(), (row.getTitle() == null ? row.getBizKey() : row.getTitle())
-                                + " 状态 " + row.getStatus());
+                                + " 状态 " + row.getStatus(),
+                        rule.getSuggestedAction(), active);
             }
         }
     }
@@ -391,18 +398,12 @@ public class AlertEngine {
             String targetKey,
             String warehouse,
             String title,
-            String detail) {
-        add(rule, targetType, targetKey, warehouse, title, detail, rule.getSuggestedAction());
-    }
-
-    private void add(
-            CtRule rule,
-            String targetType,
-            String targetKey,
-            String warehouse,
-            String title,
             String detail,
-            String suggestedAction) {
+            String suggestedAction,
+            Set<String> active) {
+        if (active != null) {
+            active.add(activeKey(rule.getCode(), targetKey));
+        }
         CtAlert existing = alertMapper.selectOne(new LambdaQueryWrapper<CtAlert>()
                 .eq(CtAlert::getRuleCode, rule.getCode())
                 .eq(CtAlert::getTargetKey, targetKey)
@@ -433,6 +434,41 @@ public class AlertEngine {
         alert.setStatus("OPEN");
         alert.setSuggestedAction(suggested);
         alertMapper.insert(alert);
+    }
+
+    private void finishExecute(CtAlert alert, String suggested, CtAction action) {
+        alert.setSuggestedAction(suggested);
+        alert.setActionId(action == null ? null : action.getId());
+        if (action != null && "SUCCESS".equals(action.getStatus())) {
+            close(alert);
+            return;
+        }
+        alertMapper.updateById(alert);
+    }
+
+    private void resolveCleared(Set<String> active) {
+        List<CtAlert> open = alertMapper.selectList(
+                new LambdaQueryWrapper<CtAlert>().eq(CtAlert::getStatus, "OPEN"));
+        for (CtAlert alert : open) {
+            if (!active.contains(activeKey(alert.getRuleCode(), alert.getTargetKey()))) {
+                close(alert);
+            }
+        }
+    }
+
+    private void close(CtAlert alert) {
+        if (alert == null || "RESOLVED".equals(alert.getStatus())
+                || "IGNORED".equals(alert.getStatus())) {
+            return;
+        }
+        alert.setStatus("RESOLVED");
+        alert.setResolvedAt(LocalDateTime.now());
+        alertMapper.updateById(alert);
+    }
+
+    private String activeKey(String ruleCode, String targetKey) {
+        return (ruleCode == null ? "" : ruleCode) + "\0"
+                + (targetKey == null ? "" : targetKey);
     }
 
     private Map<String, Object> params(String json) {
@@ -529,9 +565,7 @@ public class AlertEngine {
                 primary = action;
             }
         }
-        alert.setSuggestedAction(BalanceAdvisor.SWITCH);
-        alert.setActionId(primary == null ? null : primary.getId());
-        alertMapper.updateById(alert);
+        finishExecute(alert, BalanceAdvisor.SWITCH, primary);
         return primary;
     }
 
@@ -570,9 +604,9 @@ public class AlertEngine {
                 primary = action;
             }
         }
-        alert.setSuggestedAction(primary == null ? alert.getSuggestedAction() : primary.getType());
-        alert.setActionId(primary == null ? null : primary.getId());
-        alertMapper.updateById(alert);
+        finishExecute(alert,
+                primary == null ? alert.getSuggestedAction() : primary.getType(),
+                primary);
         return primary;
     }
 
