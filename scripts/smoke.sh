@@ -37,7 +37,7 @@ SCENARIO_NAME="2倍需求-$(date +%H%M%S)"
 SCENARIO="$(json -X POST "$BASE/api/sandbox/scenario" -H 'Content-Type: application/json' -d "{\"name\":\"$SCENARIO_NAME\",\"params\":{\"demandMultiplier\":2,\"allocationStrategy\":\"SINGLE_WAREHOUSE\",\"singleWarehouse\":\"WH-SH\"}}" | jq -r '.data.id')"
 json -X POST "$BASE/api/sandbox/scenario/$SCENARIO/run" | jq -e '.code==0' >/dev/null
 json "$BASE/api/sandbox/compare?ids=$BASELINE,$SCENARIO" | jq -e '.code==0 and (.data|length)>=2' >/dev/null
-json -X POST "$BASE/api/sandbox/capital" -H 'Content-Type: application/json' -d '{"workingCapital":100000000}' | jq -e '.code==0 and .data.verdict=="RELIABLE" and .data.reliable==true and .data.baseline.capitalVerdict=="RELIABLE"' >/dev/null
+json -X POST "$BASE/api/sandbox/capital" -H 'Content-Type: application/json' -d '{"workingCapital":100000000}' | jq -e '.code==0 and .data.verdict=="RELIABLE" and .data.reliable==true and .data.baseline.capitalVerdict=="RELIABLE" and .data.demand5x.capitalVerdict=="RELIABLE" and (.data.headroom|tonumber)>20 and (.data.optimizations|length)>0' >/dev/null
 AUTO="$(json -X POST "$BASE/api/sandbox/auto/run" | jq -r '.data.recommended.id')"
 test -n "$AUTO" && test "$AUTO" != "null"
 json "$BASE/api/sandbox/auto/latest" | jq -e '.code==0 and .data.recommended.id!=null' >/dev/null
