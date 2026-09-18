@@ -1,6 +1,7 @@
 package com.ir.alert.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -487,8 +488,9 @@ public class AlertEngine {
             if ("OPEN".equals(alert.getStatus())) {
                 close(alert);
             } else if (alert.getActionId() != null) {
-                alert.setActionId(null);
-                alertMapper.updateById(alert);
+                alertMapper.update(null, new LambdaUpdateWrapper<CtAlert>()
+                        .eq(CtAlert::getId, alert.getId())
+                        .set(CtAlert::getActionId, null));
             }
         }
     }
