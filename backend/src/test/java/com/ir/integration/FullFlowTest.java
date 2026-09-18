@@ -169,6 +169,12 @@ class FullFlowTest {
         assertTrue(capital.path("baseline").path("capitalUtilization").decimalValue()
                 .compareTo(new BigDecimal("0.20")) < 0);
         assertEquals("RELIABLE", capital.path("baseline").path("capitalVerdict").asText());
+        assertTrue(capital.path("headroom").decimalValue().compareTo(new BigDecimal("20")) > 0);
+        assertTrue(capital.path("minReliableCapital").decimalValue()
+                .compareTo(new BigDecimal("1000000")) < 0);
+        assertTrue(capital.path("maxReliableDemandMultiplier").asInt() >= 5);
+        assertTrue(capital.path("optimizations").size() > 0);
+        assertEquals("RELIABLE", capital.path("demand5x").path("capitalVerdict").asText());
     }
 
     private void seedStuckOrder() {

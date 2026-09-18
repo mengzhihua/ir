@@ -217,7 +217,7 @@
         ><el-button type="primary" :loading="saving" @click="save">创建场景</el-button></template
       ></el-dialog
     >
-    <el-dialog v-model="capitalDialog" title="1 亿资金盘推演" width="720px">
+    <el-dialog v-model="capitalDialog" title="1 亿资金盘推演" width="760px">
       <div v-if="capitalResult">
         <p>{{ capitalResult.reason }}</p>
         <div class="stats">
@@ -232,6 +232,14 @@
           <div class="stat">
             <div class="label">资金盘</div>
             <div class="value">{{ formatMoney(capitalResult.workingCapital) }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">安全垫</div>
+            <div class="value">{{ formatNumber(capitalResult.headroom, 1) }}倍</div>
+          </div>
+          <div class="stat">
+            <div class="label">最低可靠资金</div>
+            <div class="value">{{ formatMoney(capitalResult.minReliableCapital) }}</div>
           </div>
         </div>
         <el-table :data="capitalRows" size="small">
@@ -251,6 +259,9 @@
             }}</template>
           </el-table-column>
         </el-table>
+        <ul v-if="capitalResult.optimizations?.length" class="subtitle" style="margin-top: 12px">
+          <li v-for="item in capitalResult.optimizations" :key="item">{{ item }}</li>
+        </ul>
       </div>
     </el-dialog>
     <el-dialog v-model="actionDialog" title="已生成待执行动作" width="680px"
@@ -320,7 +331,8 @@ const capitalRows = computed(() => {
   if (!capitalResult.value) return []
   return [
     { name: '常态 30 天', ...(capitalResult.value.baseline || {}) },
-    { name: '2 倍需求', ...(capitalResult.value.demand2x || {}) }
+    { name: '2 倍需求', ...(capitalResult.value.demand2x || {}) },
+    { name: '5 倍需求', ...(capitalResult.value.demand5x || {}) }
   ]
 })
 const carrierRows = computed(() => carriers.map((key) => ({ key })))
