@@ -39,6 +39,9 @@ public class MockWmsClient implements WmsClient {
     @Override
     public void execute(ActionCommand command) {
         if ("WMS_REPLENISH".equals(command.getType())) {
+            if (command.getTargetKey() != null && command.getTargetKey().startsWith("WH-FAIL")) {
+                throw new IllegalStateException("仓内补货失败");
+            }
             return;
         }
         for (WmsOrderSnapshot order : dataset.outbound()) {

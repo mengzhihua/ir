@@ -32,6 +32,7 @@ import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -207,11 +208,13 @@ public class AlertEngine {
         request.put("alertId", id);
         request.put("expectedSaving", savingOf(advice, type, targetKey, params));
         CtAction action = actions.createAndExecute(request);
+        List<CtAction> batch = new ArrayList<>();
+        batch.add(action);
         if (action != null && "SUCCESS".equals(action.getStatus())
                 && "SAP_LOW_STOCK".equals(alert.getRuleCode())) {
-            fanOutPurchase(params, targetKey, id);
+            batch.addAll(fanOutPurchase(params, targetKey, id));
         }
-        finishExecute(alert, type, action);
+        finishBatch(alert, type, batch);
         return action;
     }
 
@@ -463,14 +466,41 @@ public class AlertEngine {
         alertMapper.insert(alert);
     }
 
-    private void finishExecute(CtAlert alert, String suggested, CtAction action) {
+    private CtAction finishBatch(CtAlert alert, String suggested, List<CtAction> batch) {
         alert.setSuggestedAction(suggested);
-        alert.setActionId(action == null ? null : action.getId());
-        if (action != null && "SUCCESS".equals(action.getStatus())) {
+        CtAction primary = firstAction(batch);
+        if (allSuccess(batch)) {
+            alert.setActionId(primary == null ? null : primary.getId());
             close(alert);
-            return;
+            return primary;
         }
+        alert.setActionId(null);
         alertMapper.updateById(alert);
+        return primary;
+    }
+
+    private boolean allSuccess(List<CtAction> batch) {
+        if (batch == null || batch.isEmpty()) {
+            return false;
+        }
+        for (CtAction action : batch) {
+            if (action == null || !"SUCCESS".equals(action.getStatus())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private CtAction firstAction(List<CtAction> batch) {
+        if (batch == null) {
+            return null;
+        }
+        for (CtAction action : batch) {
+            if (action != null) {
+                return action;
+            }
+        }
+        return null;
     }
 
     private void resolveCleared(Set<String> active, Set<String> evaluatedRules) {
@@ -580,18 +610,20 @@ public class AlertEngine {
         return gap.signum() > 0 ? gap : java.math.BigDecimal.ONE;
     }
 
-    private void fanOutPurchase(Map<String, Object> params, String sku, Long alertId) {
-        dispatch("SRM_PURCHASE_SUGGEST", sku, params, alertId);
+    private List<CtAction> fanOutPurchase(Map<String, Object> params, String sku, Long alertId) {
+        List<CtAction> rows = new ArrayList<>();
+        rows.add(dispatch("SRM_PURCHASE_SUGGEST", sku, params, alertId));
         Map<String, Object> oa = new LinkedHashMap<>(params);
         oa.put("definitionCode", "GENERAL");
         oa.put("title", "采购补货审批 " + sku);
         oa.put("businessType", "SAP_PR");
         oa.put("businessId", sku);
-        dispatch("OA_START_WORKFLOW", sku, oa, alertId);
+        rows.add(dispatch("OA_START_WORKFLOW", sku, oa, alertId));
         String warehouse = String.valueOf(params.getOrDefault("warehouseCode", "WH-SH"));
         Map<String, Object> wms = new LinkedHashMap<>();
         wms.put("warehouseCode", warehouse);
-        dispatch("WMS_REPLENISH", warehouse, wms, alertId);
+        rows.add(dispatch("WMS_REPLENISH", warehouse, wms, alertId));
+        return rows;
     }
 
     private CtAction executeOverrun(CtAlert alert) {
@@ -602,16 +634,12 @@ public class AlertEngine {
         if (advice.isEmpty()) {
             return null;
         }
-        CtAction primary = null;
+        List<CtAction> batch = new ArrayList<>();
         for (BalanceAdvisor.Advice item : advice) {
-            CtAction action = dispatch(item.getType(), item.getTargetKey(),
-                    item.params(), alert.getId(), item.getExpectedSaving());
-            if (primary == null) {
-                primary = action;
-            }
+            batch.add(dispatch(item.getType(), item.getTargetKey(),
+                    item.params(), alert.getId(), item.getExpectedSaving()));
         }
-        finishExecute(alert, BalanceAdvisor.SWITCH, primary);
-        return primary;
+        return finishBatch(alert, BalanceAdvisor.SWITCH, batch);
     }
 
     private CtAction executeStockout(CtAlert alert) {
@@ -641,18 +669,15 @@ public class AlertEngine {
         if (advice.isEmpty()) {
             return null;
         }
-        CtAction primary = null;
+        List<CtAction> batch = new ArrayList<>();
         for (BalanceAdvisor.Advice item : advice) {
-            CtAction action = dispatch(item.getType(), item.getTargetKey(),
-                    item.params(), alert.getId());
-            if (primary == null) {
-                primary = action;
-            }
+            batch.add(dispatch(item.getType(), item.getTargetKey(),
+                    item.params(), alert.getId()));
         }
-        finishExecute(alert,
+        CtAction primary = firstAction(batch);
+        return finishBatch(alert,
                 primary == null ? alert.getSuggestedAction() : primary.getType(),
-                primary);
-        return primary;
+                batch);
     }
 
     private void fillFromShipment(CtAlert alert, Map<String, Object> params) {

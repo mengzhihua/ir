@@ -221,6 +221,36 @@ class AlertEngineTest {
     }
 
     @Test
+    void stockoutKeepsOpenWhenReplenishFails() {
+        inventoryMapper.insert(stock("SKU-BATCH-FAIL", "WH-FAIL", "2"));
+        alertEngine.evaluate();
+        CtAlert low = alertMapper.selectList(null).stream()
+                .filter(a -> "LOW_STOCK".equals(a.getRuleCode())
+                        && a.getTargetKey() != null
+                        && a.getTargetKey().startsWith("SKU-BATCH-FAIL")
+                        && "OPEN".equals(a.getStatus()))
+                .findFirst().orElse(null);
+        assertNotNull(low);
+        CtAction primary = alertEngine.executeSuggested(low.getId());
+        assertNotNull(primary);
+        assertEquals("SRM_PURCHASE_SUGGEST", primary.getType());
+        assertEquals("SUCCESS", primary.getStatus());
+        boolean replenishFailed = actionMapper.selectList(null).stream()
+                .anyMatch(row -> low.getId().equals(row.getAlertId())
+                        && "WMS_REPLENISH".equals(row.getType())
+                        && "FAILED".equals(row.getStatus()));
+        assertTrue(replenishFailed);
+        CtAlert afterExecute = alertMapper.selectById(low.getId());
+        assertEquals("OPEN", afterExecute.getStatus());
+        assertNull(afterExecute.getActionId());
+        alertEngine.evaluate();
+        CtAlert afterEvaluate = alertMapper.selectById(low.getId());
+        assertNull(afterEvaluate.getActionId());
+        assertTrue("OPEN".equals(afterEvaluate.getStatus())
+                || "RESOLVED".equals(afterEvaluate.getStatus()));
+    }
+
+    @Test
     void wmsAllocateResolvesStuckAndEvaluateDoesNotReopen() {
         alertEngine.evaluate();
         CtAlert stuck = alertMapper.selectList(null).stream()
