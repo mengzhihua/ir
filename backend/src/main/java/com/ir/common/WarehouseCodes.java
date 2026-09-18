@@ -46,4 +46,19 @@ public final class WarehouseCodes {
         }
         return toOms(plant);
     }
+
+    /** 采购在途落仓：快照写了仓号就用仓号，否则按工厂映到 OMS 仓。 */
+    public static String ofInbound(String plant, String warehouse) {
+        if (warehouse != null && !warehouse.trim().isEmpty()) {
+            return toOms(warehouse.trim());
+        }
+        return fromPlant(plant);
+    }
+
+    public static String stockKey(String sku, String warehouse) {
+        String item = sku == null ? "" : sku.trim();
+        String site = warehouse == null || warehouse.trim().isEmpty()
+                ? "" : toOms(warehouse.trim());
+        return site.isEmpty() ? item : item + "/" + site;
+    }
 }

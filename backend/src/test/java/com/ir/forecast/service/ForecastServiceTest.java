@@ -25,12 +25,19 @@ class ForecastServiceTest {
         Map<String, BigDecimal> inbound = forecasts.inboundBySku();
         assertEquals(0, new BigDecimal("12").compareTo(inbound.get("SKU002")));
         assertEquals(0, new BigDecimal("20").compareTo(inbound.get("MAT-1000")));
+        assertEquals(0, new BigDecimal("12").compareTo(forecasts.inboundOf("SKU002", "WH-SH")));
+        assertEquals(0, BigDecimal.ZERO.compareTo(forecasts.inboundOf("SKU002", "WH-BJ")));
+        assertEquals(0, new BigDecimal("20").compareTo(forecasts.inboundOf("MAT-1000", "WH-SH")));
 
-        List<Map<String, Object>> rows = forecasts.replenish(null, "SKU002", 14, 3);
-        assertFalse(rows.isEmpty());
-        Map<String, Object> first = rows.get(0);
+        List<Map<String, Object>> sh = forecasts.replenish("WH-SH", "SKU002", 14, 3);
+        assertFalse(sh.isEmpty());
+        Map<String, Object> first = sh.get(0);
         assertEquals(0, new BigDecimal("12").compareTo((BigDecimal) first.get("inTransit")));
         assertEquals(first.get("suggestQty"), first.get("suggestedQty"));
+
+        List<Map<String, Object>> bj = forecasts.replenish("WH-BJ", "SKU002", 14, 3);
+        assertFalse(bj.isEmpty());
+        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) bj.get(0).get("inTransit")));
     }
 
     @Test

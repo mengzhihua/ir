@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import com.ir.action.entity.CtAction;
 import com.ir.action.service.ActionService;
 import com.ir.common.CodeGenerator;
+import com.ir.common.WarehouseCodes;
 import com.ir.forecast.engine.ForecastEngine;
 import com.ir.forecast.entity.CtForecast;
 import com.ir.forecast.mapper.CtForecastMapper;
@@ -126,7 +127,7 @@ public class ForecastService {
             query.eq(InventorySnapshot::getSku, sku.trim());
         }
         List<InventorySnapshot> inventory = inventoryMapper.selectList(query);
-        Map<String, BigDecimal> inbound = inboundBySku();
+        Map<String, BigDecimal> inbound = inboundBySkuWarehouse();
         for (InventorySnapshot item : inventory) {
             Map<String, Object> forecast = run(
                     item.getSku(), item.getWarehouseCode(), horizon, "AUTO");
@@ -138,7 +139,9 @@ public class ForecastService {
                     ? BigDecimal.ZERO
                     : demand.divide(BigDecimal.valueOf(horizon), 6, RoundingMode.HALF_UP);
             BigDecimal safety = daily.multiply(BigDecimal.valueOf(serviceDays));
-            BigDecimal inTransit = inbound.getOrDefault(item.getSku(), BigDecimal.ZERO);
+            BigDecimal inTransit = inbound.getOrDefault(
+                    WarehouseCodes.stockKey(item.getSku(), item.getWarehouseCode()),
+                    BigDecimal.ZERO);
             BigDecimal available = item.getQtyAvailable() == null
                     ? BigDecimal.ZERO
                     : item.getQtyAvailable();
@@ -188,6 +191,19 @@ public class ForecastService {
     }
 
     public Map<String, BigDecimal> inboundBySku() {
+        Map<String, BigDecimal> bySku = new HashMap<>();
+        for (Map.Entry<String, BigDecimal> entry : inboundBySkuWarehouse().entrySet()) {
+            String sku = entry.getKey();
+            int slash = sku.indexOf('/');
+            if (slash > 0) {
+                sku = sku.substring(0, slash);
+            }
+            bySku.merge(sku, entry.getValue(), BigDecimal::add);
+        }
+        return bySku;
+    }
+
+    public Map<String, BigDecimal> inboundBySkuWarehouse() {
         Map<String, BigDecimal> po = new HashMap<>();
         Map<String, BigDecimal> asn = new HashMap<>();
         List<ExtSnapshot> rows = extMapper.selectList(new LambdaQueryWrapper<ExtSnapshot>()
@@ -198,10 +214,11 @@ public class ForecastService {
                 continue;
             }
             BigDecimal qty = row.getQty() == null ? BigDecimal.ZERO : row.getQty();
+            String key = WarehouseCodes.stockKey(row.getSku(), inboundWarehouse(row));
             if ("ASN".equals(row.getDataType())) {
-                asn.merge(row.getSku(), qty, BigDecimal::add);
+                asn.merge(key, qty, BigDecimal::add);
             } else {
-                po.merge(row.getSku(), qty, BigDecimal::add);
+                po.merge(key, qty, BigDecimal::add);
             }
         }
         Map<String, BigDecimal> inbound = new HashMap<>(po);
@@ -210,6 +227,17 @@ public class ForecastService {
             inbound.put(entry.getKey(), ordered.max(entry.getValue()));
         }
         return inbound;
+    }
+
+    public BigDecimal inboundOf(String sku, String warehouse) {
+        if (sku == null || sku.trim().isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        if (warehouse == null || warehouse.trim().isEmpty()) {
+            return inboundBySku().getOrDefault(sku.trim(), BigDecimal.ZERO);
+        }
+        return inboundBySkuWarehouse().getOrDefault(
+                WarehouseCodes.stockKey(sku, warehouse), BigDecimal.ZERO);
     }
 
     private Map<String, Object> toActionRequest(Map<String, Object> row) {
@@ -239,6 +267,24 @@ public class ForecastService {
             request.put("params", params);
         }
         return request;
+    }
+
+    private String inboundWarehouse(ExtSnapshot row) {
+        return WarehouseCodes.ofInbound(row.getPlantCode(), extraWarehouse(row.getExtraJson()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extraWarehouse(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            Map<String, Object> extra = objectMapper.readValue(json, Map.class);
+            Object value = extra.get("warehouseCode");
+            return value == null ? null : String.valueOf(value);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private boolean closedInbound(String status) {

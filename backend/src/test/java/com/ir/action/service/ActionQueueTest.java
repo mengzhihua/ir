@@ -240,8 +240,8 @@ class ActionQueueTest {
 
     @Test
     void purchaseSuggestWritesOpenPoAndInbound() {
-        Map<String, BigDecimal> before = forecasts.inboundBySku();
-        BigDecimal prior = before.getOrDefault("SKU005", BigDecimal.ZERO);
+        BigDecimal priorGz = forecasts.inboundOf("SKU005", "WH-GZ");
+        BigDecimal priorBj = forecasts.inboundOf("SKU005", "WH-BJ");
         Map<String, Object> request = pending("SRM_PURCHASE_SUGGEST", "SKU005", null);
         Map<String, Object> params = new LinkedHashMap<String, Object>();
         params.put("sku", "SKU005");
@@ -250,17 +250,20 @@ class ActionQueueTest {
         request.put("params", params);
         CtAction action = actions.createAndExecute(request);
         assertEquals("SUCCESS", action.getStatus());
-        assertTrue(action.getParamsJson().contains("IR-PO-SRM-SKU005"));
+        assertTrue(action.getParamsJson().contains("IR-PO-SRM-SKU005-WH-GZ"));
         ExtSnapshot po = extMapper.selectOne(
                 new LambdaQueryWrapper<ExtSnapshot>()
-                        .eq(ExtSnapshot::getBizKey, "IR-PO-SRM-SKU005")
+                        .eq(ExtSnapshot::getBizKey, "IR-PO-SRM-SKU005-WH-GZ")
                         .last("LIMIT 1"));
         assertNotNull(po);
         assertEquals("OPEN", po.getStatus());
         assertEquals("SKU005", po.getSku());
-        assertEquals(0, prior.add(new BigDecimal("50")).compareTo(po.getQty()));
-        assertEquals(0, prior.add(new BigDecimal("50")).compareTo(
-                forecasts.inboundBySku().get("SKU005")));
+        assertEquals("WH-GZ", po.getPlantCode());
+        assertTrue(po.getExtraJson() != null && po.getExtraJson().contains("WH-GZ"));
+        assertEquals(0, priorGz.add(new BigDecimal("50")).compareTo(po.getQty()));
+        assertEquals(0, priorGz.add(new BigDecimal("50")).compareTo(
+                forecasts.inboundOf("SKU005", "WH-GZ")));
+        assertEquals(0, priorBj.compareTo(forecasts.inboundOf("SKU005", "WH-BJ")));
     }
 
     @Test
