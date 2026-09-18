@@ -22,6 +22,7 @@ import com.ir.snapshot.mapper.OrderSnapshotMapper;
 import com.ir.snapshot.mapper.SalesDailyMapper;
 import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -250,24 +251,59 @@ public class SandboxService {
     public Map<String, Object> analyzeCapital(BigDecimal amount) {
         BigDecimal capital = amount == null || amount.signum() <= 0
                 ? new BigDecimal("100000000") : amount;
-        ScenarioParams normalParams = new ScenarioParams();
-        normalParams.setHorizonDays(30);
-        normalParams.setWorkingCapital(capital);
-        SandboxEngine.Result normal = engine.run(normalParams, baselineData());
-        ScenarioParams stressParams = new ScenarioParams();
-        stressParams.setHorizonDays(30);
-        stressParams.setWorkingCapital(capital);
-        stressParams.setDemandMultiplier(BigDecimal.valueOf(2));
-        SandboxEngine.Result stress = engine.run(stressParams, baselineData());
+        BaselineData data = baselineData();
+        SandboxEngine.Result normal = runCapital(data, capital, BigDecimal.ONE);
+        SandboxEngine.Result stress = runCapital(data, capital, BigDecimal.valueOf(2));
+        SandboxEngine.Result surge = runCapital(data, capital, BigDecimal.valueOf(5));
+        BigDecimal minReliable = minReliableCapital(data, capital);
+        int maxMultiplier = maxReliableMultiplier(data, capital);
+        BigDecimal used = nz(normal.getCashUsed());
+        BigDecimal headroom = used.signum() == 0
+                ? BigDecimal.ZERO
+                : capital.divide(used, 2, RoundingMode.HALF_UP);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("workingCapital", capital);
         result.put("baseline", capitalView(normal));
         result.put("demand2x", capitalView(stress));
+        result.put("demand5x", capitalView(surge));
+        result.put("headroom", headroom);
+        result.put("minReliableCapital", minReliable);
+        result.put("maxReliableDemandMultiplier", maxMultiplier);
         String verdict = overallVerdict(normal, stress);
         result.put("verdict", verdict);
         result.put("reliable", "RELIABLE".equals(verdict));
-        result.put("reason", overallReason(normal, stress, capital));
+        result.put("reason", overallReason(normal, stress, surge, capital, headroom, minReliable));
+        List<Map<String, Object>> playbook = playbook(data, capital);
+        Map<String, Object> recommended = pickPlay(playbook);
+        result.put("playbook", playbook);
+        result.put("recommended", recommended);
+        result.put("optimizations", optimizations(
+                normal, stress, surge, capital, minReliable, maxMultiplier, headroom, recommended, playbook));
         return result;
+    }
+
+    public CtScenario adoptRecommended(BigDecimal amount) {
+        ensureBaseline();
+        Map<String, Object> analysis = analyzeCapital(amount);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> recommended = (Map<String, Object>) analysis.get("recommended");
+        if (recommended == null || recommended.get("name") == null) {
+            throw new IllegalStateException("没有可采纳的资金盘策略");
+        }
+        BigDecimal capital = amount == null || amount.signum() <= 0
+                ? new BigDecimal("100000000") : amount;
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> mix = recommended.get("carrierMix") instanceof Map
+                ? (Map<String, BigDecimal>) recommended.get("carrierMix")
+                : null;
+        ScenarioParams params = capitalParams(
+                capital,
+                String.valueOf(recommended.getOrDefault("allocationStrategy", "BALANCED")),
+                decimal(recommended.get("safetyDays")).intValue(),
+                decimal(recommended.get("replenishLeadDays")).intValue(),
+                BigDecimal.ONE,
+                mix);
+        return persist("资金盘推荐·" + recommended.get("name"), params, false, "MANUAL", null, false, null);
     }
 
     public Map<String, Object> resultOf(CtScenario scenario) {
@@ -622,17 +658,237 @@ public class SandboxService {
         return stress.getCapitalVerdict();
     }
 
+    private List<Map<String, Object>> playbook(BaselineData data, BigDecimal capital) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        rows.add(play(data, capital, "就近默认", capitalParams(capital, "NEAREST", 3, 3, BigDecimal.ONE, null)));
+        rows.add(play(data, capital, "短交期补货", capitalParams(capital, "BALANCED", 3, 1, BigDecimal.ONE, null)));
+        rows.add(play(data, capital, "低安全短交期", capitalParams(capital, "BALANCED", 1, 1, BigDecimal.ONE, null)));
+        rows.add(play(data, capital, "低安全库存", capitalParams(capital, "BALANCED", 1, 3, BigDecimal.ONE, null)));
+        rows.add(play(data, capital, "经济承运", capitalParams(capital, "LOWEST_COST", 3, 4, BigDecimal.ONE, economicMix())));
+        rows.add(play(data, capital, "低安全短交期·5倍需求",
+                capitalParams(capital, "BALANCED", 1, 1, BigDecimal.valueOf(5), null)));
+        return rows;
+    }
+
+    private Map<String, Object> play(
+            BaselineData data,
+            BigDecimal capital,
+            String name,
+            ScenarioParams params) {
+        SandboxEngine.Result result = engine.run(params, data);
+        Map<String, Object> row = capitalView(result);
+        row.put("name", name);
+        row.put("allocationStrategy", params.getAllocationStrategy());
+        row.put("safetyDays", params.getSafetyDays());
+        row.put("replenishLeadDays", params.getReplenishLeadDays());
+        row.put("demandMultiplier", params.getDemandMultiplier());
+        row.put("carrierMix", params.getCarrierMix());
+        row.put("workingCapital", capital);
+        row.put("recommended", false);
+        return row;
+    }
+
+    private ScenarioParams capitalParams(
+            BigDecimal capital,
+            String allocation,
+            int safetyDays,
+            int leadDays,
+            BigDecimal multiplier,
+            Map<String, BigDecimal> mix) {
+        ScenarioParams params = new ScenarioParams();
+        params.setHorizonDays(30);
+        params.setWorkingCapital(capital);
+        params.setAllocationStrategy(allocation);
+        params.setSafetyDays(safetyDays);
+        params.setReplenishLeadDays(leadDays);
+        params.setDemandMultiplier(multiplier);
+        if (mix != null) {
+            params.setCarrierMix(mix);
+        }
+        return params;
+    }
+
+    private Map<String, BigDecimal> economicMix() {
+        Map<String, BigDecimal> mix = new LinkedHashMap<>();
+        mix.put("SF", BigDecimal.valueOf(0.1));
+        mix.put("JD", BigDecimal.valueOf(0.3));
+        mix.put("SELF01", BigDecimal.valueOf(0.6));
+        return mix;
+    }
+
+    private Map<String, Object> pickPlay(List<Map<String, Object>> playbook) {
+        Map<String, Object> best = null;
+        BigDecimal bestCash = null;
+        for (Map<String, Object> row : playbook) {
+            if (decimal(row.get("demandMultiplier")).compareTo(BigDecimal.ONE) != 0) {
+                continue;
+            }
+            if (decimal(row.get("serviceLevel")).compareTo(new BigDecimal("0.995")) < 0) {
+                continue;
+            }
+            if (decimal(row.get("stockoutUnits")).signum() > 0) {
+                continue;
+            }
+            BigDecimal cash = decimal(row.get("cashUsed"));
+            if (best == null || cash.compareTo(bestCash) < 0) {
+                best = row;
+                bestCash = cash;
+            }
+        }
+        if (best == null && !playbook.isEmpty()) {
+            best = playbook.get(0);
+        }
+        if (best != null) {
+            best.put("recommended", true);
+        }
+        return best;
+    }
+
+    private SandboxEngine.Result runCapital(
+            BaselineData data, BigDecimal capital, BigDecimal multiplier) {
+        ScenarioParams params = new ScenarioParams();
+        params.setHorizonDays(30);
+        params.setWorkingCapital(capital);
+        params.setDemandMultiplier(multiplier);
+        return engine.run(params, data);
+    }
+
+    private BigDecimal minReliableCapital(BaselineData data, BigDecimal capital) {
+        if (!"RELIABLE".equals(overallVerdict(
+                runCapital(data, capital, BigDecimal.ONE),
+                runCapital(data, capital, BigDecimal.valueOf(2))))) {
+            return capital;
+        }
+        BigDecimal low = BigDecimal.ONE;
+        BigDecimal high = capital;
+        for (int i = 0; i < 16; i++) {
+            BigDecimal mid = low.add(high).divide(BigDecimal.valueOf(2), 0, RoundingMode.HALF_UP);
+            if (mid.compareTo(low) <= 0 || mid.compareTo(high) >= 0) {
+                break;
+            }
+            if ("RELIABLE".equals(overallVerdict(
+                    runCapital(data, mid, BigDecimal.ONE),
+                    runCapital(data, mid, BigDecimal.valueOf(2))))) {
+                high = mid;
+            } else {
+                low = mid.add(BigDecimal.ONE);
+            }
+        }
+        return high;
+    }
+
+    private int maxReliableMultiplier(BaselineData data, BigDecimal capital) {
+        int best = 1;
+        int low = 1;
+        int high = 80;
+        while (low <= high) {
+            int mid = (low + high) / 2;
+            SandboxEngine.Result result = runCapital(data, capital, BigDecimal.valueOf(mid));
+            if ("RELIABLE".equals(result.getCapitalVerdict())) {
+                best = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return best;
+    }
+
+    private List<String> optimizations(
+            SandboxEngine.Result normal,
+            SandboxEngine.Result stress,
+            SandboxEngine.Result surge,
+            BigDecimal capital,
+            BigDecimal minReliable,
+            int maxMultiplier,
+            BigDecimal headroom,
+            Map<String, Object> recommended,
+            List<Map<String, Object>> playbook) {
+        List<String> rows = new ArrayList<>();
+        if (recommended != null && recommended.get("name") != null) {
+            rows.add("推荐策略「" + recommended.get("name")
+                    + "」：安全天数 " + recommended.get("safetyDays")
+                    + "、补货提前期 " + recommended.get("replenishLeadDays")
+                    + " 天，30 天现金 "
+                    + recommended.get("cashUsed")
+                    + "，服务水平 "
+                    + recommended.get("serviceLevel") + "。");
+        }
+        if (recommended != null && playbook != null && !playbook.isEmpty()) {
+            BigDecimal baselineCash = decimal(playbook.get(0).get("cashUsed"));
+            BigDecimal recommendedCash = decimal(recommended.get("cashUsed"));
+            BigDecimal saved = baselineCash.subtract(recommendedCash);
+            if (baselineCash.signum() > 0 && saved.signum() > 0) {
+                rows.add("相对就近默认可少占用现金 "
+                        + saved.toPlainString()
+                        + "，约 "
+                        + saved.multiply(new BigDecimal("100"))
+                                .divide(baselineCash, 1, RoundingMode.HALF_UP)
+                        + "%；只降安全库存不缩短交期会掉服务水平。");
+            }
+            for (Map<String, Object> row : playbook) {
+                if ("低安全短交期".equals(row.get("name"))
+                        && decimal(row.get("stockoutUnits")).signum() > 0
+                        && !Boolean.TRUE.equals(row.get("recommended"))) {
+                    rows.add("当前库存撑不住再把安全天数降到 1，会缺货 "
+                            + row.get("stockoutUnits")
+                            + "，先保短交期补货（安全 3 天 + 提前期 1 天）。");
+                }
+            }
+        }
+        if (headroom.compareTo(BigDecimal.valueOf(20)) >= 0) {
+            rows.add("1 亿相对当前 30 天现金需求过大，约 "
+                    + minReliable.toPlainString()
+                    + " 即可覆盖常态和 2 倍需求并保持可靠。");
+        }
+        BigDecimal used = nz(normal.getCashUsed());
+        if (used.signum() > 0
+                && nz(normal.getPurchaseCash()).divide(used, 4, RoundingMode.HALF_UP)
+                .compareTo(new BigDecimal("0.70")) >= 0) {
+            rows.add("现金主要被补货占用，缩短补货提前期或降低安全天数，比换承运商更能释放资金盘。");
+        }
+        if ("RELIABLE".equals(surge.getCapitalVerdict())) {
+            rows.add("需求放大 5 倍仍可靠，资金不是当前履约瓶颈，优化重点应放在仓配时效和缺货。");
+        }
+        if (maxMultiplier >= 80) {
+            rows.add("需求倍率搜索上界为 80，这是搜索上限而不是实测失稳点。");
+        } else if (maxMultiplier >= 10) {
+            rows.add("按当前费率，资金盘大约还能撑到 " + maxMultiplier + " 倍需求才开始吃紧。");
+        }
+        if (rows.isEmpty()) {
+            rows.add("资金盘余量有限，优先保障补货现金，避免把安全库存再抬高。");
+        }
+        return rows;
+    }
+
     private String overallReason(
             SandboxEngine.Result normal,
             SandboxEngine.Result stress,
-            BigDecimal capital) {
+            SandboxEngine.Result surge,
+            BigDecimal capital,
+            BigDecimal headroom,
+            BigDecimal minReliable) {
         return "资金盘 " + capital.toPlainString()
-                + "：常态 " + normal.getCapitalVerdict()
-                + "（占用 " + normal.getCapitalUtilization()
-                + "，服务水平 " + normal.getServiceLevel()
-                + "），2 倍需求 " + stress.getCapitalVerdict()
-                + "（占用 " + stress.getCapitalUtilization()
-                + "，服务水平 " + stress.getServiceLevel() + "）";
+                + " 结论" + verdictLabel(overallVerdict(normal, stress))
+                + "：常态占用 " + normal.getCapitalUtilization()
+                + "，2 倍需求占用 " + stress.getCapitalUtilization()
+                + "，5 倍需求占用 " + surge.getCapitalUtilization()
+                + "，安全垫约 " + headroom.toPlainString()
+                + " 倍，覆盖常态+翻倍的最低可靠资金约 "
+                + minReliable.toPlainString();
+    }
+
+    private String verdictLabel(String verdict) {
+        if ("RELIABLE".equals(verdict)) {
+            return "可靠";
+        }
+        if ("TIGHT".equals(verdict)) {
+            return "偏紧";
+        }
+        if ("INSUFFICIENT".equals(verdict)) {
+            return "不足";
+        }
+        return verdict == null ? "-" : verdict;
     }
 
     private Map<String, Object> deltas(

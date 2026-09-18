@@ -124,10 +124,10 @@ public class AutoSandboxService {
                 params("BALANCED", null, 3, 3, 0.5, 0.5, mix(0.4, 0.3, 0.3))));
         result.add(candidate("自动·上海单仓",
                 params("SINGLE_WAREHOUSE", "WH-SH", 3, 3, 0.5, 0.5, mix(0.4, 0.3, 0.3))));
-        result.add(candidate("自动·北京单仓",
-                params("SINGLE_WAREHOUSE", "WH-BJ", 3, 3, 0.5, 0.5, mix(0.4, 0.3, 0.3))));
-        result.add(candidate("自动·广州单仓",
-                params("SINGLE_WAREHOUSE", "WH-GZ", 3, 3, 0.5, 0.5, mix(0.4, 0.3, 0.3))));
+        result.add(candidate("自动·短交期补货",
+                params("BALANCED", null, 3, 1, 0.4, 0.6, mix(0.4, 0.3, 0.3))));
+        result.add(candidate("自动·低安全短交期",
+                params("BALANCED", null, 1, 1, 0.4, 0.6, mix(0.4, 0.3, 0.3))));
         result.add(candidate("自动·时效承运（顺丰为主）",
                 params("NEAREST", null, 3, 2, 0.3, 0.7, mix(0.7, 0.2, 0.1))));
         result.add(candidate("自动·经济承运",

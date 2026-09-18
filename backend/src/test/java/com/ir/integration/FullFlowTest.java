@@ -169,6 +169,26 @@ class FullFlowTest {
         assertTrue(capital.path("baseline").path("capitalUtilization").decimalValue()
                 .compareTo(new BigDecimal("0.20")) < 0);
         assertEquals("RELIABLE", capital.path("baseline").path("capitalVerdict").asText());
+        assertTrue(capital.path("headroom").decimalValue().compareTo(new BigDecimal("20")) > 0);
+        assertTrue(capital.path("minReliableCapital").decimalValue()
+                .compareTo(new BigDecimal("1000000")) < 0);
+        assertTrue(capital.path("maxReliableDemandMultiplier").asInt() >= 5);
+        assertTrue(capital.path("optimizations").size() > 0);
+        assertEquals("RELIABLE", capital.path("demand5x").path("capitalVerdict").asText());
+        assertEquals(1, capital.path("recommended").path("replenishLeadDays").asInt());
+        assertEquals("BALANCED", capital.path("recommended").path("allocationStrategy").asText());
+        assertTrue(capital.path("recommended").path("recommended").asBoolean());
+        assertTrue(capital.path("recommended").path("serviceLevel").decimalValue()
+                .compareTo(new BigDecimal("0.995")) >= 0);
+        assertEquals(0, capital.path("recommended").path("stockoutUnits").decimalValue().signum());
+        assertTrue(capital.path("playbook").size() >= 5);
+
+        JsonNode adopted = post(token, "/api/sandbox/capital/adopt",
+                "{\"workingCapital\":100000000}");
+        assertEquals("MANUAL", adopted.path("kind").asText());
+        assertTrue(adopted.path("id").asLong() > 0);
+        assertEquals(1, adopted.path("params").path("replenishLeadDays").asInt());
+        assertEquals("BALANCED", adopted.path("params").path("allocationStrategy").asText());
     }
 
     private void seedStuckOrder() {
