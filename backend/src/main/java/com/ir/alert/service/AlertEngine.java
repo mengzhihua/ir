@@ -364,10 +364,18 @@ public class AlertEngine {
     }
 
     private void evaluateInventory(CtRule rule, Set<String> active) {
+        java.util.Map<String, java.math.BigDecimal> inbound = forecastService.inboundBySku();
         for (InventorySnapshot inventory : inventoryMapper.selectList(null)) {
-            if (inventory.getQtyAvailable().compareTo(inventory.getSafetyQty()) < 0) {
+            java.math.BigDecimal available = inventory.getQtyAvailable() == null
+                    ? java.math.BigDecimal.ZERO : inventory.getQtyAvailable();
+            java.math.BigDecimal safety = inventory.getSafetyQty() == null
+                    ? java.math.BigDecimal.ZERO : inventory.getSafetyQty();
+            java.math.BigDecimal inTransit = inbound.getOrDefault(
+                    inventory.getSku(), java.math.BigDecimal.ZERO);
+            if (available.add(inTransit).compareTo(safety) < 0) {
                 add(rule, "SKU", inventory.getSku(), inventory.getWarehouseCode(),
-                        "低库存", "可用库存低于安全库存，"
+                        "低库存", "可用+在途仍低于安全库存（在途 "
+                                + inTransit + "），"
                                 + (balanceAdvisor.costFirst()
                                 ? "成本优先加大采购批量"
                                 : "兼顾时效，采购建议同时仓内补货"),

@@ -8,6 +8,7 @@ import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
 import com.ir.alert.entity.CtAlert;
 import com.ir.alert.mapper.CtAlertMapper;
+import com.ir.forecast.service.ForecastService;
 import com.ir.sandbox.service.BalanceAdvisor;
 import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.entity.WmsOrderSnapshot;
@@ -32,6 +33,8 @@ class AlertEngineTest {
     private OrderSnapshotMapper orderMapper;
     @Autowired
     private WmsOrderSnapshotMapper wmsMapper;
+    @Autowired
+    private ForecastService forecasts;
 
     @Test
     void stuckOrderRuleFiresAndIsIdempotent() {
@@ -189,6 +192,17 @@ class AlertEngineTest {
         assertTrue(types.contains("SRM_PURCHASE_SUGGEST"));
         assertTrue(types.contains("WMS_REPLENISH"));
         assertResolved(low);
+        String sku = low.getTargetKey() != null && low.getTargetKey().contains("/")
+                ? low.getTargetKey().split("/")[0] : low.getTargetKey();
+        assertTrue(forecasts.inboundBySku().getOrDefault(sku,
+                java.math.BigDecimal.ZERO).signum() > 0);
+        alertEngine.evaluate();
+        long stillOpen = alertMapper.selectList(null).stream()
+                .filter(a -> "LOW_STOCK".equals(a.getRuleCode())
+                        && low.getTargetKey().equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(0, stillOpen);
     }
 
     @Test

@@ -11,8 +11,11 @@ import com.ir.common.CarrierCodes;
 import com.ir.cost.service.CostService;
 import com.ir.sandbox.service.BalanceAdvisor;
 import com.ir.sandbox.service.BalancePolicy;
+import com.ir.forecast.service.ForecastService;
+import com.ir.snapshot.entity.ExtSnapshot;
 import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.entity.ShipmentSnapshot;
+import com.ir.snapshot.mapper.ExtSnapshotMapper;
 import com.ir.snapshot.mapper.OrderSnapshotMapper;
 import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -44,6 +47,10 @@ class ActionQueueTest {
     private CostService costService;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private ExtSnapshotMapper extMapper;
+    @Autowired
+    private ForecastService forecasts;
 
     @Test
     void pendingIsDedupedAndOpposingStanceIsSuperseded() {
@@ -196,6 +203,31 @@ class ActionQueueTest {
                 new BigDecimal(String.valueOf(after.get("actual")))));
         assertEquals(0, totalBefore.add(new BigDecimal("99")).compareTo(
                 new BigDecimal(String.valueOf(after.get("total")))));
+    }
+
+    @Test
+    void purchaseSuggestWritesOpenPoAndInbound() {
+        Map<String, BigDecimal> before = forecasts.inboundBySku();
+        BigDecimal prior = before.getOrDefault("SKU005", BigDecimal.ZERO);
+        Map<String, Object> request = pending("SRM_PURCHASE_SUGGEST", "SKU005", null);
+        Map<String, Object> params = new LinkedHashMap<String, Object>();
+        params.put("sku", "SKU005");
+        params.put("qty", 50);
+        params.put("warehouseCode", "WH-GZ");
+        request.put("params", params);
+        CtAction action = actions.createAndExecute(request);
+        assertEquals("SUCCESS", action.getStatus());
+        assertTrue(action.getParamsJson().contains("IR-PO-SRM-SKU005"));
+        ExtSnapshot po = extMapper.selectOne(
+                new LambdaQueryWrapper<ExtSnapshot>()
+                        .eq(ExtSnapshot::getBizKey, "IR-PO-SRM-SKU005")
+                        .last("LIMIT 1"));
+        assertNotNull(po);
+        assertEquals("OPEN", po.getStatus());
+        assertEquals("SKU005", po.getSku());
+        assertEquals(0, prior.add(new BigDecimal("50")).compareTo(po.getQty()));
+        assertEquals(0, prior.add(new BigDecimal("50")).compareTo(
+                forecasts.inboundBySku().get("SKU005")));
     }
 
     @Test

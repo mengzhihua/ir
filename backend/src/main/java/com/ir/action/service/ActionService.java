@@ -358,6 +358,9 @@ public class ActionService {
             if (shipment != null) {
                 applyTmsTrack(action.getType(), shipment, params);
             }
+        } else if ("SRM_PURCHASE_SUGGEST".equals(action.getType())
+                || "SAP_CREATE_PR".equals(action.getType())) {
+            writePurchaseInbound(action, params);
         } else if (action.getTargetSystem() != null
                 && ClientFactory.ecosystemCode(action.getTargetSystem())) {
             ExtSnapshot snapshot = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
@@ -591,5 +594,81 @@ public class ActionService {
         return "DELIVERED".equals(status)
                 || "CLOSED".equals(status)
                 || "CANCELLED".equals(status);
+    }
+
+    private void writePurchaseInbound(CtAction action, Map<String, Object> params) {
+        String sku = firstText(params.get("sku"), params.get("matnr"), action.getTargetKey());
+        if (sku != null && sku.contains("/")) {
+            sku = sku.split("/")[0];
+        }
+        if (sku == null || sku.trim().isEmpty()) {
+            return;
+        }
+        sku = sku.trim();
+        BigDecimal qty = qtyOf(params.get("qty"), params.get("suggestQty"));
+        String system = "SAP_CREATE_PR".equals(action.getType()) ? "SAP" : "SRM";
+        String bizKey = "IR-PO-" + system + "-" + sku;
+        ExtSnapshot existing = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
+                .eq(ExtSnapshot::getSourceSystem, system)
+                .eq(ExtSnapshot::getDataType, "PO")
+                .eq(ExtSnapshot::getBizKey, bizKey)
+                .last("LIMIT 1"));
+        if (existing == null) {
+            existing = new ExtSnapshot();
+            existing.setSourceSystem(system);
+            existing.setDataType("PO");
+            existing.setBizKey(bizKey);
+            existing.setStatus("OPEN");
+            existing.setSku(sku);
+            existing.setQty(qty);
+            existing.setPlantCode(plantOf(system, params));
+            existing.setTitle("IR 采购在途 " + sku);
+            existing.setSyncedAt(LocalDateTime.now());
+            extMapper.insert(existing);
+        } else {
+            BigDecimal current = existing.getQty() == null ? BigDecimal.ZERO : existing.getQty();
+            existing.setQty(current.add(qty));
+            existing.setStatus("OPEN");
+            existing.setSku(sku);
+            existing.setSyncedAt(LocalDateTime.now());
+            extMapper.updateById(existing);
+        }
+        params.put("poBizKey", bizKey);
+        params.put("inTransitQty", existing.getQty());
+    }
+
+    private String plantOf(String system, Map<String, Object> params) {
+        String plant = firstText(params.get("plantCode"), params.get("werks"));
+        if (plant != null) {
+            return plant;
+        }
+        return "SAP".equals(system) ? "1000" : "P001";
+    }
+
+    private BigDecimal qtyOf(Object... values) {
+        for (Object value : values) {
+            if (value == null || String.valueOf(value).trim().isEmpty()) {
+                continue;
+            }
+            try {
+                BigDecimal qty = new BigDecimal(String.valueOf(value));
+                if (qty.signum() > 0) {
+                    return qty;
+                }
+            } catch (NumberFormatException ignored) {
+                // next
+            }
+        }
+        return BigDecimal.TEN;
+    }
+
+    private String firstText(Object... values) {
+        for (Object value : values) {
+            if (value != null && !String.valueOf(value).trim().isEmpty()
+                    && !"null".equals(String.valueOf(value))) {
+                return String.valueOf(value).trim();
+            }
+        }
+        return null;
     }
 }
