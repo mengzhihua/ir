@@ -344,6 +344,9 @@ public class ActionService {
                 if (toFreight != null) {
                     shipment.setFreightAmount(toFreight);
                 }
+                shipment.setStatus("IN_TRANSIT");
+                shipment.setExceptionFlag(false);
+                shipment.setSyncedAt(LocalDateTime.now());
                 shipmentMapper.updateById(shipment);
                 if (fromCarrier != null) {
                     params.put("fromCarrierCode", fromCarrier);

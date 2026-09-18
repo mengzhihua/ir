@@ -83,12 +83,9 @@ class FullFlowTest {
         JsonNode delay = firstOpen(token, "TMS_DELAY", "WB-FLOW-DELAY");
         JsonNode delayAction = post(token, "/api/alert/" + delay.path("id").asLong() + "/execute-suggested", null);
         assertEquals("SUCCESS", delayAction.path("status").asText());
-        JsonNode waybill = get(token, "/api/trace/" + delay.path("targetKey").asText());
-        if (waybill.isMissingNode() || waybill.isNull() || waybill.path("oms").isMissingNode()) {
-            waybill = get(token, "/api/trace/SO-FLOW-DELAY");
-        }
+        JsonNode waybill = get(token, "/api/trace/SO-FLOW-DELAY");
         assertEquals("IN_TRANSIT", waybill.path("tms").path("status").asText());
-        assertTrue(!waybill.path("tms").path("exceptionFlag").asBoolean());
+        assertEquals(false, waybill.path("tms").path("exceptionFlag").asBoolean());
 
         seedLowStock();
         post(token, "/api/alert/evaluate", null);
