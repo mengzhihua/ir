@@ -175,8 +175,8 @@ class FullFlowTest {
         assertTrue(capital.path("maxReliableDemandMultiplier").asInt() >= 5);
         assertTrue(capital.path("optimizations").size() > 0);
         assertEquals("RELIABLE", capital.path("demand5x").path("capitalVerdict").asText());
-        assertTrue(capital.path("recommended").path("replenishLeadDays").asInt() <= 1);
-        assertTrue(capital.path("recommended").path("name").asText().contains("短交期"));
+        assertEquals(1, capital.path("recommended").path("replenishLeadDays").asInt());
+        assertEquals("BALANCED", capital.path("recommended").path("allocationStrategy").asText());
         assertTrue(capital.path("recommended").path("recommended").asBoolean());
         assertTrue(capital.path("recommended").path("serviceLevel").decimalValue()
                 .compareTo(new BigDecimal("0.995")) >= 0);
@@ -185,9 +185,11 @@ class FullFlowTest {
 
         JsonNode adopted = post(token, "/api/sandbox/capital/adopt",
                 "{\"workingCapital\":100000000}");
-        assertTrue(adopted.path("name").asText().contains("短交期"));
         assertEquals("MANUAL", adopted.path("kind").asText());
         assertTrue(adopted.path("id").asLong() > 0);
+        assertTrue(adopted.path("name").asText().startsWith("\u8d44\u91d1\u76d8\u63a8\u8350"));
+        JsonNode adoptedParams = mapper.readTree(adopted.path("paramsJson").asText());
+        assertEquals(1, adoptedParams.path("replenishLeadDays").asInt());
     }
 
     private void seedStuckOrder() {
