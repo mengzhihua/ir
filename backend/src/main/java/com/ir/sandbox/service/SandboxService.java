@@ -273,9 +273,37 @@ public class SandboxService {
         result.put("verdict", verdict);
         result.put("reliable", "RELIABLE".equals(verdict));
         result.put("reason", overallReason(normal, stress, surge, capital, headroom, minReliable));
+        List<Map<String, Object>> playbook = playbook(data, capital);
+        Map<String, Object> recommended = pickPlay(playbook);
+        result.put("playbook", playbook);
+        result.put("recommended", recommended);
         result.put("optimizations", optimizations(
-                normal, stress, surge, capital, minReliable, maxMultiplier, headroom));
+                normal, stress, surge, capital, minReliable, maxMultiplier, headroom, recommended, playbook));
         return result;
+    }
+
+    public CtScenario adoptRecommended(BigDecimal amount) {
+        ensureBaseline();
+        Map<String, Object> analysis = analyzeCapital(amount);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> recommended = (Map<String, Object>) analysis.get("recommended");
+        if (recommended == null || recommended.get("name") == null) {
+            throw new IllegalStateException("没有可采纳的资金盘策略");
+        }
+        BigDecimal capital = amount == null || amount.signum() <= 0
+                ? new BigDecimal("100000000") : amount;
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> mix = recommended.get("carrierMix") instanceof Map
+                ? (Map<String, BigDecimal>) recommended.get("carrierMix")
+                : null;
+        ScenarioParams params = capitalParams(
+                capital,
+                String.valueOf(recommended.getOrDefault("allocationStrategy", "BALANCED")),
+                decimal(recommended.get("safetyDays")).intValue(),
+                decimal(recommended.get("replenishLeadDays")).intValue(),
+                BigDecimal.ONE,
+                mix);
+        return persist("资金盘推荐·" + recommended.get("name"), params, false, "MANUAL", null, false, null);
     }
 
     public Map<String, Object> resultOf(CtScenario scenario) {
@@ -630,6 +658,92 @@ public class SandboxService {
         return stress.getCapitalVerdict();
     }
 
+    private List<Map<String, Object>> playbook(BaselineData data, BigDecimal capital) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        rows.add(play(data, capital, "就近默认", capitalParams(capital, "NEAREST", 3, 3, BigDecimal.ONE, null)));
+        rows.add(play(data, capital, "短交期补货", capitalParams(capital, "BALANCED", 3, 1, BigDecimal.ONE, null)));
+        rows.add(play(data, capital, "低安全短交期", capitalParams(capital, "BALANCED", 1, 1, BigDecimal.ONE, null)));
+        rows.add(play(data, capital, "低安全库存", capitalParams(capital, "BALANCED", 1, 3, BigDecimal.ONE, null)));
+        rows.add(play(data, capital, "经济承运", capitalParams(capital, "LOWEST_COST", 3, 4, BigDecimal.ONE, economicMix())));
+        rows.add(play(data, capital, "低安全短交期·5倍需求",
+                capitalParams(capital, "BALANCED", 1, 1, BigDecimal.valueOf(5), null)));
+        return rows;
+    }
+
+    private Map<String, Object> play(
+            BaselineData data,
+            BigDecimal capital,
+            String name,
+            ScenarioParams params) {
+        SandboxEngine.Result result = engine.run(params, data);
+        Map<String, Object> row = capitalView(result);
+        row.put("name", name);
+        row.put("allocationStrategy", params.getAllocationStrategy());
+        row.put("safetyDays", params.getSafetyDays());
+        row.put("replenishLeadDays", params.getReplenishLeadDays());
+        row.put("demandMultiplier", params.getDemandMultiplier());
+        row.put("carrierMix", params.getCarrierMix());
+        row.put("workingCapital", capital);
+        row.put("recommended", false);
+        return row;
+    }
+
+    private ScenarioParams capitalParams(
+            BigDecimal capital,
+            String allocation,
+            int safetyDays,
+            int leadDays,
+            BigDecimal multiplier,
+            Map<String, BigDecimal> mix) {
+        ScenarioParams params = new ScenarioParams();
+        params.setHorizonDays(30);
+        params.setWorkingCapital(capital);
+        params.setAllocationStrategy(allocation);
+        params.setSafetyDays(safetyDays);
+        params.setReplenishLeadDays(leadDays);
+        params.setDemandMultiplier(multiplier);
+        if (mix != null) {
+            params.setCarrierMix(mix);
+        }
+        return params;
+    }
+
+    private Map<String, BigDecimal> economicMix() {
+        Map<String, BigDecimal> mix = new LinkedHashMap<>();
+        mix.put("SF", BigDecimal.valueOf(0.1));
+        mix.put("JD", BigDecimal.valueOf(0.3));
+        mix.put("SELF01", BigDecimal.valueOf(0.6));
+        return mix;
+    }
+
+    private Map<String, Object> pickPlay(List<Map<String, Object>> playbook) {
+        Map<String, Object> best = null;
+        BigDecimal bestCash = null;
+        for (Map<String, Object> row : playbook) {
+            if (decimal(row.get("demandMultiplier")).compareTo(BigDecimal.ONE) != 0) {
+                continue;
+            }
+            if (decimal(row.get("serviceLevel")).compareTo(new BigDecimal("0.995")) < 0) {
+                continue;
+            }
+            if (decimal(row.get("stockoutUnits")).signum() > 0) {
+                continue;
+            }
+            BigDecimal cash = decimal(row.get("cashUsed"));
+            if (best == null || cash.compareTo(bestCash) < 0) {
+                best = row;
+                bestCash = cash;
+            }
+        }
+        if (best == null && !playbook.isEmpty()) {
+            best = playbook.get(0);
+        }
+        if (best != null) {
+            best.put("recommended", true);
+        }
+        return best;
+    }
+
     private SandboxEngine.Result runCapital(
             BaselineData data, BigDecimal capital, BigDecimal multiplier) {
         ScenarioParams params = new ScenarioParams();
@@ -687,8 +801,32 @@ public class SandboxService {
             BigDecimal capital,
             BigDecimal minReliable,
             int maxMultiplier,
-            BigDecimal headroom) {
+            BigDecimal headroom,
+            Map<String, Object> recommended,
+            List<Map<String, Object>> playbook) {
         List<String> rows = new ArrayList<>();
+        if (recommended != null && recommended.get("name") != null) {
+            rows.add("推荐策略「" + recommended.get("name")
+                    + "」：安全天数 " + recommended.get("safetyDays")
+                    + "、补货提前期 " + recommended.get("replenishLeadDays")
+                    + " 天，30 天现金 "
+                    + recommended.get("cashUsed")
+                    + "，服务水平 "
+                    + recommended.get("serviceLevel") + "。");
+        }
+        if (recommended != null && playbook != null && !playbook.isEmpty()) {
+            BigDecimal baselineCash = decimal(playbook.get(0).get("cashUsed"));
+            BigDecimal recommendedCash = decimal(recommended.get("cashUsed"));
+            BigDecimal saved = baselineCash.subtract(recommendedCash);
+            if (baselineCash.signum() > 0 && saved.signum() > 0) {
+                rows.add("相对就近默认可少占用现金 "
+                        + saved.toPlainString()
+                        + "，约 "
+                        + saved.multiply(new BigDecimal("100"))
+                                .divide(baselineCash, 1, RoundingMode.HALF_UP)
+                        + "%；只降安全库存不缩短交期会掉服务水平。");
+            }
+        }
         if (headroom.compareTo(BigDecimal.valueOf(20)) >= 0) {
             rows.add("1 亿相对当前 30 天现金需求过大，约 "
                     + minReliable.toPlainString()
@@ -703,7 +841,9 @@ public class SandboxService {
         if ("RELIABLE".equals(surge.getCapitalVerdict())) {
             rows.add("需求放大 5 倍仍可靠，资金不是当前履约瓶颈，优化重点应放在仓配时效和缺货。");
         }
-        if (maxMultiplier >= 10) {
+        if (maxMultiplier >= 80) {
+            rows.add("需求倍率搜索上界为 80，这是搜索上限而不是实测失稳点。");
+        } else if (maxMultiplier >= 10) {
             rows.add("按当前费率，资金盘大约还能撑到 " + maxMultiplier + " 倍需求才开始吃紧。");
         }
         if (rows.isEmpty()) {

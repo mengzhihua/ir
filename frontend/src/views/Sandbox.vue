@@ -217,9 +217,12 @@
         ><el-button type="primary" :loading="saving" @click="save">创建场景</el-button></template
       ></el-dialog
     >
-    <el-dialog v-model="capitalDialog" title="1 亿资金盘推演" width="760px">
+    <el-dialog v-model="capitalDialog" title="1 亿资金盘推演" width="860px">
       <div v-if="capitalResult">
         <p>{{ capitalResult.reason }}</p>
+        <p v-if="capitalResult.recommended" class="subtitle">
+          推荐策略：{{ capitalResult.recommended.name }}（安全 {{ capitalResult.recommended.safetyDays }} 天 / 补货 {{ capitalResult.recommended.replenishLeadDays }} 天）
+        </p>
         <div class="stats">
           <div class="stat">
             <div class="label">结论</div>
@@ -259,10 +262,45 @@
             }}</template>
           </el-table-column>
         </el-table>
+        <el-table
+          v-if="capitalResult.playbook?.length"
+          :data="capitalResult.playbook"
+          size="small"
+          style="margin-top: 12px"
+          :row-class-name="playbookRowClass"
+        >
+          <el-table-column label="策略" min-width="180">
+            <template #default="{ row }">
+              {{ row.name }}
+              <el-tag v-if="row.recommended" type="success" size="small">推荐</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="现金">
+            <template #default="{ row }">{{ formatMoney(row.cashUsed) }}</template>
+          </el-table-column>
+          <el-table-column label="成本">
+            <template #default="{ row }">{{ formatMoney(row.totalCost) }}</template>
+          </el-table-column>
+          <el-table-column label="服务水平">
+            <template #default="{ row }">{{ percent(row.serviceLevel) }}</template>
+          </el-table-column>
+          <el-table-column label="缺货">
+            <template #default="{ row }">{{ formatNumber(row.stockoutUnits, 2) }}</template>
+          </el-table-column>
+        </el-table>
         <ul v-if="capitalResult.optimizations?.length" class="subtitle" style="margin-top: 12px">
           <li v-for="item in capitalResult.optimizations" :key="item">{{ item }}</li>
         </ul>
       </div>
+      <template #footer>
+        <el-button @click="capitalDialog = false">关闭</el-button>
+        <el-button
+          v-if="canWrite() && capitalResult?.recommended"
+          type="primary"
+          :loading="adopting"
+          @click="adoptRecommended"
+        >采纳推荐策略</el-button>
+      </template>
     </el-dialog>
     <el-dialog v-model="actionDialog" title="已生成待执行动作" width="680px"
       ><el-table :data="pendingActions"
@@ -308,6 +346,7 @@ const visible = ref(false)
 const actionDialog = ref(false)
 const capitalDialog = ref(false)
 const capitalResult = ref(null)
+const adopting = ref(false)
 const pendingActions = ref([])
 const formRef = ref()
 const pager = reactive({ current: 1, size: 10, total: 0 })
@@ -430,12 +469,29 @@ async function openCreate() {
   })
   visible.value = true
 }
+function playbookRowClass({ row }) {
+  return row.recommended ? 'is-recommended' : ''
+}
 async function analyzeCapital() {
   capitalResult.value = await sandboxApi.capital({ workingCapital: 100000000 })
   capitalDialog.value = true
   ElMessage.success(
     capitalResult.value?.reliable ? '1 亿资金盘推演完成，结论可靠' : '1 亿资金盘推演完成，需要关注资金压力'
   )
+}
+async function adoptRecommended() {
+  adopting.value = true
+  try {
+    const scenario = await sandboxApi.adoptCapital({ workingCapital: 100000000 })
+    capitalDialog.value = false
+    ElMessage.success(`已生成场景「${scenario.name}」`)
+    await load()
+    if (scenario?.id) {
+      await select(scenario)
+    }
+  } finally {
+    adopting.value = false
+  }
 }
 async function save() {
   await formRef.value.validate()
@@ -451,3 +507,8 @@ async function save() {
 }
 load()
 </script>
+<style scoped>
+:deep(.is-recommended) td {
+  background: var(--el-color-success-light-9);
+}
+</style>

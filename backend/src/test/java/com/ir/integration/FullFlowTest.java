@@ -175,6 +175,17 @@ class FullFlowTest {
         assertTrue(capital.path("maxReliableDemandMultiplier").asInt() >= 5);
         assertTrue(capital.path("optimizations").size() > 0);
         assertEquals("RELIABLE", capital.path("demand5x").path("capitalVerdict").asText());
+        assertEquals(1, capital.path("recommended").path("safetyDays").asInt());
+        assertEquals(1, capital.path("recommended").path("replenishLeadDays").asInt());
+        assertEquals("低安全短交期", capital.path("recommended").path("name").asText());
+        assertTrue(capital.path("recommended").path("recommended").asBoolean());
+        assertTrue(capital.path("playbook").size() >= 5);
+
+        JsonNode adopted = post(token, "/api/sandbox/capital/adopt",
+                "{\"workingCapital\":100000000}");
+        assertTrue(adopted.path("name").asText().contains("低安全短交期"));
+        assertEquals("MANUAL", adopted.path("kind").asText());
+        assertTrue(adopted.path("id").asLong() > 0);
     }
 
     private void seedStuckOrder() {
