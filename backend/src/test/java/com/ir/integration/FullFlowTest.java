@@ -147,6 +147,19 @@ class FullFlowTest {
 
         JsonNode auto = post(token, "/api/sandbox/auto/run", null);
         assertTrue(auto.path("recommended").path("id").asLong() > 0);
+        assertTrue(auto.path("recommended").path("serviceLevel").decimalValue()
+                .compareTo(new BigDecimal("0.995")) >= 0);
+        assertEquals(0, auto.path("recommended").path("stockoutUnits").decimalValue().signum());
+        BigDecimal recCash = auto.path("recommended").path("result").path("cashUsed").decimalValue();
+        for (JsonNode row : auto.path("scenarios")) {
+            if (row.path("serviceLevel").decimalValue().compareTo(new BigDecimal("0.995")) < 0) {
+                continue;
+            }
+            if (row.path("stockoutUnits").decimalValue().signum() > 0) {
+                continue;
+            }
+            assertTrue(recCash.compareTo(row.path("result").path("cashUsed").decimalValue()) <= 0);
+        }
         JsonNode latest = get(token, "/api/sandbox/auto/latest");
         assertEquals(auto.path("recommended").path("id").asLong(),
                 latest.path("recommended").path("id").asLong());

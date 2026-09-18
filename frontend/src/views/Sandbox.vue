@@ -488,6 +488,7 @@ async function adoptRecommended() {
     await load()
     if (scenario?.id) {
       await select(scenario)
+      await apply(scenario, false)
     }
   } finally {
     adopting.value = false

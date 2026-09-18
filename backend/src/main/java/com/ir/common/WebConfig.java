@@ -12,7 +12,7 @@ import com.ir.system.auth.AuthInterceptor;
 public class WebConfig implements WebMvcConfigurer {
     private final AuthInterceptor authInterceptor;
     private final OperationLogInterceptor operationLogInterceptor;
-    @Value("${ir.cors.origins:http://localhost:5174}")
+    @Value("${ir.cors.origins:http://localhost:5174,http://127.0.0.1:5174}")
     private String[] origins;
 
     public WebConfig(

@@ -24,7 +24,7 @@ ir:
     token-ttl: ${IR_TOKEN_TTL:12h}
     admin-password: ${IR_ADMIN_PASSWORD:admin123}
   cors:
-    origins: ${IR_CORS_ORIGINS:http://localhost:5174}
+    origins: ${IR_CORS_ORIGINS:http://localhost:5174,http://127.0.0.1:5174}
   sync:
     enabled: ${IR_SYNC_ENABLED:true}
   cost:
