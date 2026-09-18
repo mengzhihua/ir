@@ -6,6 +6,7 @@ import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.TmsClient;
 import com.ir.snapshot.entity.CostRecord;
 import com.ir.snapshot.entity.ShipmentSnapshot;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,7 +61,22 @@ public class MockTmsClient implements TmsClient {
                 continue;
             }
             if ("TMS_SYNC_TRACK".equals(command.getType())) {
-                shipment.setStatus("IN_TRANSIT");
+                if (!"DELIVERED".equals(shipment.getStatus())
+                        && !"CLOSED".equals(shipment.getStatus())
+                        && !"CANCELLED".equals(shipment.getStatus())) {
+                    shipment.setStatus("IN_TRANSIT");
+                    shipment.setExceptionFlag(false);
+                    LocalDateTime now = LocalDateTime.now();
+                    if (shipment.getPlannedArriveTime() == null
+                            || !shipment.getPlannedArriveTime().isAfter(now)) {
+                        shipment.setPlannedArriveTime(now.plusHours(6));
+                    }
+                }
+            }
+            if ("TMS_DISPATCH".equals(command.getType())) {
+                if (shipment.getStatus() == null || "CREATED".equals(shipment.getStatus())) {
+                    shipment.setStatus("DISPATCHED");
+                }
             }
             if ("TMS_SWITCH_CARRIER".equals(command.getType())) {
                 Object carrier = command.getParams().get("carrierCode");
