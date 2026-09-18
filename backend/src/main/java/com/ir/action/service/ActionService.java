@@ -362,7 +362,7 @@ public class ActionService {
         } else if ("SRM_PURCHASE_SUGGEST".equals(action.getType())
                 || "SAP_CREATE_PR".equals(action.getType())) {
             writePurchaseInbound(action, params);
-        } else if (action.getTargetSystem() != null)
+        } else if (action.getTargetSystem() != null
                 && ClientFactory.ecosystemCode(action.getTargetSystem())) {
             ExtSnapshot snapshot = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
                     .eq(ExtSnapshot::getSourceSystem, action.getTargetSystem())
