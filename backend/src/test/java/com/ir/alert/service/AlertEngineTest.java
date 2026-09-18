@@ -7,17 +7,26 @@ import org.springframework.test.context.ActiveProfiles;
 import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
 import com.ir.alert.entity.CtAlert;
+import com.ir.alert.entity.CtRule;
 import com.ir.alert.mapper.CtAlertMapper;
+import com.ir.alert.mapper.CtRuleMapper;
 import com.ir.forecast.service.ForecastService;
 import com.ir.sandbox.service.BalanceAdvisor;
+import com.ir.snapshot.entity.InventorySnapshot;
 import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.entity.ShipmentSnapshot;
 import com.ir.snapshot.entity.WmsOrderSnapshot;
+import com.ir.snapshot.mapper.InventorySnapshotMapper;
 import com.ir.snapshot.mapper.OrderSnapshotMapper;
+import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
 import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
@@ -35,6 +44,12 @@ class AlertEngineTest {
     private WmsOrderSnapshotMapper wmsMapper;
     @Autowired
     private ForecastService forecasts;
+    @Autowired
+    private CtRuleMapper ruleMapper;
+    @Autowired
+    private InventorySnapshotMapper inventoryMapper;
+    @Autowired
+    private ShipmentSnapshotMapper shipmentMapper;
 
     @Test
     void stuckOrderRuleFiresAndIsIdempotent() {
@@ -252,6 +267,150 @@ class AlertEngineTest {
                         && "OPEN".equals(a.getStatus()))
                 .count();
         assertEquals(0, stillOpen);
+    }
+
+    @Test
+    void prioritizeExecuteDoesNotReopenWhileConditionRemains() {
+        OrderSnapshot seeded = new OrderSnapshot();
+        seeded.setOrderNo("SO-ALERT-SUPPRESS");
+        seeded.setWarehouseCode("WH-SH");
+        seeded.setStatus("AUDITED");
+        seeded.setPriority(1);
+        seeded.setOrderTime(LocalDateTime.now().minusHours(8));
+        seeded.setPayAmount(new BigDecimal("99"));
+        seeded.setQty(BigDecimal.ONE);
+        orderMapper.insert(seeded);
+        alertEngine.evaluate();
+        CtAlert stuck = alertMapper.selectList(null).stream()
+                .filter(a -> "OMS_STUCK".equals(a.getRuleCode())
+                        && "SO-ALERT-SUPPRESS".equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .findFirst().orElse(null);
+        assertNotNull(stuck);
+        CtAction action = alertEngine.executeSuggested(stuck.getId());
+        assertNotNull(action);
+        assertEquals("SUCCESS", action.getStatus());
+        assertResolved(stuck);
+        alertEngine.evaluate();
+        long reopened = alertMapper.selectList(null).stream()
+                .filter(a -> "OMS_STUCK".equals(a.getRuleCode())
+                        && stuck.getTargetKey().equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(0, reopened);
+        CtAlert handled = alertMapper.selectById(stuck.getId());
+        assertEquals(action.getId(), handled.getActionId());
+        OrderSnapshot order = orderMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OrderSnapshot>()
+                        .eq(OrderSnapshot::getOrderNo, stuck.getTargetKey()));
+        assertNotNull(order);
+        order.setStatus("ALLOCATED");
+        orderMapper.updateById(order);
+        alertEngine.evaluate();
+        CtAlert cleared = alertMapper.selectById(stuck.getId());
+        assertEquals("RESOLVED", cleared.getStatus());
+        assertNull(cleared.getActionId());
+    }
+
+    @Test
+    void lowStockTargetKeyIncludesWarehouse() {
+        InventorySnapshot sh = stock("SKU-ALERT-WH", "WH-SH", "2");
+        InventorySnapshot bj = stock("SKU-ALERT-WH", "WH-BJ", "1");
+        inventoryMapper.insert(sh);
+        inventoryMapper.insert(bj);
+        alertEngine.evaluate();
+        long keys = alertMapper.selectList(null).stream()
+                .filter(a -> "LOW_STOCK".equals(a.getRuleCode())
+                        && a.getTargetKey() != null
+                        && a.getTargetKey().startsWith("SKU-ALERT-WH/"))
+                .count();
+        assertEquals(2, keys);
+        CtAlert shAlert = alertMapper.selectList(null).stream()
+                .filter(a -> "SKU-ALERT-WH/WH-SH".equals(a.getTargetKey()))
+                .findFirst().orElse(null);
+        assertNotNull(shAlert);
+        assertEquals("SKU_WAREHOUSE", shAlert.getTargetType());
+        assertEquals("WH-SH", shAlert.getWarehouseCode());
+        bj.setQtyAvailable(new BigDecimal("80"));
+        inventoryMapper.updateById(bj);
+        alertEngine.evaluate();
+        long bjOpen = alertMapper.selectList(null).stream()
+                .filter(a -> "SKU-ALERT-WH/WH-BJ".equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(0, bjOpen);
+        long shOpen = alertMapper.selectList(null).stream()
+                .filter(a -> "SKU-ALERT-WH/WH-SH".equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(1, shOpen);
+    }
+
+    @Test
+    void disabledRuleLeavesExistingOpenAlerts() {
+        ShipmentSnapshot late = new ShipmentSnapshot();
+        late.setWaybillCode("WB-ALERT-KEEP");
+        late.setSourceNo("SO-ALERT-KEEP");
+        late.setCarrierCode("SF");
+        late.setStatus("IN_TRANSIT");
+        late.setFromSiteCode("WH01");
+        late.setPlannedArriveTime(LocalDateTime.now().minusHours(10));
+        late.setFreightAmount(new BigDecimal("25"));
+        late.setExceptionFlag(false);
+        shipmentMapper.insert(late);
+        alertEngine.evaluate();
+        CtAlert delay = alertMapper.selectList(null).stream()
+                .filter(a -> "TMS_DELAY".equals(a.getRuleCode())
+                        && "WB-ALERT-KEEP".equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .findFirst().orElse(null);
+        assertNotNull(delay);
+        CtRule rule = ruleMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CtRule>()
+                        .eq(CtRule::getCode, "TMS_DELAY"));
+        assertNotNull(rule);
+        rule.setEnabled(false);
+        ruleMapper.updateById(rule);
+        try {
+            alertEngine.evaluate();
+            CtAlert still = alertMapper.selectById(delay.getId());
+            assertEquals("OPEN", still.getStatus());
+        } finally {
+            rule.setEnabled(true);
+            ruleMapper.updateById(rule);
+        }
+    }
+
+    @Test
+    void terminalShipmentsDoNotKeepDelayOrExceptionAlerts() {
+        ShipmentSnapshot cancelled = new ShipmentSnapshot();
+        cancelled.setWaybillCode("WB-ALERT-CANCEL");
+        cancelled.setSourceNo("SO-ALERT-CANCEL");
+        cancelled.setCarrierCode("SF");
+        cancelled.setStatus("CANCELLED");
+        cancelled.setFromSiteCode("WH01");
+        cancelled.setPlannedArriveTime(LocalDateTime.now().minusHours(8));
+        cancelled.setFreightAmount(new BigDecimal("30"));
+        cancelled.setExceptionFlag(true);
+        shipmentMapper.insert(cancelled);
+        alertEngine.evaluate();
+        long open = alertMapper.selectList(null).stream()
+                .filter(a -> "WB-ALERT-CANCEL".equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(0, open);
+    }
+
+    private InventorySnapshot stock(String sku, String warehouse, String available) {
+        InventorySnapshot item = new InventorySnapshot();
+        item.setSourceSystem("WMS");
+        item.setWarehouseCode(warehouse);
+        item.setSku(sku);
+        item.setQtyOnHand(new BigDecimal(available));
+        item.setQtyReserved(BigDecimal.ZERO);
+        item.setQtyAvailable(new BigDecimal(available));
+        item.setSafetyQty(new BigDecimal("40"));
+        return item;
     }
 
     private void assertResolved(CtAlert before) {

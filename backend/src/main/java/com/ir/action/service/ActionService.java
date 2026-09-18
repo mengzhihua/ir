@@ -28,7 +28,9 @@ import com.ir.system.auth.CurrentUser;
 import com.ir.system.entity.User;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -354,8 +356,7 @@ public class ActionService {
             }
         } else if ("TMS_SYNC_TRACK".equals(action.getType())
                 || "TMS_DISPATCH".equals(action.getType())) {
-            ShipmentSnapshot shipment = shipmentOf(action.getTargetKey());
-            if (shipment != null) {
+            for (ShipmentSnapshot shipment : shipmentsOf(action.getTargetKey())) {
                 applyTmsTrack(action.getType(), shipment, params);
             }
         } else if ("SRM_PURCHASE_SUGGEST".equals(action.getType())
@@ -540,19 +541,25 @@ public class ActionService {
     }
 
     private ShipmentSnapshot shipmentOf(String key) {
+        List<ShipmentSnapshot> rows = shipmentsOf(key);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    private List<ShipmentSnapshot> shipmentsOf(String key) {
         if (key == null || key.trim().isEmpty()) {
-            return null;
+            return Collections.emptyList();
         }
-        ShipmentSnapshot shipment = shipmentMapper.selectOne(
+        ShipmentSnapshot byCode = shipmentMapper.selectOne(
                 new LambdaQueryWrapper<ShipmentSnapshot>()
                         .eq(ShipmentSnapshot::getWaybillCode, key)
                         .last("LIMIT 1"));
-        if (shipment != null) {
-            return shipment;
+        if (byCode != null) {
+            return Collections.singletonList(byCode);
         }
-        return shipmentMapper.selectOne(new LambdaQueryWrapper<ShipmentSnapshot>()
-                .eq(ShipmentSnapshot::getSourceNo, key)
-                .last("LIMIT 1"));
+        List<ShipmentSnapshot> byOrder = shipmentMapper.selectList(
+                new LambdaQueryWrapper<ShipmentSnapshot>()
+                        .eq(ShipmentSnapshot::getSourceNo, key));
+        return byOrder == null ? new ArrayList<ShipmentSnapshot>() : byOrder;
     }
 
     private void applyTmsTrack(String type, ShipmentSnapshot shipment, Map<String, Object> params) {
