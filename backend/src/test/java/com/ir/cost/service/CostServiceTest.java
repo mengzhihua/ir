@@ -41,6 +41,18 @@ class CostServiceTest {
     }
 
     @Test
+    void freightSourceUsesRecordPresenceNotSign() {
+        CostRecord adjustment = row("BMS", "FREIGHT", "-20", "SO-4");
+        CostRecord tms = row("TMS", "FREIGHT", "100", "SO-5");
+        List<CostRecord> preferred = CostService.preferSettlement(
+                Arrays.asList(adjustment, tms));
+        assertEquals("MIXED", CostService.freightSource(preferred));
+        assertEquals("BMS", CostService.freightSource(Arrays.asList(adjustment)));
+        CostRecord zero = row("BMS", "FREIGHT", "0", "SO-6");
+        assertEquals("BMS", CostService.freightSource(Arrays.asList(zero)));
+    }
+
+    @Test
     void transportCountsAsFreight() {
         CostRecord transport = row("BMS", "TRANSPORT", "36", "SO-3");
         CostRecord tms = row("TMS", "FREIGHT", "40", "SO-3");

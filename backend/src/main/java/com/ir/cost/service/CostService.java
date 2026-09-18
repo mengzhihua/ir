@@ -161,7 +161,7 @@ public class CostService {
         result.put("variance", actual.subtract(writtenExpected));
         result.put("byMonth", byMonth);
         result.put("estimated", true);
-        result.put("freightSource", freightSource(costMapper.selectList(null)));
+        result.put("freightSource", freightSource(preferSettlement(costMapper.selectList(null))));
         return result;
     }
 
@@ -276,9 +276,21 @@ public class CostService {
         }
     }
 
-    private static String freightSource(List<CostRecord> rows) {
-        boolean bms = freightAmount(rows, "BMS").signum() > 0;
-        boolean tms = freightAmount(rows, "TMS").signum() > 0;
+    static String freightSource(List<CostRecord> rows) {
+        boolean bms = false;
+        boolean tms = false;
+        if (rows != null) {
+            for (CostRecord row : rows) {
+                if (!freight(row)) {
+                    continue;
+                }
+                if ("BMS".equals(row.getSourceSystem())) {
+                    bms = true;
+                } else if (row.getSourceSystem() == null || "TMS".equals(row.getSourceSystem())) {
+                    tms = true;
+                }
+            }
+        }
         if (bms && tms) {
             return "MIXED";
         }
