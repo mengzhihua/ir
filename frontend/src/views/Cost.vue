@@ -3,13 +3,13 @@
     <div class="page-title">
       <div>
         <h2>成本分析</h2>
-        <p class="subtitle">按类型、仓库、承运商分析供应链成本；预估来自成功指令运价，回写只计换商后运费差（贵换为负）</p>
+        <p class="subtitle">按类型、仓库、承运商分析供应链成本；运费优先认 BMS 结算，没有账单时回退 TMS 快照。预估来自成功指令运价，回写只计换商后运费差（贵换为负）</p>
       </div>
       <el-button @click="load">刷新</el-button>
     </div>
     <div class="stats">
       <div class="stat">
-        <div class="label">总成本</div>
+        <div class="label">总成本 · {{ freightLabel }}</div>
         <div class="value">{{ formatMoney(summary.total) }}</div>
       </div>
       <div class="stat">
@@ -88,6 +88,9 @@
           label="订单号" /><el-table-column prop="costType" label="类型" /><el-table-column
           prop="warehouseCode"
           label="仓库" /><el-table-column prop="carrierCode" label="承运商" /><el-table-column
+          prop="sourceSystem"
+          label="来源"
+          width="90" /><el-table-column
           label="金额"
           align="right"
           ><template #default="{ row }">{{ formatMoney(row.amount) }}</template></el-table-column
@@ -167,6 +170,18 @@ const carrierOption = computed(() => ({
 }))
 const actualClass = computed(() => signClass(saving.actual))
 const varianceClass = computed(() => signClass(saving.variance))
+const freightLabel = computed(() => {
+  if (summary.freightSource === 'BMS') {
+    return 'BMS结算'
+  }
+  if (summary.freightSource === 'MIXED') {
+    return 'BMS结算+TMS未对账'
+  }
+  if (summary.freightSource === 'TMS') {
+    return 'TMS快照'
+  }
+  return '未接入运费'
+})
 function signClass(value) {
   const amount = Number(value || 0)
   if (amount > 0) {

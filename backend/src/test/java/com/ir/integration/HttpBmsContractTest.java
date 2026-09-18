@@ -29,7 +29,10 @@ class HttpBmsContractTest {
                 .andExpect(header("X-Api-Key", "bms-open-key"))
                 .andRespond(withSuccess(
                         "{\"code\":0,\"data\":[{\"bizDate\":\"2026-09-17\",\"orderNo\":\"IR-SO-STUCK\","
-                                + "\"warehouseCode\":\"WH-SH\",\"costType\":\"OUTBOUND\",\"amount\":88.0}]}",
+                                + "\"warehouseCode\":\"WH-SH\",\"costType\":\"OUTBOUND\",\"amount\":88.0},"
+                                + "{\"bizDate\":\"2026-09-17\",\"orderNo\":\"IR-SO-STUCK\","
+                                + "\"warehouseCode\":\"WH-SH\",\"costType\":\"TRANSPORT\",\"amount\":36.0,"
+                                + "\"carrierCode\":\"SF\"}]}",
                         MediaType.APPLICATION_JSON));
 
         ClientFactory factory = new ClientFactory(
@@ -40,9 +43,12 @@ class HttpBmsContractTest {
         bms.setBaseUrl("http://bms.local");
         bms.setApiKey("bms-open-key");
         List<CostRecord> rows = factory.bms(bms).fetchCosts(from, to);
-        assertEquals(1, rows.size());
+        assertEquals(2, rows.size());
         assertEquals("IR-SO-STUCK", rows.get(0).getOrderNo());
         assertEquals("WH-SH", rows.get(0).getWarehouseCode());
+        assertEquals("OUTBOUND", rows.get(0).getCostType());
+        assertEquals("FREIGHT", rows.get(1).getCostType());
+        assertEquals("SF", rows.get(1).getCarrierCode());
         server.verify();
     }
 }

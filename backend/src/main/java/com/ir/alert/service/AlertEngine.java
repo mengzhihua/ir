@@ -13,6 +13,7 @@ import com.ir.alert.entity.CtRule;
 import com.ir.alert.mapper.CtAlertMapper;
 import com.ir.alert.mapper.CtRuleMapper;
 import com.ir.common.CodeGenerator;
+import com.ir.cost.service.CostService;
 import com.ir.forecast.service.ForecastService;
 import com.ir.sandbox.service.BalanceAdvisor;
 import com.ir.snapshot.entity.CostRecord;
@@ -296,9 +297,9 @@ public class AlertEngine {
                 new java.util.LinkedHashMap<>();
         java.util.Map<String, java.util.Set<String>> ordersByWarehouse =
                 new java.util.LinkedHashMap<>();
-        for (CostRecord row : costMapper.selectList(
+        for (CostRecord row : CostService.preferSettlement(costMapper.selectList(
                 new LambdaQueryWrapper<CostRecord>()
-                        .ge(CostRecord::getBizDate, from))) {
+                        .ge(CostRecord::getBizDate, from)))) {
             String warehouse = row.getWarehouseCode() == null
                     ? "UNKNOWN" : row.getWarehouseCode();
             amountByWarehouse.put(warehouse,
