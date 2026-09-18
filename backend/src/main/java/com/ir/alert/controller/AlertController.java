@@ -11,6 +11,7 @@ import com.ir.action.entity.CtAction;
 import com.ir.alert.entity.CtAlert;
 import com.ir.alert.service.AlertEngine;
 import com.ir.common.R;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,8 @@ public class AlertController {
         result.put("acked", count(alerts, "ACKED"));
         result.put("resolved", count(alerts, "RESOLVED"));
         result.put("ignored", count(alerts, "IGNORED"));
+        result.put("high", countSeverity(alerts, "HIGH"));
+        result.put("today", countToday(alerts));
         return R.ok(result);
     }
 
@@ -75,6 +78,28 @@ public class AlertController {
         int count = 0;
         for (CtAlert alert : alerts) {
             if (status.equals(alert.getStatus())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int countSeverity(List<CtAlert> alerts, String severity) {
+        int count = 0;
+        for (CtAlert alert : alerts) {
+            if (severity.equals(alert.getSeverity())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int countToday(List<CtAlert> alerts) {
+        LocalDate today = LocalDate.now();
+        int count = 0;
+        for (CtAlert alert : alerts) {
+            if (alert.getCreatedAt() != null
+                    && today.equals(alert.getCreatedAt().toLocalDate())) {
                 count++;
             }
         }

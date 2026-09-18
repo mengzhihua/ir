@@ -47,5 +47,5 @@ npm run dev
 
 ## 冒烟和构建
 
-后端启动后运行 `bash scripts/smoke.sh`，脚本使用 `curl` 和 `jq` 检查登录、看板、追踪、预警、指令、预测、补货、baseline/场景/对比、成本以及健康同步。
+后端启动后运行 `bash scripts/smoke.sh`，脚本使用 `curl` 和 `jq` 检查登录、看板、追踪（含卡单筛选）、预警统计、挂起/解挂回写、执行建议、按仓在途、采购 PO、预测、补货、baseline/场景/对比、成本以及健康同步。
 前端构建使用 `cd frontend && npm run build`。
