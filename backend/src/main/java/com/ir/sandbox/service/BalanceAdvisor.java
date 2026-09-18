@@ -318,12 +318,11 @@ public class BalanceAdvisor {
         if (from.signum() <= 0 || to.compareTo(from) >= 0) {
             return BigDecimal.ZERO;
         }
-        if (freight == null || freight.signum() <= 0) {
+        BigDecimal next = CarrierCodes.scaledFreight(fromCarrier, toCarrier, freight);
+        if (freight == null || next == null) {
             return BigDecimal.ZERO;
         }
-        return freight.multiply(from.subtract(to))
-                .divide(from, 2, RoundingMode.HALF_UP)
-                .max(BigDecimal.ZERO);
+        return freight.subtract(next).max(BigDecimal.ZERO);
     }
 
     public static BigDecimal shareSaving(BigDecimal total, int count) {

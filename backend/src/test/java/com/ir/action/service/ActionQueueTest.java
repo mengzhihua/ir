@@ -4,16 +4,26 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
+import com.ir.common.CarrierCodes;
+import com.ir.cost.service.CostService;
+import com.ir.sandbox.service.BalanceAdvisor;
 import com.ir.sandbox.service.BalancePolicy;
 import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.entity.ShipmentSnapshot;
 import com.ir.snapshot.mapper.OrderSnapshotMapper;
+import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
@@ -27,6 +37,12 @@ class ActionQueueTest {
     private OrderSnapshotMapper orderMapper;
     @Autowired
     private BalancePolicy policy;
+    @Autowired
+    private ShipmentSnapshotMapper shipmentMapper;
+    @Autowired
+    private CostService costService;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Test
     void pendingIsDedupedAndOpposingStanceIsSuperseded() {
@@ -73,6 +89,77 @@ class ActionQueueTest {
     }
 
     @Test
+    void switchCarrierRewritesFreightAndSavingActual() {
+        ShipmentSnapshot shipment = shipmentMapper.selectOne(
+                new LambdaQueryWrapper<ShipmentSnapshot>()
+                        .in(ShipmentSnapshot::getCarrierCode, Arrays.asList("SF", "JD"))
+                        .gt(ShipmentSnapshot::getFreightAmount, BigDecimal.ZERO)
+                        .last("LIMIT 1"));
+        assertNotNull(shipment);
+        String fromCarrier = shipment.getCarrierCode();
+        BigDecimal fromFreight = shipment.getFreightAmount();
+        BigDecimal expectedFreight = CarrierCodes.scaledFreight(
+                fromCarrier, "SELF01", fromFreight);
+        BigDecimal expectedSaving = BalanceAdvisor.freightSaving(
+                fromCarrier, "SELF01", fromFreight);
+        Map<String, Object> request = pending(
+                "TMS_SWITCH_CARRIER", shipment.getWaybillCode(), "SELF01");
+        request.put("expectedSaving", expectedSaving);
+        CtAction action = actions.createAndExecute(request);
+        assertEquals("SUCCESS", action.getStatus());
+        assertTrue(action.getParamsJson().contains("actualSaving"));
+        assertTrue(action.getParamsJson().contains("fromCarrierCode"));
+        ShipmentSnapshot updated = shipmentMapper.selectById(shipment.getId());
+        assertEquals("SELF01", updated.getCarrierCode());
+        assertEquals(0, expectedFreight.compareTo(updated.getFreightAmount()));
+        assertEquals(0, fromFreight.subtract(expectedFreight).compareTo(
+                paramDecimal(action, "actualSaving")));
+        Map<String, Object> saving = costService.saving();
+        assertNotNull(saving.get("actual"));
+        assertNotNull(saving.get("variance"));
+        assertEquals(0, expectedSaving.compareTo(action.getExpectedSaving()));
+    }
+
+    @Test
+    void switchToFasterCarrierRecordsNegativeSaving() {
+        ShipmentSnapshot shipment = shipmentMapper.selectOne(
+                new LambdaQueryWrapper<ShipmentSnapshot>()
+                        .eq(ShipmentSnapshot::getCarrierCode, "SELF01")
+                        .gt(ShipmentSnapshot::getFreightAmount, BigDecimal.ZERO)
+                        .last("LIMIT 1"));
+        assertNotNull(shipment);
+        BigDecimal fromFreight = shipment.getFreightAmount();
+        BigDecimal toFreight = CarrierCodes.scaledFreight(
+                "SELF01", "SF", fromFreight);
+        Map<String, Object> request = pending(
+                "TMS_SWITCH_CARRIER", shipment.getWaybillCode(), "SF");
+        CtAction action = actions.createAndExecute(request);
+        assertEquals("SUCCESS", action.getStatus());
+        BigDecimal actualSaving = paramDecimal(action, "actualSaving");
+        assertTrue(actualSaving.compareTo(BigDecimal.ZERO) < 0);
+        assertEquals(0, fromFreight.subtract(toFreight).compareTo(actualSaving));
+        ShipmentSnapshot updated = shipmentMapper.selectById(shipment.getId());
+        assertEquals("SF", updated.getCarrierCode());
+        assertEquals(0, toFreight.compareTo(updated.getFreightAmount()));
+    }
+
+    @Test
+    void savingActualIgnoresEstimatedWithoutWriteback() {
+        Map<String, Object> before = costService.saving();
+        BigDecimal actualBefore = new BigDecimal(String.valueOf(before.get("actual")));
+        BigDecimal totalBefore = new BigDecimal(String.valueOf(before.get("total")));
+        Map<String, Object> request = pending("OMS_HOLD", "SO-SAVE-UNWRITTEN", null);
+        request.put("expectedSaving", 99);
+        CtAction action = actions.createAndExecute(request);
+        assertEquals("SUCCESS", action.getStatus());
+        Map<String, Object> after = costService.saving();
+        assertEquals(0, actualBefore.compareTo(
+                new BigDecimal(String.valueOf(after.get("actual")))));
+        assertEquals(0, totalBefore.add(new BigDecimal("99")).compareTo(
+                new BigDecimal(String.valueOf(after.get("total")))));
+    }
+
+    @Test
     void prioritizeWritesSnapshotPriority() {
         Map<String, Object> request = pending("OMS_PRIORITIZE", "SO000043", null);
         Map<String, Object> params = new LinkedHashMap<String, Object>();
@@ -81,7 +168,7 @@ class ActionQueueTest {
         CtAction action = actions.createAndExecute(request);
         assertEquals("SUCCESS", action.getStatus());
         OrderSnapshot order = orderMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OrderSnapshot>()
+                new LambdaQueryWrapper<OrderSnapshot>()
                         .eq(OrderSnapshot::getOrderNo, "SO000043"));
         org.junit.jupiter.api.Assertions.assertNotNull(order);
         assertEquals(Integer.valueOf(10), order.getPriority());
@@ -103,5 +190,17 @@ class ActionQueueTest {
         }
         request.put("params", params);
         return request;
+    }
+
+    private BigDecimal paramDecimal(CtAction action, String key) {
+        try {
+            Map<String, Object> params = objectMapper.readValue(
+                    action.getParamsJson(),
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            return new BigDecimal(String.valueOf(params.get(key)));
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 }

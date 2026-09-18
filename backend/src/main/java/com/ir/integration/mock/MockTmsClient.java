@@ -1,6 +1,7 @@
 package com.ir.integration.mock;
 
 import org.springframework.stereotype.Component;
+import com.ir.common.CarrierCodes;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.TmsClient;
 import com.ir.snapshot.entity.CostRecord;
@@ -64,7 +65,10 @@ public class MockTmsClient implements TmsClient {
             if ("TMS_SWITCH_CARRIER".equals(command.getType())) {
                 Object carrier = command.getParams().get("carrierCode");
                 if (carrier != null) {
-                    shipment.setCarrierCode(String.valueOf(carrier));
+                    String toCarrier = String.valueOf(carrier);
+                    shipment.setFreightAmount(CarrierCodes.scaledFreight(
+                            shipment.getCarrierCode(), toCarrier, shipment.getFreightAmount()));
+                    shipment.setCarrierCode(toCarrier);
                 }
             }
         }
