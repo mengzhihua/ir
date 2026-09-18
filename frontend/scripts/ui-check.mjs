@@ -10,7 +10,16 @@ const routes = [
   ['/action', null],
   ['/forecast', async (page) => page.getByRole('button', { name: '运行预测' }).click()],
   ['/replenish', null],
-  ['/sandbox', async (page) => page.locator('.el-table__body-wrapper tbody tr').first().click()],
+  ['/sandbox', async (page) => {
+    const capital = page.getByRole('button', { name: '推演 1 亿资金盘' })
+    if (await capital.count()) {
+      await capital.click()
+      await page.locator('.el-dialog').waitFor({ state: 'visible', timeout: 15000 })
+      await page.screenshot({ path: '/tmp/capital_dialog.png', fullPage: true })
+      await page.keyboard.press('Escape')
+    }
+    await page.locator('.el-table__body-wrapper tbody tr').first().click()
+  }],
   [
     '/compare',
     async (page) => {
@@ -76,8 +85,9 @@ async function assertPage(page, route) {
 }
 
 async function login(page, username, password) {
-  await page.evaluate(() => localStorage.clear())
   await page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle' })
+  await page.evaluate(() => localStorage.clear())
+  await page.reload({ waitUntil: 'networkidle' })
   await page.locator('input').nth(0).fill(username)
   await page.locator('input').nth(1).fill(password)
   await page.getByRole('button', { name: '登录' }).click()

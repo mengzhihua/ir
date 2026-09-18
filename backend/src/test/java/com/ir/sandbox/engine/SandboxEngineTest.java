@@ -36,4 +36,32 @@ class SandboxEngineTest {
         assertTrue(n.getCarrierMix().containsKey("JD"));
         assertEquals(new BigDecimal("1"), n.getCarrierMix().get("JD"));
     }
+
+    @Test void oneHundredMillionCapitalIsReliable(){
+        ScenarioParams a=new ScenarioParams();
+        a.setHorizonDays(30);
+        a.setWorkingCapital(new BigDecimal("100000000"));
+        SandboxEngine.Result result=new SandboxEngine().run(a,data());
+        assertEquals("RELIABLE", result.getCapitalVerdict());
+        assertTrue(result.getCapitalFeasible());
+        assertTrue(result.getCapitalUtilization().compareTo(new BigDecimal("0.10")) < 0);
+        assertEquals(0, result.getDeferredPurchaseQty().signum());
+    }
+
+    @Test void tightCapitalDefersReplenishment(){
+        ScenarioParams tight=new ScenarioParams();
+        tight.setHorizonDays(7);
+        tight.setInitialInventoryMultiplier(BigDecimal.ZERO);
+        tight.setWorkingCapital(BigDecimal.TEN);
+        tight.setPurchaseCostPerUnit(BigDecimal.valueOf(50));
+        SandboxEngine.Result result=new SandboxEngine().run(tight,data());
+        assertEquals("INSUFFICIENT", result.getCapitalVerdict());
+        assertTrue(result.getDeferredPurchaseQty().signum() > 0);
+        ScenarioParams rich=new ScenarioParams();
+        rich.setHorizonDays(7);
+        rich.setInitialInventoryMultiplier(BigDecimal.ZERO);
+        rich.setWorkingCapital(new BigDecimal("100000000"));
+        assertTrue(new SandboxEngine().run(rich,data()).getStockoutUnits()
+                .compareTo(result.getStockoutUnits()) <= 0);
+    }
 }

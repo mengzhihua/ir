@@ -54,7 +54,9 @@ const metrics = computed(() => {
     ['平均时效', 'avgLeadDays'],
     ['成本分', 'costScore'],
     ['效率分', 'efficiencyScore'],
-    ['综合分', 'balanceScore']
+    ['综合分', 'balanceScore'],
+    ['资金占用', 'capitalUtilization'],
+    ['现金使用', 'cashUsed']
   ]
   return definitions.map(([metric, key]) => ({
     metric,

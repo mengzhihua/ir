@@ -93,6 +93,13 @@
             <div class="label">平均时效</div>
             <div class="value">{{ formatNumber(selected.avgLeadDays, 2) }}天</div>
           </div>
+          <div class="stat">
+            <div class="label">资金结论</div>
+            <div class="value">
+              {{ labelOf(selected.capitalVerdict, capitalVerdictLabels) }}
+              · {{ percent(selected.capitalUtilization) }}
+            </div>
+          </div>
         </div>
         <div v-if="selected" class="grid-2">
           <Chart :option="typeOption" /><Chart :option="dailyOption" /><Chart :option="warehouseOption" /><Chart
@@ -124,7 +131,7 @@ import { sandboxApi } from '../api'
 import { canWrite } from '../auth'
 import Chart from '../components/Chart.vue'
 import { formatMoney, formatNumber, parseJson, percent } from '../utils/format'
-import { actionStatusLabels, labelOf, tagTypes } from '../utils/labels'
+import { actionStatusLabels, capitalVerdictLabels, labelOf, tagTypes } from '../utils/labels'
 
 const loading = ref(false)
 const running = ref(false)

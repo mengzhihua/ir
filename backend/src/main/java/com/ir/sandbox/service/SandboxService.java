@@ -247,6 +247,33 @@ public class SandboxService {
         return result;
     }
 
+    public Map<String, Object> analyzeCapital(BigDecimal amount) {
+        BigDecimal capital = amount == null || amount.signum() <= 0
+                ? new BigDecimal("100000000") : amount;
+        ScenarioParams normalParams = new ScenarioParams();
+        normalParams.setHorizonDays(30);
+        normalParams.setWorkingCapital(capital);
+        SandboxEngine.Result normal = engine.run(normalParams, baselineData());
+        ScenarioParams stressParams = new ScenarioParams();
+        stressParams.setHorizonDays(30);
+        stressParams.setWorkingCapital(capital);
+        stressParams.setDemandMultiplier(BigDecimal.valueOf(2));
+        SandboxEngine.Result stress = engine.run(stressParams, baselineData());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("workingCapital", capital);
+        result.put("baseline", capitalView(normal));
+        result.put("demand2x", capitalView(stress));
+        String verdict = overallVerdict(normal, stress);
+        result.put("verdict", verdict);
+        result.put("reliable", "RELIABLE".equals(verdict));
+        result.put("reason", overallReason(normal, stress, capital));
+        return result;
+    }
+
+    public Map<String, Object> resultOf(CtScenario scenario) {
+        return result(scenario);
+    }
+
     public BaselineData currentBaselineData() {
         return baselineData();
     }
@@ -565,6 +592,49 @@ public class SandboxService {
         return read(scenario.getResultJson(), Map.class);
     }
 
+    private Map<String, Object> capitalView(SandboxEngine.Result result) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("totalCost", result.getTotalCost());
+        row.put("serviceLevel", result.getServiceLevel());
+        row.put("stockoutUnits", result.getStockoutUnits());
+        row.put("avgLeadDays", result.getAvgLeadDays());
+        row.put("workingCapital", result.getWorkingCapital());
+        row.put("cashUsed", result.getCashUsed());
+        row.put("cashRemaining", result.getCashRemaining());
+        row.put("purchaseCash", result.getPurchaseCash());
+        row.put("opsCash", result.getOpsCash());
+        row.put("deferredPurchaseQty", result.getDeferredPurchaseQty());
+        row.put("capitalShortage", result.getCapitalShortage());
+        row.put("capitalUtilization", result.getCapitalUtilization());
+        row.put("capitalFeasible", result.getCapitalFeasible());
+        row.put("capitalVerdict", result.getCapitalVerdict());
+        row.put("capitalReason", result.getCapitalReason());
+        return row;
+    }
+
+    private String overallVerdict(SandboxEngine.Result normal, SandboxEngine.Result stress) {
+        if (!"RELIABLE".equals(normal.getCapitalVerdict())) {
+            return normal.getCapitalVerdict();
+        }
+        if ("INSUFFICIENT".equals(stress.getCapitalVerdict())) {
+            return "TIGHT";
+        }
+        return stress.getCapitalVerdict();
+    }
+
+    private String overallReason(
+            SandboxEngine.Result normal,
+            SandboxEngine.Result stress,
+            BigDecimal capital) {
+        return "资金盘 " + capital.toPlainString()
+                + "：常态 " + normal.getCapitalVerdict()
+                + "（占用 " + normal.getCapitalUtilization()
+                + "，服务水平 " + normal.getServiceLevel()
+                + "），2 倍需求 " + stress.getCapitalVerdict()
+                + "（占用 " + stress.getCapitalUtilization()
+                + "，服务水平 " + stress.getServiceLevel() + "）";
+    }
+
     private Map<String, Object> deltas(
             Map<String, Object> baseline,
             Map<String, Object> scenario) {
@@ -576,6 +646,8 @@ public class SandboxService {
         delta.put("costScore", difference(scenario, baseline, "costScore"));
         delta.put("efficiencyScore", difference(scenario, baseline, "efficiencyScore"));
         delta.put("balanceScore", difference(scenario, baseline, "balanceScore"));
+        delta.put("capitalUtilization", difference(scenario, baseline, "capitalUtilization"));
+        delta.put("cashUsed", difference(scenario, baseline, "cashUsed"));
         return delta;
     }
 

@@ -26,6 +26,8 @@ public class ScenarioParams {
     private BigDecimal initialInventoryMultiplier = BigDecimal.ONE;
     private BigDecimal costWeight = BigDecimal.valueOf(0.5);
     private BigDecimal efficiencyWeight = BigDecimal.valueOf(0.5);
+    private BigDecimal workingCapital = new BigDecimal("100000000");
+    private BigDecimal purchaseCostPerUnit = BigDecimal.valueOf(50);
 
     public ScenarioParams() {
         channelDemandMultiplier.put("TMALL", BigDecimal.ONE);
@@ -78,6 +80,12 @@ public class ScenarioParams {
                 ? BigDecimal.valueOf(0.5) : costWeight);
         normalized.setEfficiencyWeight(efficiencyWeight == null
                 ? BigDecimal.valueOf(0.5) : efficiencyWeight);
+        normalized.setWorkingCapital(workingCapital == null
+                || workingCapital.signum() < 0
+                ? new BigDecimal("100000000") : workingCapital);
+        normalized.setPurchaseCostPerUnit(purchaseCostPerUnit == null
+                || purchaseCostPerUnit.signum() < 0
+                ? BigDecimal.valueOf(50) : purchaseCostPerUnit);
         if (channelDemandMultiplier != null
                 && !channelDemandMultiplier.isEmpty()) {
             normalized.setChannelDemandMultiplier(

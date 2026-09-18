@@ -136,6 +136,13 @@
             <div class="label">总成本</div>
             <div class="value">{{ formatMoney(overview.recommendation.totalCost) }}</div>
           </div>
+          <div class="stat">
+            <div class="label">资金盘</div>
+            <div class="value">
+              {{ formatMoney(overview.recommendation.workingCapital) }}
+              · {{ labelOf(overview.recommendation.capitalVerdict, capitalVerdictLabels) }}
+            </div>
+          </div>
         </div>
         <el-empty v-else description="尚未产生自动沙盘推荐" />
       </div>
@@ -183,7 +190,7 @@ import { sandboxApi, towerApi } from '../api'
 import { canWrite } from '../auth'
 import Chart from '../components/Chart.vue'
 import { formatDate, formatMoney, formatNumber, percent } from '../utils/format'
-import { labelOf, severityLabels, systemModeLabels, tagTypes } from '../utils/labels'
+import { capitalVerdictLabels, labelOf, severityLabels, systemModeLabels, tagTypes } from '../utils/labels'
 
 const loading = ref(false)
 const overview = reactive({

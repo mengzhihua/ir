@@ -79,21 +79,39 @@ public class TraceService {
                     .or().lt(OrderSnapshot::getPriority, 10));
         }
         query.orderByDesc(OrderSnapshot::getOrderTime);
-        Page<OrderSnapshot> orders = orderMapper.selectPage(
-                new Page<>(current, size), query);
-        Page<Map<String, Object>> resultPage = new Page<>(
-                current, size, orders.getTotal());
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (OrderSnapshot order : orders.getRecords()) {
+        if (stuck == null) {
+            Page<OrderSnapshot> orders = orderMapper.selectPage(
+                    new Page<>(current, size), query);
+            Page<Map<String, Object>> resultPage = new Page<>(
+                    current, size, orders.getTotal());
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (OrderSnapshot order : orders.getRecords()) {
+                WmsOrderSnapshot wms = wms(order.getOrderNo());
+                ShipmentSnapshot shipment = shipment(order.getOrderNo());
+                result.add(row(order, wms, shipment, stuckHours(order, wms, shipment)));
+            }
+            resultPage.setRecords(result);
+            return resultPage;
+        }
+        List<OrderSnapshot> all = orderMapper.selectList(query);
+        List<Map<String, Object>> filtered = new ArrayList<>();
+        for (OrderSnapshot order : all) {
             WmsOrderSnapshot wms = wms(order.getOrderNo());
             ShipmentSnapshot shipment = shipment(order.getOrderNo());
-            long stuckHours = stuckHours(order, wms, shipment);
-            if (stuck != null && stuck != (stuckHours > 0)) {
+            long hours = stuckHours(order, wms, shipment);
+            if (stuck != (hours > 0)) {
                 continue;
             }
-            result.add(row(order, wms, shipment, stuckHours));
+            filtered.add(row(order, wms, shipment, hours));
         }
-        resultPage.setRecords(result);
+        long fromIndex = Math.max(0L, (current - 1L) * size);
+        long toIndex = Math.min(filtered.size(), fromIndex + size);
+        List<Map<String, Object>> pageRows = fromIndex >= filtered.size()
+                ? new ArrayList<Map<String, Object>>()
+                : new ArrayList<Map<String, Object>>(
+                        filtered.subList((int) fromIndex, (int) toIndex));
+        Page<Map<String, Object>> resultPage = new Page<>(current, size, filtered.size());
+        resultPage.setRecords(pageRows);
         return resultPage;
     }
 

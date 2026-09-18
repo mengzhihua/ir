@@ -5,8 +5,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ir.action.entity.CtAction;
 import com.ir.action.service.ActionService;
+import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.entity.ShipmentSnapshot;
 import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
 import java.util.LinkedHashMap;
@@ -55,5 +57,27 @@ class TraceServiceTest {
             }
         }
         assertTrue(found, "订单抽屉应包含运单换商指令");
+    }
+
+    @Test
+    void stuckFilterReturnsAuditedOrders() {
+        Page<Map<String, Object>> page = traces.page(null, null, null, null, true, null, 1, 20);
+        assertNotNull(page);
+        java.util.List<Map<String, Object>> rows = page.getRecords();
+        assertTrue(rows.size() > 0, "stuck=true 应返回卡单而不是空页");
+        assertTrue(page.getTotal() >= rows.size());
+        boolean stuckRow = false;
+        for (Map<String, Object> row : rows) {
+            Object hours = row.get("stuckHours");
+            assertNotNull(hours);
+            if (((Number) hours).longValue() > 0) {
+                stuckRow = true;
+            }
+            Object oms = row.get("oms");
+            if (oms instanceof OrderSnapshot && "AUDITED".equals(((OrderSnapshot) oms).getStatus())) {
+                stuckRow = true;
+            }
+        }
+        assertTrue(stuckRow);
     }
 }
