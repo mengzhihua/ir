@@ -32,7 +32,8 @@ public class HttpBmsClient implements BmsClient {
             cost.setOrderNo(HttpSupport.string(row, "orderNo"));
             cost.setWarehouseCode(HttpSupport.string(row, "warehouseCode"));
             cost.setCarrierCode(HttpSupport.string(row, "carrierCode"));
-            cost.setCostType(HttpSupport.string(row, "costType"));
+            String costType = HttpSupport.string(row, "costType");
+            cost.setCostType("TRANSPORT".equals(costType) ? "FREIGHT" : costType);
             cost.setAmount(java.math.BigDecimal.valueOf(HttpSupport.doubleValue(row, "amount")));
             cost.setSourceSystem("BMS");
             cost.setRemark(HttpSupport.string(row, "remark"));

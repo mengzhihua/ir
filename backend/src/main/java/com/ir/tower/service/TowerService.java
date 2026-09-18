@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Service;
 import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
+import com.ir.cost.service.CostService;
 import com.ir.alert.entity.CtAlert;
 import com.ir.alert.mapper.CtAlertMapper;
 import com.ir.integration.entity.CtSystem;
@@ -133,8 +134,9 @@ public class TowerService {
                 lowStock++;
             }
         }
-        for (CostRecord cost : costs.selectList(new LambdaQueryWrapper<CostRecord>()
-                .ge(CostRecord::getBizDate, from))) {
+        for (CostRecord cost : CostService.preferSettlement(costs.selectList(
+                new LambdaQueryWrapper<CostRecord>()
+                        .ge(CostRecord::getBizDate, from)))) {
             totalCost = totalCost.add(cost.getAmount());
         }
 
@@ -218,9 +220,10 @@ public class TowerService {
 
     private List<Map<String, Object>> costTrend(LocalDate from) {
         Map<LocalDate, Map<String, BigDecimal>> grouped = new LinkedHashMap<>();
-        for (CostRecord cost : costs.selectList(new LambdaQueryWrapper<CostRecord>()
-                .ge(CostRecord::getBizDate, from)
-                .orderByAsc(CostRecord::getBizDate))) {
+        for (CostRecord cost : CostService.preferSettlement(costs.selectList(
+                new LambdaQueryWrapper<CostRecord>()
+                        .ge(CostRecord::getBizDate, from)
+                        .orderByAsc(CostRecord::getBizDate)))) {
             grouped.computeIfAbsent(cost.getBizDate(),
                     key -> new LinkedHashMap<>())
                     .put(cost.getCostType(),

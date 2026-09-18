@@ -43,8 +43,9 @@ public class CostService {
 
     public Map<String, Object> summary(int days) {
         LocalDate from = LocalDate.now().minusDays(days - 1L);
-        List<CostRecord> rows = records(
+        List<CostRecord> raw = records(
                 null, null, null, null, from, LocalDate.now());
+        List<CostRecord> rows = preferSettlement(raw);
         BigDecimal total = BigDecimal.ZERO;
         Map<String, BigDecimal> byType = new LinkedHashMap<>();
         Map<String, BigDecimal> byWarehouse = new LinkedHashMap<>();
@@ -62,6 +63,9 @@ public class CostService {
         result.put("byType", byType);
         result.put("byWarehouse", byWarehouse);
         result.put("byCarrier", byCarrier);
+        result.put("freightSource", freightSource(raw));
+        result.put("freightBms", freightAmount(raw, "BMS"));
+        result.put("freightTms", freightAmount(raw, "TMS"));
         result.put("costPerOrder", orderMapper.selectCount(null) == 0
                 ? BigDecimal.ZERO
                 : total.divide(BigDecimal.valueOf(orderMapper.selectCount(null)),
@@ -155,7 +159,45 @@ public class CostService {
         result.put("variance", actual.subtract(writtenExpected));
         result.put("byMonth", byMonth);
         result.put("estimated", true);
+        result.put("freightSource", freightSource(costMapper.selectList(null)));
         return result;
+    }
+
+    public static List<CostRecord> preferSettlement(List<CostRecord> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return new ArrayList<CostRecord>();
+        }
+        boolean bmsFreight = false;
+        for (CostRecord row : rows) {
+            if (freight(row) && "BMS".equals(row.getSourceSystem())) {
+                bmsFreight = true;
+                break;
+            }
+        }
+        List<CostRecord> preferred = new ArrayList<CostRecord>();
+        for (CostRecord row : rows) {
+            if (!freight(row)) {
+                preferred.add(row);
+                continue;
+            }
+            if (bmsFreight) {
+                if ("BMS".equals(row.getSourceSystem())) {
+                    preferred.add(row);
+                }
+            } else if (row.getSourceSystem() == null
+                    || "TMS".equals(row.getSourceSystem())) {
+                preferred.add(row);
+            }
+        }
+        return preferred;
+    }
+
+    public static boolean freight(CostRecord row) {
+        return row != null && freightType(row.getCostType());
+    }
+
+    public static boolean freightType(String costType) {
+        return "FREIGHT".equals(costType) || "TRANSPORT".equals(costType);
     }
 
     public List<CtCostTarget> targets() {
@@ -221,5 +263,29 @@ public class CostService {
         } catch (Exception ex) {
             return null;
         }
+    }
+
+    private static String freightSource(List<CostRecord> rows) {
+        if (freightAmount(rows, "BMS").signum() > 0) {
+            return "BMS";
+        }
+        if (freightAmount(rows, "TMS").signum() > 0) {
+            return "TMS";
+        }
+        return "NONE";
+    }
+
+    private static BigDecimal freightAmount(List<CostRecord> rows, String source) {
+        BigDecimal total = BigDecimal.ZERO;
+        if (rows == null) {
+            return total;
+        }
+        for (CostRecord row : rows) {
+            if (freight(row) && source.equals(row.getSourceSystem())
+                    && row.getAmount() != null) {
+                total = total.add(row.getAmount());
+            }
+        }
+        return total;
     }
 }
