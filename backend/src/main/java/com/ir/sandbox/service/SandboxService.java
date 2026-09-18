@@ -826,6 +826,15 @@ public class SandboxService {
                                 .divide(baselineCash, 1, RoundingMode.HALF_UP)
                         + "%；只降安全库存不缩短交期会掉服务水平。");
             }
+            for (Map<String, Object> row : playbook) {
+                if ("低安全短交期".equals(row.get("name"))
+                        && decimal(row.get("stockoutUnits")).signum() > 0
+                        && !Boolean.TRUE.equals(row.get("recommended"))) {
+                    rows.add("当前库存撑不住再把安全天数降到 1，会缺货 "
+                            + row.get("stockoutUnits")
+                            + "，先保短交期补货（安全 3 天 + 提前期 1 天）。");
+                }
+            }
         }
         if (headroom.compareTo(BigDecimal.valueOf(20)) >= 0) {
             rows.add("1 亿相对当前 30 天现金需求过大，约 "
