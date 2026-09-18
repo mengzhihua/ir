@@ -91,7 +91,9 @@ class IrIntegrationTest {
                     .andExpect(jsonPath("$.data.superseded").isNumber());
             mvc.perform(get("/api/sandbox/policy").header("Authorization", "Bearer " + t))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.stance").value("COST"));
+                    .andExpect(jsonPath("$.data.stance").value("COST"))
+                    .andExpect(jsonPath("$.data.safetyDays").isNumber())
+                    .andExpect(jsonPath("$.data.replenishLeadDays").isNumber());
             mvc.perform(get("/api/tower/overview").header("Authorization", "Bearer " + t))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.policy.stance").value("COST"))

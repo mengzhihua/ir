@@ -38,6 +38,8 @@
       <div class="muted">
         成本权重 {{ (costPercent / 100).toFixed(2) }} · 效率权重
         {{ ((100 - costPercent) / 100).toFixed(2) }}
+        · 补货安全 {{ overview.policy?.safetyDays ?? '-' }} 天 / 提前期
+        {{ overview.policy?.replenishLeadDays ?? '-' }} 天
         <template v-if="carrierSummary"> · 在途承运 {{ carrierSummary }}</template>
       </div>
     </div>
@@ -213,7 +215,7 @@ const overview = reactive({
   systems: [],
   recommendation: null,
   ecosystem: {},
-  policy: { costWeight: 0.5, efficiencyWeight: 0.5, stance: 'BALANCED' }
+  policy: { costWeight: 0.5, efficiencyWeight: 0.5, stance: 'BALANCED', safetyDays: 3, replenishLeadDays: 3 }
 })
 const saving = ref(false)
 const costPercent = ref(50)

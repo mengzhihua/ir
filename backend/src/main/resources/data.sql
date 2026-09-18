@@ -59,7 +59,7 @@ KEY (code)
 VALUES ('COST_OVERRUN', '成本超预算', 'COST_OVERRUN', '{"days":7,"costPerOrderThreshold":0}', 'MEDIUM', TRUE, 'TMS_SWITCH_CARRIER');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
-VALUES ('FORECAST_STOCKOUT', '预测即将缺货', 'FORECAST_STOCKOUT', '{"horizon":14,"serviceDays":3}', 'MEDIUM', TRUE, 'SRM_PURCHASE_SUGGEST');
+VALUES ('FORECAST_STOCKOUT', '预测即将缺货', 'FORECAST_STOCKOUT', '{"horizon":14}', 'MEDIUM', TRUE, 'SRM_PURCHASE_SUGGEST');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
 VALUES ('UNSHIPPED_ORDER', '订单未发货', 'ORDER_STUCK', '{"status":"PAID","hours":24}', 'LOW', TRUE, 'OMS_PRIORITIZE');

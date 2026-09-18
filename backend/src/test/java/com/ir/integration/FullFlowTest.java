@@ -173,6 +173,16 @@ class FullFlowTest {
         JsonNode rec = get(token, "/api/tower/overview");
         assertEquals(auto.path("recommended").path("id").asLong(),
                 rec.path("recommendation").path("id").asLong());
+        int recSafety = auto.path("recommended").path("params").path("safetyDays").asInt();
+        int recLead = auto.path("recommended").path("params").path("replenishLeadDays").asInt();
+        assertTrue(recSafety > 0);
+        assertTrue(recLead > 0);
+        JsonNode policyAfterAuto = get(token, "/api/sandbox/policy");
+        assertEquals(recSafety, policyAfterAuto.path("safetyDays").asInt());
+        assertEquals(recLead, policyAfterAuto.path("replenishLeadDays").asInt());
+        JsonNode replenishDefault = get(token,
+                "/api/forecast/replenish?warehouseCode=WH-SH&sku=SKU002&horizon=14");
+        assertEquals(recSafety, replenishDefault.get(0).path("serviceDays").asInt());
 
         JsonNode capital = post(token, "/api/sandbox/capital",
                 "{\"workingCapital\":100000000}");
@@ -202,6 +212,10 @@ class FullFlowTest {
         assertTrue(adopted.path("id").asLong() > 0);
         assertEquals(1, adopted.path("params").path("replenishLeadDays").asInt());
         assertEquals("BALANCED", adopted.path("params").path("allocationStrategy").asText());
+        JsonNode policyAfterAdopt = get(token, "/api/sandbox/policy");
+        assertEquals(adopted.path("params").path("safetyDays").asInt(),
+                policyAfterAdopt.path("safetyDays").asInt());
+        assertEquals(1, policyAfterAdopt.path("replenishLeadDays").asInt());
     }
 
     private void seedStuckOrder() {

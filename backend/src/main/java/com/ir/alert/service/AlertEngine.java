@@ -17,6 +17,7 @@ import com.ir.common.CodeGenerator;
 import com.ir.cost.service.CostService;
 import com.ir.forecast.service.ForecastService;
 import com.ir.sandbox.service.BalanceAdvisor;
+import com.ir.sandbox.service.BalancePolicy;
 import com.ir.snapshot.entity.CostRecord;
 import com.ir.snapshot.entity.ExtSnapshot;
 import com.ir.snapshot.entity.InventorySnapshot;
@@ -55,6 +56,7 @@ public class AlertEngine {
     private final CostRecordMapper costMapper;
     private final ForecastService forecastService;
     private final BalanceAdvisor balanceAdvisor;
+    private final BalancePolicy policy;
 
     public AlertEngine(
             CtRuleMapper ruleMapper,
@@ -69,7 +71,8 @@ public class AlertEngine {
             ObjectMapper objectMapper,
             CostRecordMapper costMapper,
             ForecastService forecastService,
-            BalanceAdvisor balanceAdvisor) {
+            BalanceAdvisor balanceAdvisor,
+            BalancePolicy policy) {
         this.ruleMapper = ruleMapper;
         this.alertMapper = alertMapper;
         this.orderMapper = orderMapper;
@@ -83,6 +86,7 @@ public class AlertEngine {
         this.costMapper = costMapper;
         this.forecastService = forecastService;
         this.balanceAdvisor = balanceAdvisor;
+        this.policy = policy;
     }
 
     @Transactional
@@ -348,7 +352,7 @@ public class AlertEngine {
     private void evaluateForecast(CtRule rule, Map<String, Object> params, Set<String> active) {
         int horizon = (int) number(params.get("horizon"),
                 number(params.get("days"), 14L));
-        int serviceDays = (int) number(params.get("serviceDays"), 3L);
+        int serviceDays = policy.safetyDays();
         LocalDate limit = LocalDate.now().plusDays(horizon);
         for (Map<String, Object> row : forecastService.replenish(
                 null, null, horizon, serviceDays)) {
@@ -364,7 +368,8 @@ public class AlertEngine {
                 String warehouse = String.valueOf(row.get("warehouseCode"));
                 add(rule, "SKU_WAREHOUSE", sku + "/" + warehouse,
                         warehouse, "预测即将缺货",
-                        "预计 " + stockout + " 缺货，"
+                        "预计 " + stockout + " 缺货（保障 "
+                                + serviceDays + " 天），"
                                 + (balanceAdvisor.costFirst()
                                 ? "成本优先只走采购建议、加大批量"
                                 : "兼顾时效，采购建议同时仓内补货"),

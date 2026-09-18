@@ -38,6 +38,8 @@ ir:
     auto-queue: ${IR_SANDBOX_AUTO_QUEUE:true}
     cost-weight: ${IR_SANDBOX_COST_WEIGHT:0.5}
     efficiency-weight: ${IR_SANDBOX_EFFICIENCY_WEIGHT:0.5}
+    safety-days: ${IR_SANDBOX_SAFETY_DAYS:3}
+    replenish-lead-days: ${IR_SANDBOX_REPLENISH_LEAD_DAYS:3}
   http:
     # 逗号分隔系统编码，或 * / ALL。启动时把对应 ct_system.mode 写成 HTTP。
     systems: ${IR_HTTP_SYSTEMS:}

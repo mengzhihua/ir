@@ -11,6 +11,7 @@ import com.ir.action.entity.CtAction;
 import com.ir.common.R;
 import com.ir.forecast.entity.CtForecast;
 import com.ir.forecast.service.ForecastService;
+import com.ir.sandbox.service.BalancePolicy;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -19,9 +20,11 @@ import java.util.Map;
 @RequestMapping("/api/forecast")
 public class ForecastController {
     private final ForecastService service;
+    private final BalancePolicy policy;
 
-    public ForecastController(ForecastService service) {
+    public ForecastController(ForecastService service, BalancePolicy policy) {
         this.service = service;
+        this.policy = policy;
     }
 
     @GetMapping("/history")
@@ -52,8 +55,9 @@ public class ForecastController {
             @RequestParam(required = false) String warehouseCode,
             @RequestParam(required = false) String sku,
             @RequestParam(defaultValue = "14") int horizon,
-            @RequestParam(defaultValue = "3") int serviceDays) {
-        return R.ok(service.replenish(warehouseCode, sku, horizon, serviceDays));
+            @RequestParam(required = false) Integer serviceDays) {
+        int days = serviceDays == null ? policy.safetyDays() : serviceDays;
+        return R.ok(service.replenish(warehouseCode, sku, horizon, days));
     }
 
     @PostMapping("/replenish/to-action")

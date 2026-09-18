@@ -3,7 +3,10 @@
     <div class="page-title">
       <div>
         <h2>补货建议</h2>
-        <p class="subtitle">将预测缺口转换为采购或仓内补货指令</p>
+        <p class="subtitle">
+          将预测缺口转换为采购或仓内补货指令 · 当前保障
+          {{ policy.safetyDays }} 天（跟随沙盘推荐）
+        </p>
       </div>
       <el-button @click="load">刷新</el-button>
     </div>
@@ -73,9 +76,10 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { forecastApi } from '../api'
+import { forecastApi, sandboxApi } from '../api'
 import { canWrite } from '../auth'
 const filters = reactive({ sku: '', warehouseCode: '' })
+const policy = reactive({ safetyDays: 3, replenishLeadDays: 3 })
 const pager = reactive({ current: 1, size: 20, total: 0 })
 const rows = ref([])
 const selected = ref([])
@@ -91,6 +95,11 @@ async function load() {
     pager.total = all.length
     const start = (pager.current - 1) * pager.size
     rows.value = all.slice(start, start + pager.size)
+    const current = await sandboxApi.policy()
+    if (current) {
+      policy.safetyDays = current.safetyDays ?? policy.safetyDays
+      policy.replenishLeadDays = current.replenishLeadDays ?? policy.replenishLeadDays
+    }
   } finally {
     loading.value = false
   }

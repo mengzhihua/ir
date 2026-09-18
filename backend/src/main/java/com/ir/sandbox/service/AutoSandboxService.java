@@ -56,6 +56,12 @@ public class AutoSandboxService {
         sandbox.rescore(rows, policy.costWeight(), policy.efficiencyWeight());
         CtScenario recommended = pickRecommended(rows);
         sandbox.markRecommended(rows, recommended == null ? null : recommended.getId());
+        if (recommended != null) {
+            ScenarioParams recParams = sandbox.paramsOf(recommended);
+            if (recParams != null) {
+                policy.updateReplenish(recParams.getSafetyDays(), recParams.getReplenishLeadDays());
+            }
+        }
 
         List<CtAction> queued = new ArrayList<>();
         if (recommended != null && (autoApply || autoQueue)) {
