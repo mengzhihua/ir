@@ -16,9 +16,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class CostService {
@@ -63,7 +65,7 @@ public class CostService {
         result.put("byType", byType);
         result.put("byWarehouse", byWarehouse);
         result.put("byCarrier", byCarrier);
-        result.put("freightSource", freightSource(raw));
+        result.put("freightSource", freightSource(rows));
         result.put("freightBms", freightAmount(raw, "BMS"));
         result.put("freightTms", freightAmount(raw, "TMS"));
         result.put("costPerOrder", orderMapper.selectCount(null) == 0
@@ -167,11 +169,10 @@ public class CostService {
         if (rows == null || rows.isEmpty()) {
             return new ArrayList<CostRecord>();
         }
-        boolean bmsFreight = false;
+        Set<String> settled = new HashSet<String>();
         for (CostRecord row : rows) {
             if (freight(row) && "BMS".equals(row.getSourceSystem())) {
-                bmsFreight = true;
-                break;
+                settled.add(settleKey(row));
             }
         }
         List<CostRecord> preferred = new ArrayList<CostRecord>();
@@ -180,16 +181,26 @@ public class CostService {
                 preferred.add(row);
                 continue;
             }
-            if (bmsFreight) {
-                if ("BMS".equals(row.getSourceSystem())) {
-                    preferred.add(row);
-                }
-            } else if (row.getSourceSystem() == null
-                    || "TMS".equals(row.getSourceSystem())) {
+            if ("BMS".equals(row.getSourceSystem())) {
+                preferred.add(row);
+                continue;
+            }
+            if ((row.getSourceSystem() == null || "TMS".equals(row.getSourceSystem()))
+                    && !settled.contains(settleKey(row))) {
                 preferred.add(row);
             }
         }
         return preferred;
+    }
+
+    static String settleKey(CostRecord row) {
+        if (row.getOrderNo() != null && !row.getOrderNo().trim().isEmpty()) {
+            return "O:" + row.getOrderNo().trim();
+        }
+        String date = row.getBizDate() == null ? "" : row.getBizDate().toString();
+        String warehouse = row.getWarehouseCode() == null ? "" : row.getWarehouseCode();
+        String carrier = row.getCarrierCode() == null ? "" : row.getCarrierCode();
+        return "F:" + date + "|" + warehouse + "|" + carrier;
     }
 
     public static boolean freight(CostRecord row) {
@@ -266,10 +277,15 @@ public class CostService {
     }
 
     private static String freightSource(List<CostRecord> rows) {
-        if (freightAmount(rows, "BMS").signum() > 0) {
+        boolean bms = freightAmount(rows, "BMS").signum() > 0;
+        boolean tms = freightAmount(rows, "TMS").signum() > 0;
+        if (bms && tms) {
+            return "MIXED";
+        }
+        if (bms) {
             return "BMS";
         }
-        if (freightAmount(rows, "TMS").signum() > 0) {
+        if (tms) {
             return "TMS";
         }
         return "NONE";

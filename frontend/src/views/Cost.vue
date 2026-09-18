@@ -174,6 +174,9 @@ const freightLabel = computed(() => {
   if (summary.freightSource === 'BMS') {
     return 'BMS结算'
   }
+  if (summary.freightSource === 'MIXED') {
+    return 'BMS结算+TMS未对账'
+  }
   if (summary.freightSource === 'TMS') {
     return 'TMS快照'
   }
