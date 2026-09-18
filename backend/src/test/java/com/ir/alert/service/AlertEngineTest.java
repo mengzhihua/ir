@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
+import com.ir.action.service.ActionService;
 import com.ir.alert.entity.CtAlert;
 import com.ir.alert.entity.CtRule;
 import com.ir.alert.mapper.CtAlertMapper;
@@ -23,6 +24,7 @@ import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -34,6 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AlertEngineTest {
     @Autowired
     private AlertEngine alertEngine;
+    @Autowired
+    private ActionService actions;
     @Autowired
     private CtAlertMapper alertMapper;
     @Autowired
@@ -340,6 +344,93 @@ class AlertEngineTest {
         CtAlert cleared = alertMapper.selectById(stuck.getId());
         assertEquals("RESOLVED", cleared.getStatus());
         assertNull(cleared.getActionId());
+    }
+
+    @Test
+    void shInboundDoesNotCoverBjLowStock() {
+        InventorySnapshot sh = stock("SKU-INB-WH", "WH-SH", "2");
+        InventorySnapshot bj = stock("SKU-INB-WH", "WH-BJ", "2");
+        inventoryMapper.insert(sh);
+        inventoryMapper.insert(bj);
+        Map<String, Object> request = new java.util.LinkedHashMap<>();
+        request.put("type", "SRM_PURCHASE_SUGGEST");
+        request.put("targetKey", "SKU-INB-WH");
+        Map<String, Object> params = new java.util.LinkedHashMap<>();
+        params.put("sku", "SKU-INB-WH");
+        params.put("qty", 50);
+        params.put("warehouseCode", "WH-SH");
+        request.put("params", params);
+        assertEquals("SUCCESS", actions.createAndExecute(request).getStatus());
+        alertEngine.evaluate();
+        long shOpen = alertMapper.selectList(null).stream()
+                .filter(a -> "SKU-INB-WH/WH-SH".equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        long bjOpen = alertMapper.selectList(null).stream()
+                .filter(a -> "SKU-INB-WH/WH-BJ".equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(0, shOpen);
+        assertEquals(1, bjOpen);
+    }
+
+    @Test
+    void legacyLowStockKeyStillSuppresses() {
+        InventorySnapshot item = stock("SKU-LEGACY-WH", "WH-SH", "2");
+        inventoryMapper.insert(item);
+        CtAlert handled = new CtAlert();
+        handled.setAlertNo("ALT-LEGACY-WH");
+        handled.setRuleCode("LOW_STOCK");
+        handled.setType("LOW_STOCK");
+        handled.setSeverity("MEDIUM");
+        handled.setTargetType("SKU");
+        handled.setTargetKey("SKU-LEGACY-WH");
+        handled.setWarehouseCode("WH-SH");
+        handled.setTitle("低库存");
+        handled.setStatus("RESOLVED");
+        handled.setActionId(1L);
+        handled.setSuggestedAction("SRM_PURCHASE_SUGGEST");
+        alertMapper.insert(handled);
+        alertEngine.evaluate();
+        long opened = alertMapper.selectList(null).stream()
+                .filter(a -> a.getTargetKey() != null
+                        && a.getTargetKey().startsWith("SKU-LEGACY-WH")
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(0, opened);
+        CtAlert still = alertMapper.selectById(handled.getId());
+        assertEquals("RESOLVED", still.getStatus());
+        assertEquals("SKU-LEGACY-WH/WH-SH", still.getTargetKey());
+        assertEquals("SKU_WAREHOUSE", still.getTargetType());
+        assertEquals(Long.valueOf(1L), still.getActionId());
+    }
+
+    @Test
+    void legacyOpenLowStockKeyMigratesToWarehouse() {
+        InventorySnapshot item = stock("SKU-MIG-WH", "WH-SH", "2");
+        inventoryMapper.insert(item);
+        CtAlert open = new CtAlert();
+        open.setAlertNo("ALT-MIG-WH");
+        open.setRuleCode("LOW_STOCK");
+        open.setType("LOW_STOCK");
+        open.setSeverity("MEDIUM");
+        open.setTargetType("SKU");
+        open.setTargetKey("SKU-MIG-WH");
+        open.setWarehouseCode("WH-SH");
+        open.setTitle("低库存");
+        open.setStatus("OPEN");
+        open.setSuggestedAction("SRM_PURCHASE_SUGGEST");
+        alertMapper.insert(open);
+        alertEngine.evaluate();
+        CtAlert migrated = alertMapper.selectById(open.getId());
+        assertEquals("SKU-MIG-WH/WH-SH", migrated.getTargetKey());
+        assertEquals("SKU_WAREHOUSE", migrated.getTargetType());
+        assertEquals("OPEN", migrated.getStatus());
+        long duplicates = alertMapper.selectList(null).stream()
+                .filter(a -> "SKU-MIG-WH/WH-SH".equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
+                .count();
+        assertEquals(1, duplicates);
     }
 
     @Test

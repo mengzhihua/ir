@@ -374,17 +374,17 @@ public class AlertEngine {
     }
 
     private void evaluateInventory(CtRule rule, Set<String> active) {
-        java.util.Map<String, java.math.BigDecimal> inbound = forecastService.inboundBySku();
         for (InventorySnapshot inventory : inventoryMapper.selectList(null)) {
             java.math.BigDecimal available = inventory.getQtyAvailable() == null
                     ? java.math.BigDecimal.ZERO : inventory.getQtyAvailable();
             java.math.BigDecimal safety = inventory.getSafetyQty() == null
                     ? java.math.BigDecimal.ZERO : inventory.getSafetyQty();
-            java.math.BigDecimal inTransit = inbound.getOrDefault(
-                    inventory.getSku(), java.math.BigDecimal.ZERO);
+            java.math.BigDecimal inTransit = forecastService.inboundOf(
+                    inventory.getSku(), inventory.getWarehouseCode());
             if (available.add(inTransit).compareTo(safety) < 0) {
                 add(rule, "SKU_WAREHOUSE",
-                        inventory.getSku() + "/" + inventory.getWarehouseCode(),
+                        com.ir.common.WarehouseCodes.stockKey(
+                                inventory.getSku(), inventory.getWarehouseCode()),
                         inventory.getWarehouseCode(),
                         "低库存", "可用+在途仍低于安全库存（在途 "
                                 + inTransit + "），"
@@ -424,31 +424,26 @@ public class AlertEngine {
         if (active != null) {
             active.add(activeKey(rule.getCode(), targetKey));
         }
-        CtAlert existing = alertMapper.selectOne(new LambdaQueryWrapper<CtAlert>()
-                .eq(CtAlert::getRuleCode, rule.getCode())
-                .eq(CtAlert::getTargetKey, targetKey)
-                .eq(CtAlert::getStatus, "OPEN"));
+        CtAlert existing = findAlert(rule.getCode(), targetKey, warehouse, "OPEN", false);
         String suggested = suggestedAction == null || suggestedAction.trim().isEmpty()
                 ? rule.getSuggestedAction() : suggestedAction;
         if (existing != null) {
             boolean actionChanged = suggested != null
                     && !suggested.equals(existing.getSuggestedAction());
             boolean detailChanged = detail != null && !detail.equals(existing.getDetail());
-            if (actionChanged || detailChanged) {
+            boolean migrated = migrateStockKey(existing, targetType, targetKey, warehouse);
+            if (actionChanged || detailChanged || migrated) {
                 existing.setSuggestedAction(suggested);
                 existing.setDetail(detail);
                 alertMapper.updateById(existing);
             }
             return;
         }
-        CtAlert handled = alertMapper.selectOne(new LambdaQueryWrapper<CtAlert>()
-                .eq(CtAlert::getRuleCode, rule.getCode())
-                .eq(CtAlert::getTargetKey, targetKey)
-                .eq(CtAlert::getStatus, "RESOLVED")
-                .isNotNull(CtAlert::getActionId)
-                .orderByDesc(CtAlert::getId)
-                .last("LIMIT 1"));
+        CtAlert handled = findAlert(rule.getCode(), targetKey, warehouse, "RESOLVED", true);
         if (handled != null) {
+            if (migrateStockKey(handled, targetType, targetKey, warehouse)) {
+                alertMapper.updateById(handled);
+            }
             return;
         }
         CtAlert alert = new CtAlert();
@@ -512,7 +507,8 @@ public class AlertEngine {
                         .in(CtAlert::getStatus, Arrays.asList("OPEN", "RESOLVED"))
                         .in(CtAlert::getRuleCode, evaluatedRules));
         for (CtAlert alert : rows) {
-            if (active.contains(activeKey(alert.getRuleCode(), alert.getTargetKey()))) {
+            if (active.contains(activeKey(alert.getRuleCode(), alert.getTargetKey()))
+                    || legacyStockActive(alert, active)) {
                 continue;
             }
             if ("OPEN".equals(alert.getStatus())) {
@@ -544,6 +540,95 @@ public class AlertEngine {
     private String activeKey(String ruleCode, String targetKey) {
         return (ruleCode == null ? "" : ruleCode) + "\0"
                 + (targetKey == null ? "" : targetKey);
+    }
+
+    private CtAlert findAlert(
+            String ruleCode,
+            String targetKey,
+            String warehouse,
+            String status,
+            boolean handled) {
+        LambdaQueryWrapper<CtAlert> query = new LambdaQueryWrapper<CtAlert>()
+                .eq(CtAlert::getRuleCode, ruleCode)
+                .eq(CtAlert::getTargetKey, targetKey)
+                .eq(CtAlert::getStatus, status);
+        if (handled) {
+            query.isNotNull(CtAlert::getActionId).orderByDesc(CtAlert::getId);
+        }
+        CtAlert exact = alertMapper.selectOne(query.last("LIMIT 1"));
+        if (exact != null) {
+            return exact;
+        }
+        return findLegacyStockAlert(ruleCode, targetKey, warehouse, status, handled);
+    }
+
+    private CtAlert findLegacyStockAlert(
+            String ruleCode,
+            String targetKey,
+            String warehouse,
+            String status,
+            boolean handled) {
+        if (targetKey == null || !targetKey.contains("/")) {
+            return null;
+        }
+        String[] parts = targetKey.split("/", 2);
+        String sku = parts[0];
+        String site = parts.length > 1 ? parts[1] : warehouse;
+        LambdaQueryWrapper<CtAlert> query = new LambdaQueryWrapper<CtAlert>()
+                .eq(CtAlert::getRuleCode, ruleCode)
+                .eq(CtAlert::getTargetKey, sku)
+                .eq(CtAlert::getStatus, status);
+        if (handled) {
+            query.isNotNull(CtAlert::getActionId).orderByDesc(CtAlert::getId);
+        }
+        CtAlert legacy = alertMapper.selectOne(query.last("LIMIT 1"));
+        if (legacy == null) {
+            return null;
+        }
+        if (legacy.getWarehouseCode() != null && !legacy.getWarehouseCode().trim().isEmpty()
+                && site != null && !site.equals(legacy.getWarehouseCode())) {
+            return null;
+        }
+        return legacy;
+    }
+
+    private boolean migrateStockKey(
+            CtAlert existing,
+            String targetType,
+            String targetKey,
+            String warehouse) {
+        boolean changed = false;
+        if (targetKey != null && !targetKey.equals(existing.getTargetKey())) {
+            existing.setTargetKey(targetKey);
+            changed = true;
+        }
+        if (targetType != null && !targetType.equals(existing.getTargetType())) {
+            existing.setTargetType(targetType);
+            changed = true;
+        }
+        if (warehouse != null && !warehouse.equals(existing.getWarehouseCode())) {
+            existing.setWarehouseCode(warehouse);
+            changed = true;
+        }
+        return changed;
+    }
+
+    private boolean legacyStockActive(CtAlert alert, Set<String> active) {
+        String key = alert.getTargetKey();
+        if (key == null || key.contains("/")) {
+            return false;
+        }
+        if (alert.getWarehouseCode() != null && !alert.getWarehouseCode().trim().isEmpty()) {
+            return active.contains(activeKey(
+                    alert.getRuleCode(), key + "/" + alert.getWarehouseCode()));
+        }
+        String prefix = activeKey(alert.getRuleCode(), key + "/");
+        for (String item : active) {
+            if (item.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Map<String, Object> params(String json) {

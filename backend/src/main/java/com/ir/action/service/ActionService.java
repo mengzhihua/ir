@@ -11,6 +11,7 @@ import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
 import com.ir.common.CarrierCodes;
 import com.ir.common.CodeGenerator;
+import com.ir.common.WarehouseCodes;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.ClientFactory;
 import com.ir.integration.entity.CtSystem;
@@ -612,14 +613,18 @@ public class ActionService {
             return;
         }
         sku = sku.trim();
+        String warehouse = warehouseOf(systemPlant(action.getType(), params), params);
         BigDecimal qty = qtyOf(params.get("qty"), params.get("suggestQty"));
         String system = "SAP_CREATE_PR".equals(action.getType()) ? "SAP" : "SRM";
-        String bizKey = "IR-PO-" + system + "-" + sku;
+        String bizKey = "IR-PO-" + system + "-" + sku + "-" + warehouse;
         ExtSnapshot existing = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
                 .eq(ExtSnapshot::getSourceSystem, system)
                 .eq(ExtSnapshot::getDataType, "PO")
                 .eq(ExtSnapshot::getBizKey, bizKey)
                 .last("LIMIT 1"));
+        if (existing == null) {
+            existing = reuseLegacyPo(system, sku, warehouse);
+        }
         if (existing == null) {
             existing = new ExtSnapshot();
             existing.setSourceSystem(system);
@@ -628,8 +633,9 @@ public class ActionService {
             existing.setStatus("OPEN");
             existing.setSku(sku);
             existing.setQty(qty);
-            existing.setPlantCode(plantOf(system, params));
-            existing.setTitle("IR 采购在途 " + sku);
+            existing.setPlantCode(systemPlant(action.getType(), params));
+            existing.setExtraJson(writeWarehouse(warehouse));
+            existing.setTitle("IR 采购在途 " + sku + " " + warehouse);
             existing.setSyncedAt(LocalDateTime.now());
             extMapper.insert(existing);
         } else {
@@ -637,19 +643,59 @@ public class ActionService {
             existing.setQty(current.add(qty));
             existing.setStatus("OPEN");
             existing.setSku(sku);
+            existing.setBizKey(bizKey);
+            existing.setExtraJson(writeWarehouse(warehouse));
             existing.setSyncedAt(LocalDateTime.now());
             extMapper.updateById(existing);
         }
         params.put("poBizKey", bizKey);
+        params.put("warehouseCode", warehouse);
         params.put("inTransitQty", existing.getQty());
     }
 
-    private String plantOf(String system, Map<String, Object> params) {
+    private ExtSnapshot reuseLegacyPo(String system, String sku, String warehouse) {
+        ExtSnapshot legacy = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
+                .eq(ExtSnapshot::getSourceSystem, system)
+                .eq(ExtSnapshot::getDataType, "PO")
+                .eq(ExtSnapshot::getBizKey, "IR-PO-" + system + "-" + sku)
+                .last("LIMIT 1"));
+        if (legacy == null) {
+            return null;
+        }
+        String legacyWarehouse = WarehouseCodes.ofInbound(
+                legacy.getPlantCode(), extraWarehouse(legacy));
+        return warehouse.equals(legacyWarehouse) ? legacy : null;
+    }
+
+    private String warehouseOf(String plant, Map<String, Object> params) {
+        String warehouse = firstText(params.get("warehouseCode"));
+        return WarehouseCodes.ofInbound(plant, warehouse);
+    }
+
+    private String systemPlant(String type, Map<String, Object> params) {
         String plant = firstText(params.get("plantCode"), params.get("werks"));
         if (plant != null) {
             return plant;
         }
-        return "SAP".equals(system) ? "1000" : "P001";
+        String warehouse = firstText(params.get("warehouseCode"));
+        if (warehouse != null) {
+            return WarehouseCodes.toOms(warehouse);
+        }
+        return "SAP_CREATE_PR".equals(type) ? "1000" : "P001";
+    }
+
+    private String writeWarehouse(String warehouse) {
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("warehouseCode", warehouse);
+        return write(extra);
+    }
+
+    private String extraWarehouse(ExtSnapshot row) {
+        if (row == null || row.getExtraJson() == null) {
+            return null;
+        }
+        Object value = read(row.getExtraJson()).get("warehouseCode");
+        return value == null ? null : String.valueOf(value);
     }
 
     private BigDecimal qtyOf(Object... values) {
