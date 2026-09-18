@@ -42,6 +42,7 @@ public class SandboxService {
     private final ActionService actions;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
+    private final BalancePolicy policy;
 
     public SandboxService(
             CtScenarioMapper scenarioMapper,
@@ -52,7 +53,8 @@ public class SandboxService {
             SandboxEngine engine,
             ActionService actions,
             CodeGenerator codes,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            BalancePolicy policy) {
         this.scenarioMapper = scenarioMapper;
         this.inventoryMapper = inventoryMapper;
         this.salesMapper = salesMapper;
@@ -62,6 +64,7 @@ public class SandboxService {
         this.actions = actions;
         this.codes = codes;
         this.objectMapper = objectMapper;
+        this.policy = policy;
     }
 
     public synchronized CtScenario baseline() {
@@ -163,6 +166,7 @@ public class SandboxService {
         }
         ScenarioParams params = read(scenario.getParamsJson(), ScenarioParams.class).normalized();
         ScenarioParams baseParams = read(baseline().getParamsJson(), ScenarioParams.class).normalized();
+        policy.updateReplenish(params.getSafetyDays(), params.getReplenishLeadDays());
         List<CtAction> result = new ArrayList<>();
         List<Map<String, Object>> jobs = new ArrayList<>();
         BigDecimal expected = expectedSaving(baseline(), scenario);
@@ -222,7 +226,8 @@ public class SandboxService {
                 }
                 String sku = String.valueOf(summary.get("sku"));
                 jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
-                        map("sku", sku, "qty", stockout, "suggestQty", stockout),
+                        map("sku", sku, "qty", stockout, "suggestQty", stockout,
+                                "replenishLeadDays", params.getReplenishLeadDays()),
                         null));
                 purchases++;
             }
@@ -304,6 +309,7 @@ public class SandboxService {
                 decimal(recommended.get("replenishLeadDays")).intValue(),
                 BigDecimal.ONE,
                 mix);
+        policy.updateReplenish(params.getSafetyDays(), params.getReplenishLeadDays());
         return persist("资金盘推荐·" + recommended.get("name"), params, false, "MANUAL", null, false, null);
     }
 

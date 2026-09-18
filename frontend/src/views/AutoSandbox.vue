@@ -23,6 +23,12 @@
         <div class="value">{{ formatMoney(recommended.result?.cashUsed || recommended.cashUsed) }}</div>
       </div>
       <div class="stat">
+        <div class="label">补货策略</div>
+        <div class="value">
+          安全 {{ recSafety }} / 提前期 {{ recLead }} 天
+        </div>
+      </div>
+      <div class="stat">
         <div class="label">综合分</div>
         <div class="value">{{ formatNumber(recommended.balanceScore, 4) }}</div>
       </div>
@@ -153,6 +159,17 @@ const stanceLabel = computed(() => {
   if (latest.value.stance === 'EFFICIENCY') return '效率优先'
   return '均衡'
 })
+const recParams = computed(() => {
+  const raw = recommended.value?.params || recommended.value?.paramsJson
+  if (raw && typeof raw === 'object') return raw
+  return parseJson(raw, {})
+})
+const recSafety = computed(
+  () => recParams.value.safetyDays ?? latest.value.safetyDays ?? '-'
+)
+const recLead = computed(
+  () => recParams.value.replenishLeadDays ?? latest.value.replenishLeadDays ?? '-'
+)
 
 const typeOption = computed(() => ({
   tooltip: {},

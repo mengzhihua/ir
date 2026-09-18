@@ -118,6 +118,16 @@ public class ForecastService {
             String sku,
             int horizon,
             int serviceDays) {
+        return replenish(warehouseCode, sku, horizon, serviceDays, 3);
+    }
+
+    public List<Map<String, Object>> replenish(
+            String warehouseCode,
+            String sku,
+            int horizon,
+            int serviceDays,
+            int leadDays) {
+        int lead = Math.max(0, leadDays);
         List<Map<String, Object>> result = new ArrayList<>();
         LambdaQueryWrapper<InventorySnapshot> query = new LambdaQueryWrapper<>();
         if (warehouseCode != null && !warehouseCode.trim().isEmpty()) {
@@ -154,9 +164,12 @@ public class ForecastService {
             row.put("inTransit", inTransit);
             row.put("safety", safety);
             row.put("serviceDays", serviceDays);
+            row.put("replenishLeadDays", lead);
             row.put("suggestQty", suggest);
             row.put("suggestedQty", suggest);
-            row.put("stockoutDate", stockoutDate(cover, daily));
+            LocalDate stockout = stockoutDate(cover, daily);
+            row.put("stockoutDate", stockout);
+            row.put("orderByDate", orderByDate(stockout, lead));
             result.add(row);
         }
         return result;
@@ -297,6 +310,15 @@ public class ForecastService {
         }
         long days = available.divide(daily, 0, RoundingMode.DOWN).longValue();
         return LocalDate.now().plusDays(Math.max(1, days));
+    }
+
+    private LocalDate orderByDate(LocalDate stockout, int leadDays) {
+        if (stockout == null) {
+            return null;
+        }
+        LocalDate due = stockout.minusDays(Math.max(0, leadDays));
+        LocalDate today = LocalDate.now();
+        return due.isBefore(today) ? today : due;
     }
 
     @SuppressWarnings("unchecked")

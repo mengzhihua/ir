@@ -28,6 +28,7 @@ import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
 import com.ir.system.auth.CurrentUser;
 import com.ir.system.entity.User;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -637,7 +638,7 @@ public class ActionService {
             existing.setSku(sku);
             existing.setQty(qty);
             existing.setPlantCode(systemPlant(action.getType(), params));
-            existing.setExtraJson(writeWarehouse(warehouse));
+            existing.setExtraJson(writeWarehouse(warehouse, params));
             existing.setTitle("IR 采购在途 " + sku + " " + warehouse);
             existing.setSyncedAt(LocalDateTime.now());
             extMapper.insert(existing);
@@ -647,13 +648,18 @@ public class ActionService {
             existing.setStatus("OPEN");
             existing.setSku(sku);
             existing.setBizKey(bizKey);
-            existing.setExtraJson(writeWarehouse(warehouse));
+            existing.setExtraJson(writeWarehouse(warehouse, params));
             existing.setSyncedAt(LocalDateTime.now());
             extMapper.updateById(existing);
         }
         params.put("poBizKey", bizKey);
         params.put("warehouseCode", warehouse);
         params.put("inTransitQty", existing.getQty());
+        int lead = leadOf(params);
+        if (lead > 0) {
+            params.put("replenishLeadDays", lead);
+            params.put("expectedArriveDate", LocalDate.now().plusDays(lead).toString());
+        }
     }
 
     private ExtSnapshot reuseLegacyPo(String system, String sku, String warehouse) {
@@ -687,10 +693,30 @@ public class ActionService {
         return "SAP_CREATE_PR".equals(type) ? "1000" : "P001";
     }
 
-    private String writeWarehouse(String warehouse) {
+    private String writeWarehouse(String warehouse, Map<String, Object> params) {
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("warehouseCode", warehouse);
+        int lead = leadOf(params);
+        if (lead > 0) {
+            extra.put("replenishLeadDays", lead);
+            extra.put("expectedArriveDate", LocalDate.now().plusDays(lead).toString());
+        }
         return write(extra);
+    }
+
+    private int leadOf(Map<String, Object> params) {
+        if (params == null) {
+            return 0;
+        }
+        Object value = params.get("replenishLeadDays");
+        if (value == null || String.valueOf(value).trim().isEmpty()) {
+            return 0;
+        }
+        try {
+            return Math.max(0, new BigDecimal(String.valueOf(value)).intValue());
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
     }
 
     private String extraWarehouse(ExtSnapshot row) {
