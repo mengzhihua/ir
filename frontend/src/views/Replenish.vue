@@ -5,7 +5,7 @@
         <h2>补货建议</h2>
         <p class="subtitle">
           将预测缺口转换为采购或仓内补货指令 · 当前保障
-          {{ policy.safetyDays }} 天（跟随沙盘推荐）
+          {{ policy.safetyDays }} 天 / 提前期 {{ policy.replenishLeadDays }} 天（跟随沙盘推荐）
         </p>
       </div>
       <el-button @click="load">刷新</el-button>
@@ -39,8 +39,13 @@
           align="right" /><el-table-column
           prop="stockoutDate"
           label="预计缺货日期" /><el-table-column
+          prop="orderByDate"
+          label="最晚下单" /><el-table-column
           prop="serviceDays"
           label="保障天数"
+          align="right" /><el-table-column
+          prop="replenishLeadDays"
+          label="提前期"
           align="right" /><el-table-column label="操作"
           ><template #default="{ row }"
             ><el-button v-if="canWrite()" link type="primary" @click="toAction(row)"

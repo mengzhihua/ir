@@ -139,6 +139,9 @@ public class BalanceAdvisor {
         purchase.sku = sku.trim();
         purchase.warehouseCode = warehouse;
         purchase.qty = qty;
+        if (policy != null) {
+            purchase.replenishLeadDays = policy.replenishLeadDays();
+        }
         result.add(purchase);
         if (!costFirst()) {
             Advice replenish = new Advice();
@@ -392,6 +395,7 @@ public class BalanceAdvisor {
         private Integer priority;
         private BigDecimal qty;
         private BigDecimal expectedSaving;
+        private Integer replenishLeadDays;
 
         public String getType() {
             return type;
@@ -424,6 +428,9 @@ public class BalanceAdvisor {
             if (qty != null) {
                 params.put("qty", qty);
                 params.put("suggestQty", qty);
+            }
+            if (replenishLeadDays != null) {
+                params.put("replenishLeadDays", replenishLeadDays);
             }
             if (priority != null) {
                 params.put("priority", priority);

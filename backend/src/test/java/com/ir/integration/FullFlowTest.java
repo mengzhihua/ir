@@ -183,6 +183,9 @@ class FullFlowTest {
         JsonNode replenishDefault = get(token,
                 "/api/forecast/replenish?warehouseCode=WH-SH&sku=SKU002&horizon=14");
         assertEquals(recSafety, replenishDefault.get(0).path("serviceDays").asInt());
+        assertEquals(recLead, replenishDefault.get(0).path("replenishLeadDays").asInt());
+        assertTrue(replenishDefault.get(0).has("orderByDate"));
+        assertTrue(auto.path("alerts").isNumber());
 
         JsonNode capital = post(token, "/api/sandbox/capital",
                 "{\"workingCapital\":100000000}");

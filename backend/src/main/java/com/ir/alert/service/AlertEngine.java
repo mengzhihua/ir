@@ -353,23 +353,24 @@ public class AlertEngine {
         int horizon = (int) number(params.get("horizon"),
                 number(params.get("days"), 14L));
         int serviceDays = policy.safetyDays();
+        int leadDays = policy.replenishLeadDays();
         LocalDate limit = LocalDate.now().plusDays(horizon);
         for (Map<String, Object> row : forecastService.replenish(
-                null, null, horizon, serviceDays)) {
-            Object stockoutValue = row.get("stockoutDate");
-            if (stockoutValue == null) {
+                null, null, horizon, serviceDays, leadDays)) {
+            LocalDate stockout = dateOf(row.get("stockoutDate"));
+            if (stockout == null) {
                 continue;
             }
-            LocalDate stockout = stockoutValue instanceof LocalDate
-                    ? (LocalDate) stockoutValue
-                    : LocalDate.parse(String.valueOf(stockoutValue));
-            if (!stockout.isAfter(limit)) {
+            LocalDate orderBy = dateOf(row.get("orderByDate"));
+            LocalDate due = orderBy == null ? stockout : orderBy;
+            if (!due.isAfter(limit)) {
                 String sku = String.valueOf(row.get("sku"));
                 String warehouse = String.valueOf(row.get("warehouseCode"));
                 add(rule, "SKU_WAREHOUSE", sku + "/" + warehouse,
                         warehouse, "预测即将缺货",
-                        "预计 " + stockout + " 缺货（保障 "
-                                + serviceDays + " 天），"
+                        "预计 " + stockout + " 缺货，最晚 " + due
+                                + " 下单（提前期 " + leadDays
+                                + " 天，保障 " + serviceDays + " 天），"
                                 + (balanceAdvisor.costFirst()
                                 ? "成本优先只走采购建议、加大批量"
                                 : "兼顾时效，采购建议同时仓内补货"),
@@ -647,6 +648,23 @@ public class AlertEngine {
 
     private long number(Object value, long fallback) {
         return value == null ? fallback : Long.parseLong(String.valueOf(value));
+    }
+
+    private LocalDate dateOf(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof LocalDate) {
+            return (LocalDate) value;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty() || "null".equals(text)) {
+            return null;
+        }
+        if (text.length() >= 10) {
+            text = text.substring(0, 10);
+        }
+        return LocalDate.parse(text);
     }
 
     private void fillFromExt(CtAlert alert, Map<String, Object> params) {

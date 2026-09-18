@@ -34,6 +34,16 @@ class ForecastServiceTest {
         Map<String, Object> first = sh.get(0);
         assertEquals(0, new BigDecimal("12").compareTo((BigDecimal) first.get("inTransit")));
         assertEquals(first.get("suggestQty"), first.get("suggestedQty"));
+        assertEquals(3, first.get("replenishLeadDays"));
+        assertTrue(first.get("orderByDate") != null);
+
+        List<Map<String, Object>> shortLead = forecasts.replenish("WH-SH", "SKU002", 14, 3, 1);
+        List<Map<String, Object>> longLead = forecasts.replenish("WH-SH", "SKU002", 14, 3, 5);
+        assertEquals(1, shortLead.get(0).get("replenishLeadDays"));
+        assertEquals(5, longLead.get(0).get("replenishLeadDays"));
+        java.time.LocalDate shortDue = (java.time.LocalDate) shortLead.get(0).get("orderByDate");
+        java.time.LocalDate longDue = (java.time.LocalDate) longLead.get(0).get("orderByDate");
+        assertFalse(longDue.isAfter(shortDue));
 
         List<Map<String, Object>> bj = forecasts.replenish("WH-BJ", "SKU002", 14, 3);
         assertFalse(bj.isEmpty());

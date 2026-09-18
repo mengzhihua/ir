@@ -226,7 +226,8 @@ public class SandboxService {
                 }
                 String sku = String.valueOf(summary.get("sku"));
                 jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
-                        map("sku", sku, "qty", stockout, "suggestQty", stockout),
+                        map("sku", sku, "qty", stockout, "suggestQty", stockout,
+                                "replenishLeadDays", params.getReplenishLeadDays()),
                         null));
                 purchases++;
             }

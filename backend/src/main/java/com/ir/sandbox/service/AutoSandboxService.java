@@ -5,6 +5,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import com.ir.action.entity.CtAction;
 import com.ir.action.service.ActionService;
+import com.ir.alert.service.AlertEngine;
 import com.ir.common.CodeGenerator;
 import com.ir.sandbox.engine.ScenarioParams;
 import com.ir.sandbox.engine.ServiceFirstPicker;
@@ -25,6 +26,7 @@ public class AutoSandboxService {
     private final CodeGenerator codes;
     private final BalancePolicy policy;
     private final ActionService actions;
+    private final AlertEngine alerts;
 
     @Value("${ir.sandbox.auto-apply:false}")
     private boolean autoApply;
@@ -39,11 +41,13 @@ public class AutoSandboxService {
             SandboxService sandbox,
             CodeGenerator codes,
             BalancePolicy policy,
-            ActionService actions) {
+            ActionService actions,
+            AlertEngine alerts) {
         this.sandbox = sandbox;
         this.codes = codes;
         this.policy = policy;
         this.actions = actions;
+        this.alerts = alerts;
     }
 
     public synchronized Map<String, Object> run() {
@@ -68,6 +72,7 @@ public class AutoSandboxService {
             actions.supersedeOpposing(policy.stance());
             queued.addAll(sandbox.apply(recommended.getId(), autoApply));
         }
+        int alertCount = alerts.evaluate().size();
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("runNo", runNo);
@@ -75,6 +80,7 @@ public class AutoSandboxService {
         result.put("recommended", recommended);
         result.put("scenarios", rows);
         result.put("actions", queued);
+        result.put("alerts", alertCount);
         result.put("autoQueue", autoQueue);
         result.put("autoApply", autoApply);
         return result;

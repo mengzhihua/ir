@@ -55,9 +55,11 @@ public class ForecastController {
             @RequestParam(required = false) String warehouseCode,
             @RequestParam(required = false) String sku,
             @RequestParam(defaultValue = "14") int horizon,
-            @RequestParam(required = false) Integer serviceDays) {
+            @RequestParam(required = false) Integer serviceDays,
+            @RequestParam(required = false) Integer leadDays) {
         int days = serviceDays == null ? policy.safetyDays() : serviceDays;
-        return R.ok(service.replenish(warehouseCode, sku, horizon, days));
+        int lead = leadDays == null ? policy.replenishLeadDays() : leadDays;
+        return R.ok(service.replenish(warehouseCode, sku, horizon, days, lead));
     }
 
     @PostMapping("/replenish/to-action")
