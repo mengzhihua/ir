@@ -11,7 +11,7 @@ const routes = [
   ['/forecast', async (page) => page.getByRole('button', { name: '运行预测' }).click()],
   ['/replenish', null],
   ['/sandbox', async (page) => {
-    const capital = page.getByRole('button', { name: '推演 1 亿资金盘' })
+    const capital = page.getByRole('button', { name: '资金盘推演' })
     if (await capital.count()) {
       await capital.click()
       await page.locator('.el-dialog').waitFor({ state: 'visible', timeout: 15000 })
