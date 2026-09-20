@@ -307,8 +307,16 @@ public class SandboxService {
 
     public Map<String, Object> analyzeCapital(
             BigDecimal amount, Integer skuCount, BigDecimal inventoryQty, boolean detailed) {
+        return analyzeCapital(amount, catalog(skuCount, inventoryQty), detailed);
+    }
+
+    public Map<String, Object> analyzeCapital(
+            BigDecimal amount, BaselineData data, boolean detailed) {
+        long started = System.currentTimeMillis();
         BigDecimal capital = CapitalTiers.clampAmount(amount);
-        BaselineData data = catalog(skuCount, inventoryQty);
+        if (data == null) {
+            data = baselineData();
+        }
         boolean large = data.getDemandBySku().size() > 200;
         SandboxEngine.Result normal = runCapital(data, capital, BigDecimal.ONE);
         SandboxEngine.Result stress = runCapital(data, capital, BigDecimal.valueOf(2));
@@ -351,11 +359,14 @@ public class SandboxService {
         result.put("recommended", recommended);
         result.put("optimizations", optimizations(
                 normal, stress, surge, capital, minReliable, maxMultiplier, headroom, recommended, playbook));
+        result.put("elapsedMs", System.currentTimeMillis() - started);
+        result.put("horizonDays", capitalHorizon(data));
         return result;
     }
 
     public Map<String, Object> sweepCapital(
             List<BigDecimal> extraAmounts, Integer skuCount, BigDecimal inventoryQty) {
+        long startedAll = System.currentTimeMillis();
         List<BigDecimal> amounts = new ArrayList<BigDecimal>(CapitalTiers.amounts());
         if (extraAmounts != null) {
             for (BigDecimal extra : extraAmounts) {
@@ -369,6 +380,11 @@ public class SandboxService {
             }
         }
         amounts.sort(BigDecimal::compareTo);
+        BaselineData data = catalog(skuCount, inventoryQty);
+        BigDecimal ceiling = amounts.get(amounts.size() - 1);
+        Map<String, Object> unconstrained = analyzeCapital(ceiling, data, false);
+        BigDecimal cash1x = decimal(nested(unconstrained, "baseline", "cashUsed"));
+        int engineRuns = 1;
         List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
         List<String> issues = new ArrayList<String>();
         boolean flowOk = true;
@@ -380,7 +396,20 @@ public class SandboxService {
             row.put("workingCapital", amount);
             row.put("label", CapitalTiers.labelOf(amount));
             try {
-                Map<String, Object> analysis = analyzeCapital(amount, skuCount, inventoryQty, false);
+                Map<String, Object> analysis;
+                boolean projected = amount.compareTo(cash1x) >= 0
+                        && amount.compareTo(ceiling) < 0;
+                if (amount.compareTo(ceiling) == 0) {
+                    analysis = unconstrained;
+                    row.put("projected", false);
+                } else if (projected) {
+                    analysis = projectCapital(unconstrained, amount);
+                    row.put("projected", true);
+                } else {
+                    analysis = analyzeCapital(amount, data, false);
+                    engineRuns++;
+                    row.put("projected", false);
+                }
                 row.put("verdict", analysis.get("verdict"));
                 row.put("reliable", analysis.get("reliable"));
                 row.put("reason", analysis.get("reason"));
@@ -438,6 +467,9 @@ public class SandboxService {
         result.put("skuCount", skuCount == null || skuCount <= 0
                 ? snapshotSkuCount() : CapitalTiers.clampSku(skuCount));
         result.put("inventoryQty", inventoryQty == null ? null : CapitalTiers.clampQty(inventoryQty));
+        result.put("elapsedMs", System.currentTimeMillis() - startedAll);
+        result.put("engineRuns", engineRuns);
+        result.put("unconstrainedCash", cash1x);
         return result;
     }
 
@@ -857,6 +889,80 @@ public class SandboxService {
         return ((Map<?, ?>) layer).get(b);
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> projectCapital(Map<String, Object> rich, BigDecimal amount) {
+        Map<String, Object> result = new LinkedHashMap<String, Object>(rich);
+        result.put("workingCapital", amount);
+        result.put("label", CapitalTiers.labelOf(amount));
+        Map<String, Object> baseline = projectView(
+                (Map<String, Object>) rich.get("baseline"), amount);
+        Map<String, Object> demand2x = projectView(
+                (Map<String, Object>) rich.get("demand2x"), amount);
+        Map<String, Object> demand5x = projectView(
+                (Map<String, Object>) rich.get("demand5x"), amount);
+        result.put("baseline", baseline);
+        result.put("demand2x", demand2x);
+        result.put("demand5x", demand5x);
+        BigDecimal used = decimal(baseline.get("cashUsed"));
+        BigDecimal headroom = used.signum() == 0
+                ? BigDecimal.ZERO
+                : amount.divide(used, 2, RoundingMode.HALF_UP);
+        result.put("headroom", headroom);
+        String verdict = projectedVerdict(baseline, demand2x);
+        result.put("verdict", verdict);
+        result.put("reliable", "RELIABLE".equals(verdict));
+        result.put("reason", "资金盘 " + amount.toPlainString()
+                + " 结论" + verdictLabel(verdict)
+                + "：由无约束推演投影，常态占用 "
+                + baseline.get("capitalUtilization")
+                + "，2 倍需求占用 "
+                + demand2x.get("capitalUtilization")
+                + "，5 倍需求占用 "
+                + demand5x.get("capitalUtilization")
+                + "，安全垫约 " + headroom.toPlainString() + " 倍");
+        return result;
+    }
+
+    private Map<String, Object> projectView(Map<String, Object> source, BigDecimal amount) {
+        Map<String, Object> row = source == null
+                ? new LinkedHashMap<String, Object>()
+                : new LinkedHashMap<String, Object>(source);
+        BigDecimal used = decimal(row.get("cashUsed"));
+        BigDecimal util = amount.signum() == 0
+                ? BigDecimal.ONE
+                : used.divide(amount, 6, RoundingMode.HALF_UP);
+        boolean feasible = used.compareTo(amount) <= 0
+                && decimal(row.get("deferredPurchaseQty")).signum() == 0
+                && decimal(row.get("capitalShortage")).signum() == 0;
+        row.put("workingCapital", amount);
+        row.put("cashRemaining", amount.subtract(used).max(BigDecimal.ZERO));
+        row.put("capitalUtilization", util.setScale(4, RoundingMode.HALF_UP));
+        row.put("capitalFeasible", feasible);
+        if (!feasible) {
+            row.put("capitalVerdict", "INSUFFICIENT");
+            row.put("capitalReason", "资金盘覆盖不了采购或履约现金，补货被推迟或出现现金缺口");
+        } else if (util.compareTo(new BigDecimal("0.80")) >= 0) {
+            row.put("capitalVerdict", "TIGHT");
+            row.put("capitalReason", "资金盘能撑住，但现金占用已超过 80%");
+        } else {
+            row.put("capitalVerdict", "RELIABLE");
+            row.put("capitalReason", "资金盘覆盖履约与补货现金，占用低于 80%");
+        }
+        return row;
+    }
+
+    private String projectedVerdict(Map<String, Object> normal, Map<String, Object> stress) {
+        String first = normal == null ? null : String.valueOf(normal.get("capitalVerdict"));
+        if (!"RELIABLE".equals(first)) {
+            return first;
+        }
+        String second = stress == null ? null : String.valueOf(stress.get("capitalVerdict"));
+        if ("INSUFFICIENT".equals(second)) {
+            return "TIGHT";
+        }
+        return second;
+    }
+
     private List<String> validateTier(Map<String, Object> analysis, BigDecimal amount) {
         List<String> issues = new ArrayList<String>();
         String label = CapitalTiers.labelOf(amount);
@@ -1067,6 +1173,16 @@ public class SandboxService {
             Map<String, Object> recommended,
             List<Map<String, Object>> playbook) {
         List<String> rows = new ArrayList<>();
+        BigDecimal inventoryValue = nz(normal.getInventoryValue());
+        if (inventoryValue.compareTo(capital) > 0) {
+            rows.add("库存金额 " + inventoryValue.toPlainString()
+                    + " 已超过资金盘 " + capital.toPlainString()
+                    + "，大规模下应先降低单 SKU 库存或提高资金档位，否则补货会被推迟。");
+        }
+        if (normal.getSkuCount() >= 10000) {
+            rows.add("SKU 规模 " + normal.getSkuCount()
+                    + "：只对已有库存的仓库补货，量级扫描复用无约束结果，避免每个档位全量重算。");
+        }
         if (recommended != null && recommended.get("name") != null) {
             rows.add("推荐策略「" + recommended.get("name")
                     + "」：安全天数 " + recommended.get("safetyDays")

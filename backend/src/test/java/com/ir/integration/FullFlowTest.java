@@ -279,6 +279,9 @@ class FullFlowTest {
         assertEquals(0, new BigDecimal("500000").compareTo(
                 sweep.path("rows").get(1).path("workingCapital").decimalValue()));
         assertEquals(40, sweep.path("skuCount").asInt());
+        assertTrue(sweep.path("engineRuns").asInt() >= 1);
+        assertTrue(sweep.path("engineRuns").asInt() <= 6);
+        assertTrue(sweep.path("elapsedMs").asLong() >= 0);
         boolean sawReliable = false;
         for (JsonNode row : sweep.path("rows")) {
             assertTrue(row.path("issues").isArray());
