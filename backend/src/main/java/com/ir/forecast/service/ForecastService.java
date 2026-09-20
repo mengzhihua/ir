@@ -156,7 +156,9 @@ public class ForecastService {
                     ? BigDecimal.ZERO
                     : item.getQtyAvailable();
             BigDecimal cover = available.add(inTransit);
-            BigDecimal suggest = demand.add(safety).subtract(cover).max(BigDecimal.ZERO);
+            int coverDays = Math.max(1, lead + serviceDays);
+            BigDecimal target = daily.multiply(BigDecimal.valueOf(coverDays));
+            BigDecimal suggest = target.subtract(cover).max(BigDecimal.ZERO);
             Map<String, Object> row = new LinkedHashMap<>(forecast);
             row.put("forecastDemand", demand);
             row.put("onHand", item.getQtyOnHand());
@@ -165,6 +167,8 @@ public class ForecastService {
             row.put("safety", safety);
             row.put("serviceDays", serviceDays);
             row.put("replenishLeadDays", lead);
+            row.put("coverDays", coverDays);
+            row.put("targetQty", target);
             row.put("suggestQty", suggest);
             row.put("suggestedQty", suggest);
             LocalDate stockout = stockoutDate(cover, daily);

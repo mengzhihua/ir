@@ -4,7 +4,7 @@
       <div>
         <h2>补货建议</h2>
         <p class="subtitle">
-          将预测缺口转换为采购或仓内补货指令 · 当前保障
+          按再订货点（提前期 + 保障天数）补货，不按 14 天预测全量下单 · 当前保障
           {{ policy.safetyDays }} 天 / 提前期 {{ policy.replenishLeadDays }} 天（跟随沙盘推荐）
         </p>
       </div>
@@ -36,6 +36,9 @@
           align="right" /><el-table-column
           prop="suggestQty"
           label="建议数量"
+          align="right" /><el-table-column
+          prop="coverDays"
+          label="再订货点天数"
           align="right" /><el-table-column
           prop="stockoutDate"
           label="预计缺货日期" /><el-table-column

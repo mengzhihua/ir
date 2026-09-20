@@ -184,7 +184,10 @@ class FullFlowTest {
                 "/api/forecast/replenish?warehouseCode=WH-SH&sku=SKU002&horizon=14");
         assertEquals(recSafety, replenishDefault.get(0).path("serviceDays").asInt());
         assertEquals(recLead, replenishDefault.get(0).path("replenishLeadDays").asInt());
+        assertEquals(recSafety + recLead, replenishDefault.get(0).path("coverDays").asInt());
         assertTrue(replenishDefault.get(0).has("orderByDate"));
+        assertTrue(replenishDefault.get(0).path("suggestQty").decimalValue()
+                .compareTo(replenishDefault.get(0).path("forecastDemand").decimalValue()) <= 0);
         assertTrue(auto.path("alerts").isNumber());
 
         JsonNode capital = post(token, "/api/sandbox/capital",

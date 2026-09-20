@@ -357,6 +357,10 @@ public class AlertEngine {
         LocalDate limit = LocalDate.now().plusDays(horizon);
         for (Map<String, Object> row : forecastService.replenish(
                 null, null, horizon, serviceDays, leadDays)) {
+            BigDecimal suggest = decimalOf(row.get("suggestQty"));
+            if (suggest.signum() <= 0) {
+                continue;
+            }
             LocalDate stockout = dateOf(row.get("stockoutDate"));
             if (stockout == null) {
                 continue;
@@ -368,7 +372,9 @@ public class AlertEngine {
                 String warehouse = String.valueOf(row.get("warehouseCode"));
                 add(rule, "SKU_WAREHOUSE", sku + "/" + warehouse,
                         warehouse, "预测即将缺货",
-                        "预计 " + stockout + " 缺货，最晚 " + due
+                        "低于再订货点 " + row.get("coverDays")
+                                + " 天，建议补 " + suggest
+                                + "，预计 " + stockout + " 缺货，最晚 " + due
                                 + " 下单（提前期 " + leadDays
                                 + " 天，保障 " + serviceDays + " 天），"
                                 + (balanceAdvisor.costFirst()
@@ -665,6 +671,17 @@ public class AlertEngine {
             text = text.substring(0, 10);
         }
         return LocalDate.parse(text);
+    }
+
+    private java.math.BigDecimal decimalOf(Object value) {
+        if (value == null || String.valueOf(value).trim().isEmpty()) {
+            return java.math.BigDecimal.ZERO;
+        }
+        try {
+            return new java.math.BigDecimal(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return java.math.BigDecimal.ZERO;
+        }
     }
 
     private void fillFromExt(CtAlert alert, Map<String, Object> params) {

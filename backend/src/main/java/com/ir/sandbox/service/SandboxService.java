@@ -15,6 +15,7 @@ import com.ir.sandbox.engine.ScenarioParams;
 import com.ir.sandbox.engine.ServiceFirstPicker;
 import com.ir.sandbox.entity.CtScenario;
 import com.ir.sandbox.mapper.CtScenarioMapper;
+import com.ir.forecast.service.ForecastService;
 import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.entity.SalesDaily;
 import com.ir.snapshot.entity.ShipmentSnapshot;
@@ -27,9 +28,11 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class SandboxService {
@@ -43,6 +46,7 @@ public class SandboxService {
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
     private final BalancePolicy policy;
+    private final ForecastService forecasts;
 
     public SandboxService(
             CtScenarioMapper scenarioMapper,
@@ -54,7 +58,8 @@ public class SandboxService {
             ActionService actions,
             CodeGenerator codes,
             ObjectMapper objectMapper,
-            BalancePolicy policy) {
+            BalancePolicy policy,
+            ForecastService forecasts) {
         this.scenarioMapper = scenarioMapper;
         this.inventoryMapper = inventoryMapper;
         this.salesMapper = salesMapper;
@@ -65,6 +70,7 @@ public class SandboxService {
         this.codes = codes;
         this.objectMapper = objectMapper;
         this.policy = policy;
+        this.forecasts = forecasts;
     }
 
     public synchronized CtScenario baseline() {
@@ -211,6 +217,7 @@ public class SandboxService {
         Map<String, Object> scenarioResult = result(scenario);
         Object summaries = scenarioResult.get("perSkuSummary");
         int purchases = 0;
+        Set<String> queuedSku = new HashSet<>();
         if (summaries instanceof List) {
             for (Object row : (List<?>) summaries) {
                 if (purchases >= 8) {
@@ -225,8 +232,34 @@ public class SandboxService {
                     continue;
                 }
                 String sku = String.valueOf(summary.get("sku"));
+                queuedSku.add(sku);
                 jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
                         map("sku", sku, "qty", stockout, "suggestQty", stockout,
+                                "replenishLeadDays", params.getReplenishLeadDays()),
+                        null));
+                purchases++;
+            }
+        }
+        if (purchases < 8) {
+            for (Map<String, Object> row : forecasts.replenish(
+                    null, null, 14, params.getSafetyDays(), params.getReplenishLeadDays())) {
+                if (purchases >= 8) {
+                    break;
+                }
+                BigDecimal qty = decimal(row.get("suggestQty"));
+                if (qty.signum() <= 0) {
+                    continue;
+                }
+                String sku = String.valueOf(row.get("sku"));
+                if (queuedSku.contains(sku)) {
+                    continue;
+                }
+                queuedSku.add(sku);
+                jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
+                        map("sku", sku,
+                                "qty", qty,
+                                "suggestQty", qty,
+                                "warehouseCode", row.get("warehouseCode"),
                                 "replenishLeadDays", params.getReplenishLeadDays()),
                         null));
                 purchases++;
