@@ -160,19 +160,27 @@ function edit(system) {
   visible.value = true
 }
 async function save() {
-  await integrationApi.update(editing.id, editing)
-  visible.value = false
-  ElMessage.success('连接配置已保存')
-  load()
+  try {
+    await integrationApi.update(editing.id, editing)
+    visible.value = false
+    ElMessage.success('连接配置已保存')
+    load()
+  } catch {
+    return
+  }
 }
 async function saveMode(system) {
   await integrationApi.update(system.id, { mode: system.mode })
   ElMessage.success('模式已切换')
 }
 async function health(system) {
-  const result = await integrationApi.health(system.code)
-  ElMessage.success(result?.message || '健康检查完成')
-  load()
+  try {
+    const result = await integrationApi.health(system.code)
+    ElMessage.success(result?.message || '健康检查完成')
+    load()
+  } catch {
+    return
+  }
 }
 async function sync(system) {
   await integrationApi.sync(system.code)

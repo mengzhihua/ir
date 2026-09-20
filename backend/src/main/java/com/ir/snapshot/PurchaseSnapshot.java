@@ -1,6 +1,8 @@
 package com.ir.snapshot;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.common.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -31,6 +33,27 @@ public class PurchaseSnapshot extends BaseEntity {
     private LocalDate expectedDate;
     private LocalDateTime receivedAt;
     private LocalDateTime syncedAt;
+    private String linesJson;
+
+    @Data
+    public static class PurchaseLine {
+        private String sku;
+        private BigDecimal qty;
+        private BigDecimal receivedQty;
+    }
+
+    public List<PurchaseLine> lines() {
+        if (linesJson == null || linesJson.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            return new ObjectMapper().readValue(linesJson,
+                    new TypeReference<List<PurchaseLine>>() {
+                    });
+        } catch (Exception ex) {
+            return Collections.emptyList();
+        }
+    }
 
     /** 多行单据的 sku 以逗号拼接存储,此处拆分为列表. */
     public List<String> skuList() {

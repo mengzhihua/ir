@@ -67,7 +67,9 @@
               triggerLabels[row.triggerType] || row.triggerType
             }}</template>
           </el-table-column>
-          <el-table-column prop="mode" label="模式" width="80" />
+          <el-table-column label="模式" width="80">
+            <template #default="{ row }">{{ labelOf(row.mode, modeLabels) }}</template>
+          </el-table-column>
           <el-table-column label="得分" width="120">
             <template #default="{ row }"
               >{{ formatNumber(row.scoreBefore, 1) }} →
@@ -119,7 +121,9 @@
           <template #default="{ row }">{{ strategyName(row.strategy) }}</template>
         </el-table-column>
         <el-table-column prop="targetSystem" label="系统" width="70" />
-        <el-table-column prop="actionType" label="动作" width="180" />
+        <el-table-column label="动作" width="180">
+          <template #default="{ row }">{{ labelOf(row.actionType, actionTypeLabels) }}</template>
+        </el-table-column>
         <el-table-column prop="targetKey" label="对象" width="110" />
         <el-table-column prop="reason" label="决策依据" min-width="260" show-overflow-tooltip />
         <el-table-column label="成本影响" width="100" align="right">
@@ -172,7 +176,9 @@
       <template v-if="runDetail.run">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="运行号">{{ runDetail.run.runNo }}</el-descriptions-item>
-          <el-descriptions-item label="模式">{{ runDetail.run.mode }}</el-descriptions-item>
+          <el-descriptions-item label="模式">{{
+            labelOf(runDetail.run.mode, modeLabels)
+          }}</el-descriptions-item>
           <el-descriptions-item label="候选决策">{{
             runDetail.summary.candidates
           }}</el-descriptions-item>
@@ -211,7 +217,11 @@
             <el-table-column label="策略" width="110">
               <template #default="{ row }">{{ strategyName(row.strategy) }}</template>
             </el-table-column>
-            <el-table-column prop="actionType" label="动作" width="170" />
+            <el-table-column label="动作" width="170">
+              <template #default="{ row }">{{
+                labelOf(row.actionType, actionTypeLabels)
+              }}</template>
+            </el-table-column>
             <el-table-column prop="targetKey" label="对象" width="100" />
             <el-table-column prop="reason" label="依据" show-overflow-tooltip />
             <el-table-column label="状态" width="90">
@@ -267,7 +277,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { balanceApi } from '../api'
 import { canWrite } from '../auth'
 import { formatDate, formatMoney, formatNumber, pageResult, percent } from '../utils/format'
-import { severityLabels } from '../utils/labels'
+import { actionTypeLabels, labelOf, severityLabels } from '../utils/labels'
 
 const overview = reactive({})
 const config = reactive({})

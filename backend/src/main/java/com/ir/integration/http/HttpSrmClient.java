@@ -4,6 +4,7 @@ import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.IntegrationException;
 import com.ir.integration.client.SrmClient;
 import com.ir.snapshot.PurchaseSnapshot;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ir.snapshot.SupplierScore;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestTemplate;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 public class HttpSrmClient implements SrmClient {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private final RestTemplate http;
     private final String baseUrl;
     private final String username;
@@ -200,6 +202,7 @@ public class HttpSrmClient implements SrmClient {
             List<String> skus = new ArrayList<>();
             BigDecimal qty = BigDecimal.ZERO;
             BigDecimal received = BigDecimal.ZERO;
+            List<Map<String, Object>> lineRows = new ArrayList<>();
             for (Object item : (List<?>) lines) {
                 if (!(item instanceof Map)) {
                     continue;
@@ -209,10 +212,22 @@ public class HttpSrmClient implements SrmClient {
                 if (sku != null && !skus.contains(sku)) {
                     skus.add(sku);
                 }
-                qty = qty.add(decimal(line, "qty"));
-                received = received.add(decimal(line, "receivedQty"));
+                BigDecimal lineQty = decimal(line, "qty");
+                BigDecimal lineReceived = decimal(line, "receivedQty");
+                qty = qty.add(lineQty);
+                received = received.add(lineReceived);
+                Map<String, Object> lineRow = new LinkedHashMap<>();
+                lineRow.put("sku", sku);
+                lineRow.put("qty", lineQty);
+                lineRow.put("receivedQty", lineReceived);
+                lineRows.add(lineRow);
             }
             doc.setSku(skus.isEmpty() ? null : joinSkus(skus));
+            try {
+                doc.setLinesJson(OBJECT_MAPPER.writeValueAsString(lineRows));
+            } catch (Exception ex) {
+                throw new IntegrationException("采购单行解析失败", ex);
+            }
             if (doc.getQty() == null) {
                 doc.setQty(qty);
             }

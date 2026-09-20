@@ -62,7 +62,48 @@ export const integrationStatusLabels = {
   LOW: '偏低',
   OPEN: '开放',
   CLOSED: '已关闭',
+  COMPLETED: '已完成',
+  NEW: '新建',
+  NEGOTIATION: '谈判中',
+  RELEASED: '已发布',
+  SHORT: '短缺',
+  RUNNING: '执行中',
+  SYNCED: '已同步',
+  CONFIRMED: '已确认',
+  IN_TRANSIT: '运输中'
+}
+
+export const supplyStatusLabels = {
+  NEW: '新建',
+  CONFIRMED: '已确认',
+  RELEASED: '已发布',
+  IN_TRANSIT: '运输中',
+  CLOSED: '已关闭',
+  RECEIVED: '已收货',
+  CANCELLED: '已取消',
+  DELAYED: '已延误',
+  PARTIAL: '部分收货',
+  DELIVERED: '已送达',
+  SIGNED: '已签收',
+  SHORT: '短缺',
+  RUNNING: '执行中',
   COMPLETED: '已完成'
+}
+
+export const traceStatusLabels = {
+  ...orderStatusLabels,
+  DELIVERED: '已送达',
+  SIGNED: '已签收',
+  IN_TRANSIT: '运输中',
+  CLOSED: '已关闭'
+}
+
+export const forecastMethodLabels = {
+  MA: '移动平均',
+  SES: '简单指数平滑',
+  HOLT: '霍尔特',
+  SEASONAL_NAIVE: '季节朴素',
+  AUTO: '自动选择'
 }
 
 export const tagTypes = {

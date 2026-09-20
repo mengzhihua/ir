@@ -9,6 +9,7 @@ import com.ir.integration.client.SapClient;
 import com.ir.integration.client.SrmClient;
 import com.ir.integration.client.TmsClient;
 import com.ir.integration.client.WmsClient;
+import com.ir.common.WarehouseCodes;
 import com.ir.integration.entity.CtSyncLog;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSyncLogMapper;
@@ -156,6 +157,9 @@ public class SystemSyncWorker {
             OrderSnapshot existing = orderMapper.selectOne(
                     new LambdaQueryWrapper<OrderSnapshot>()
                             .eq(OrderSnapshot::getOrderNo, row.getOrderNo()));
+            if (row.getWarehouseCode() != null) {
+                row.setWarehouseCode(WarehouseCodes.toOms(row.getWarehouseCode()));
+            }
             row.setSyncedAt(LocalDateTime.now());
             if (existing == null) {
                 orderMapper.insert(row);
@@ -173,6 +177,9 @@ public class SystemSyncWorker {
             WmsOrderSnapshot existing = wmsOrderMapper.selectOne(
                     new LambdaQueryWrapper<WmsOrderSnapshot>()
                             .eq(WmsOrderSnapshot::getCode, row.getCode()));
+            if (row.getWarehouseCode() != null) {
+                row.setWarehouseCode(WarehouseCodes.toOms(row.getWarehouseCode()));
+            }
             row.setSyncedAt(LocalDateTime.now());
             if (existing == null) {
                 wmsOrderMapper.insert(row);
@@ -205,6 +212,9 @@ public class SystemSyncWorker {
     /** logSystem 为 null 时由调用方自行记录日志. */
     private int persistInventory(List<InventorySnapshot> rows, String logSystem) {
         for (InventorySnapshot row : rows) {
+            if (row.getWarehouseCode() != null) {
+                row.setWarehouseCode(WarehouseCodes.toOms(row.getWarehouseCode()));
+            }
             InventorySnapshot existing = inventoryMapper.selectOne(
                     new LambdaQueryWrapper<InventorySnapshot>()
                             .eq(InventorySnapshot::getSourceSystem, row.getSourceSystem())
@@ -229,7 +239,8 @@ public class SystemSyncWorker {
             SalesDaily row = new SalesDaily();
             row.setSalesDate(point.getSalesDate());
             row.setSku(point.getSku());
-            row.setWarehouseCode(point.getWarehouseCode());
+            row.setWarehouseCode(point.getWarehouseCode() == null
+                    ? null : WarehouseCodes.toOms(point.getWarehouseCode()));
             row.setChannelCode(point.getChannelCode());
             row.setQty(point.getQty());
             row.setAmount(point.getAmount());
@@ -305,6 +316,9 @@ public class SystemSyncWorker {
         costMapper.delete(new LambdaQueryWrapper<CostRecord>()
                 .eq(CostRecord::getSourceSystem, sourceSystem));
         for (CostRecord row : rows) {
+            if (row.getWarehouseCode() != null) {
+                row.setWarehouseCode(WarehouseCodes.toOms(row.getWarehouseCode()));
+            }
             row.setSourceSystem(sourceSystem);
             costMapper.insert(row);
         }

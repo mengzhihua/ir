@@ -39,6 +39,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         return User.PLANNER.equals(u.getRole())
                 && !path.startsWith("/api/system/")
                 && !path.startsWith("/api/integration/system")
+                && !path.startsWith("/api/objective")
                 && !path.startsWith("/api/balance/config");
     }
     private static String bearer(String h) { return h != null && h.regionMatches(true, 0, "Bearer ", 0, 7) ? h.substring(7).trim() : null; }

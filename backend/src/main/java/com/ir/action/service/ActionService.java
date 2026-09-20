@@ -96,6 +96,13 @@ public class ActionService {
         CtAction existing = findPending(type, targetKey);
         Map<String, Object> params = paramsOf(request);
         if (existing != null) {
+            Map<String, Object> existingParams = read(existing.getParamsJson());
+            Object existingKey = existingParams.get(IDEMPOTENCY_KEY);
+            String key = existingKey == null
+                    || String.valueOf(existingKey).trim().isEmpty()
+                    || "null".equals(String.valueOf(existingKey))
+                    ? existing.getActionNo() : String.valueOf(existingKey);
+            params.put(IDEMPOTENCY_KEY, key);
             refreshPending(existing, request, params);
             try {
                 execute(existing, params);
@@ -483,6 +490,15 @@ public class ActionService {
             CtAction existing,
             Map<String, Object> request,
             Map<String, Object> params) {
+        if (!params.containsKey(IDEMPOTENCY_KEY)) {
+            Map<String, Object> existingParams = read(existing.getParamsJson());
+            Object existingKey = existingParams.get(IDEMPOTENCY_KEY);
+            String key = existingKey == null
+                    || String.valueOf(existingKey).trim().isEmpty()
+                    || "null".equals(String.valueOf(existingKey))
+                    ? existing.getActionNo() : String.valueOf(existingKey);
+            params.put(IDEMPOTENCY_KEY, key);
+        }
         existing.setParams(write(params));
         existing.setExpectedSaving(decimal(request.get("expectedSaving")));
         if (request.get("alertId") != null) {

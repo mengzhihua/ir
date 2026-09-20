@@ -265,12 +265,14 @@ CREATE TABLE IF NOT EXISTS ct_purchase_snapshot (
     amount DECIMAL(18,2),
     expected_date DATE,
     received_at TIMESTAMP,
+    lines_json VARCHAR(4000),
     synced_at TIMESTAMP,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     UNIQUE(doc_type, code)
 );
 ALTER TABLE ct_purchase_snapshot ALTER COLUMN sku SET DATA TYPE VARCHAR(1024);
+ALTER TABLE ct_purchase_snapshot ADD COLUMN IF NOT EXISTS lines_json VARCHAR(4000);
 
 CREATE TABLE IF NOT EXISTS ct_supplier_score (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -374,9 +376,11 @@ CREATE TABLE IF NOT EXISTS ct_op_log (
     action VARCHAR(100),
     target VARCHAR(255),
     detail VARCHAR(2000),
+    success BOOLEAN,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
+ALTER TABLE ct_op_log ADD COLUMN IF NOT EXISTS success BOOLEAN;
 
 ALTER TABLE ct_scenario ADD COLUMN kind VARCHAR(16);
 ALTER TABLE ct_scenario ADD COLUMN recommended BOOLEAN;

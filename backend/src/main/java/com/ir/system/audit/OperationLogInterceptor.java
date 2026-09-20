@@ -39,6 +39,7 @@ public class OperationLogInterceptor implements HandlerInterceptor {
         log.setAction(request.getMethod());
         log.setTarget(request.getRequestURI());
         log.setDetail("HTTP " + response.getStatus());
+        log.setSuccess(exception == null && response.getStatus() < 400);
         mapper.insert(log);
     }
 }

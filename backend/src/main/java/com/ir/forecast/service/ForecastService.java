@@ -262,20 +262,36 @@ public class ForecastService {
         for (PurchaseSnapshot row : purchaseMapper.selectList(
                 new LambdaQueryWrapper<PurchaseSnapshot>()
                         .in(PurchaseSnapshot::getDocType, "PO", "ASN"))) {
-            if (row.getSku() == null || row.getSku().trim().isEmpty()
-                    || closedInbound(row.getStatus())) {
+            if (closedInbound(row.getStatus())) {
                 continue;
             }
-            BigDecimal qty = row.getQty() == null ? BigDecimal.ZERO : row.getQty();
-            BigDecimal received = row.getReceivedQty() == null
-                    ? BigDecimal.ZERO : row.getReceivedQty();
-            String key = WarehouseCodes.stockKey(row.getSku(),
-                    WarehouseCodes.ofInbound(row.getPlantCode(), null));
-            if ("ASN".equals(row.getDocType())) {
-                rootAsn.merge(key, qty.subtract(received).max(BigDecimal.ZERO),
-                        BigDecimal::add);
+            String warehouse = WarehouseCodes.ofInbound(row.getPlantCode(), null);
+            if (!row.lines().isEmpty()) {
+                for (PurchaseSnapshot.PurchaseLine line : row.lines()) {
+                    if (line.getSku() == null || line.getSku().trim().isEmpty()) {
+                        continue;
+                    }
+                    BigDecimal qty = line.getQty() == null ? BigDecimal.ZERO : line.getQty();
+                    BigDecimal received = line.getReceivedQty() == null
+                            ? BigDecimal.ZERO : line.getReceivedQty();
+                    String key = WarehouseCodes.stockKey(line.getSku(), warehouse);
+                    Map<String, BigDecimal> target = "ASN".equals(row.getDocType())
+                            ? rootAsn : rootPo;
+                    target.merge(key, qty.subtract(received).max(BigDecimal.ZERO),
+                            BigDecimal::add);
+                }
             } else {
-                rootPo.merge(key, qty.subtract(received).max(BigDecimal.ZERO),
+                if (row.skuList().size() > 1
+                        || row.getSku() == null || row.getSku().trim().isEmpty()) {
+                    continue;
+                }
+                BigDecimal qty = row.getQty() == null ? BigDecimal.ZERO : row.getQty();
+                BigDecimal received = row.getReceivedQty() == null
+                        ? BigDecimal.ZERO : row.getReceivedQty();
+                String key = WarehouseCodes.stockKey(row.getSku(), warehouse);
+                Map<String, BigDecimal> target = "ASN".equals(row.getDocType())
+                        ? rootAsn : rootPo;
+                target.merge(key, qty.subtract(received).max(BigDecimal.ZERO),
                         BigDecimal::add);
             }
         }

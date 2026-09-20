@@ -141,7 +141,7 @@
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <el-button v-if="canWrite()" type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
   </div>
