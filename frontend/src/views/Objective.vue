@@ -7,7 +7,7 @@
       </div>
       <div>
         <el-button @click="load">刷新</el-button>
-        <el-button v-if="canWrite()" type="primary" @click="openEdit()">新增目标</el-button>
+        <el-button v-if="isAdmin()" type="primary" @click="openEdit()">新增目标</el-button>
       </div>
     </div>
     <div class="stats">
@@ -94,7 +94,7 @@
             }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="canWrite()" label="操作" width="140">
+        <el-table-column v-if="isAdmin()" label="操作" width="140">
           <template #default="{ row }">
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="remove(row)">删除</el-button>
@@ -141,7 +141,7 @@
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
-        <el-button v-if="canWrite()" type="primary" @click="save">保存</el-button>
+        <el-button v-if="isAdmin()" type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -150,7 +150,7 @@
 import { computed, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { objectiveApi } from '../api'
-import { canWrite } from '../auth'
+import { isAdmin } from '../auth'
 import Chart from '../components/Chart.vue'
 import { formatMoney, formatNumber, percent } from '../utils/format'
 
