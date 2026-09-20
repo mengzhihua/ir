@@ -50,6 +50,11 @@ class FullFlowTest {
         assertTrue(overview.path("kpi").has("otif30d"));
         assertTrue(overview.path("systems").size() >= 11);
         assertTrue(overview.path("ecosystem").has("SAP"));
+        assertTrue(overview.path("command").path("nextActions").isArray());
+        assertTrue(overview.path("objectives").has("score"));
+        assertTrue(overview.path("balance").has("pendingDecisions"));
+        assertTrue(overview.path("supply").has("delayedAsn"));
+        assertTrue(overview.path("kpi").has("nextActions"));
 
         JsonNode stats = get(token, "/api/alert/stats");
         assertTrue(stats.path("high").asInt() > 0);

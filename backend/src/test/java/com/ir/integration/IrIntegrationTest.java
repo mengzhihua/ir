@@ -149,4 +149,39 @@ class IrIntegrationTest {
         mvc.perform(post("/api/action").header("Authorization","Bearer "+t).contentType(MediaType.APPLICATION_JSON).content("{\"type\":\"SRM_PURCHASE_SUGGEST\",\"targetKey\":\"SKU005\",\"params\":{\"sku\":\"SKU005\",\"qty\":80}}")).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("SUCCESS"));
         mvc.perform(get("/api/supply/overview").header("Authorization","Bearer "+t)).andExpect(status().isOk()).andExpect(jsonPath("$.data.suppliers").isArray());
     }
+
+    @Test void towerCommandQueueAndExecute() throws Exception {
+        String t = token();
+        String body = mvc.perform(get("/api/tower/overview").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.command.nextActions").isArray())
+                .andExpect(jsonPath("$.data.command.counts.total").isNumber())
+                .andExpect(jsonPath("$.data.objectives.score").isNumber())
+                .andExpect(jsonPath("$.data.balance.pendingDecisions").isNumber())
+                .andExpect(jsonPath("$.data.supply.delayedAsn").isNumber())
+                .andExpect(jsonPath("$.data.kpi.objectiveScore").isNumber())
+                .andExpect(jsonPath("$.data.kpi.nextActions").isNumber())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode alert = null;
+        for (JsonNode row : mapper.readTree(body).path("data").path("command").path("nextActions")) {
+            if ("ALERT".equals(row.path("kind").asText())) {
+                alert = row;
+                break;
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertNotNull(alert, "总览队列应包含可执行预警");
+        mvc.perform(post("/api/tower/command").header("Authorization", "Bearer " + t)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"ALERT\",\"id\":" + alert.path("id").asLong() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.kind").value("ALERT"))
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"));
+        mvc.perform(post("/api/tower/command").header("Authorization", "Bearer " + t)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"UNKNOWN\",\"id\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(1));
+    }
 }
