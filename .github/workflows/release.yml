@@ -66,13 +66,36 @@ jobs:
             label: linux-x64
           - os: windows-latest
             label: windows-x64
-          - os: macos-13
-            label: macos-x64
-          - os: macos-14
+          # macos-13 已于 2025-12 退役；macos-14 将于 2026-11 退役。
+          # macos-26 为 Apple Silicon（arm64）；macos-15-intel 为 Intel（x64）。
+          - os: macos-26
             label: macos-arm64
+          - os: macos-15-intel
+            label: macos-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Confirm runner architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "runner=${{ matrix.os }} label=${{ matrix.label }}"
+          uname -a
+          ARCH="$(uname -m)"
+          case "${{ matrix.label }}" in
+            *-arm64)
+              if [[ "$ARCH" != "arm64" && "$ARCH" != "aarch64" ]]; then
+                echo "expected ARM for ${{ matrix.label }}, got $ARCH"
+                exit 1
+              fi
+              ;;
+            *-x64)
+              if [[ "$ARCH" != "x86_64" && "$ARCH" != "amd64" ]]; then
+                echo "expected x86_64 for ${{ matrix.label }}, got $ARCH"
+                exit 1
+              fi
+              ;;
+          esac
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
