@@ -21,7 +21,7 @@ IR 供应链控制塔  v1.0.0
 3) macOS
    双击 start.command
    若提示无法打开：右键 → 打开
-   （或不装 Java，用 macos-x64 原生包里的 .app）
+   （或不装 Java，用 macos-arm64（Apple Silicon / M 系列）或 macos-x64（Intel）原生包里的 .app）
 
 4) Linux
    chmod +x start.sh && ./start.sh
