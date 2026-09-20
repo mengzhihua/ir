@@ -26,13 +26,20 @@ class IrIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.runNo").isString())
                 .andExpect(jsonPath("$.data.recommended.id").isNumber())
-                .andExpect(jsonPath("$.data.scenarios.length()").value(10))
+                .andExpect(jsonPath("$.data.scenarios.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(10)))
+                .andExpect(jsonPath("$.data.rationale.rule").value("SERVICE_FIRST_CASH_ROBUST"))
+                .andExpect(jsonPath("$.data.rationale.reason").isString())
                 .andReturn().getResponse().getContentAsString();
         JsonNode data = mapper.readTree(body).get("data");
         long id = data.get("recommended").get("id").asLong();
         mvc.perform(get("/api/sandbox/auto/latest").header("Authorization", "Bearer " + t))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.recommended.id").value(id));
+                .andExpect(jsonPath("$.data.recommended.id").value(id))
+                .andExpect(jsonPath("$.data.rationale.rule").value("SERVICE_FIRST_CASH_ROBUST"));
+        mvc.perform(get("/api/sandbox/auto/history").header("Authorization", "Bearer " + t))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
         mvc.perform(get("/api/sandbox/scenario/page?kind=AUTO&size=20").header("Authorization", "Bearer " + t))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(org.hamcrest.Matchers.greaterThanOrEqualTo(10)));

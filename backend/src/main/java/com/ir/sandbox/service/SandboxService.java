@@ -9,6 +9,7 @@ import com.ir.action.service.ActionService;
 import com.ir.common.CarrierCodes;
 import com.ir.common.CodeGenerator;
 import com.ir.common.WarehouseCodes;
+import com.ir.sandbox.engine.AutoSandboxPicker;
 import com.ir.sandbox.engine.BalanceScorer;
 import com.ir.sandbox.engine.BaselineData;
 import com.ir.sandbox.engine.SandboxEngine;
@@ -409,6 +410,96 @@ public class SandboxService {
 
     public BigDecimal cashUsedOf(CtScenario scenario) {
         return decimal(resultOf(scenario).get("cashUsed"));
+    }
+
+    public boolean stressReliableOf(CtScenario scenario) {
+        return Boolean.TRUE.equals(resultOf(scenario).get("stressReliable"));
+    }
+
+    public List<String> warehouseCodes() {
+        java.util.LinkedHashSet<String> codes = new java.util.LinkedHashSet<String>();
+        for (com.ir.snapshot.entity.InventorySnapshot item : inventoryMapper.selectList(null)) {
+            if (item.getWarehouseCode() == null || item.getWarehouseCode().trim().isEmpty()) {
+                continue;
+            }
+            codes.add(WarehouseCodes.toOms(item.getWarehouseCode().trim()));
+        }
+        return new ArrayList<String>(codes);
+    }
+
+    public void annotateCandidate(CtScenario scenario, String source, String signal) {
+        Map<String, Object> extra = new LinkedHashMap<String, Object>();
+        extra.put("candidateSource", source);
+        extra.put("candidateSignal", signal);
+        mergeIntoResult(scenario, extra);
+    }
+
+    public void attachStress(CtScenario scenario, BaselineData data) {
+        if (nz(scenario.getServiceLevel()).compareTo(ServiceFirstPicker.MIN_SERVICE) < 0
+                || nz(scenario.getStockoutUnits()).signum() > 0) {
+            Map<String, Object> extra = new LinkedHashMap<String, Object>();
+            extra.put("stressDemandMultiplier", 2);
+            extra.put("stressSkipped", true);
+            extra.put("stressReliable", false);
+            mergeIntoResult(scenario, extra);
+            return;
+        }
+        ScenarioParams params = paramsOf(scenario);
+        if (params == null) {
+            params = new ScenarioParams();
+        }
+        params = params.normalized();
+        params.setDemandMultiplier(BigDecimal.valueOf(2));
+        SandboxEngine.Result stress = engine.run(params, data == null ? baselineData() : data);
+        boolean reliable = AutoSandboxPicker.stressReliable(
+                stress.getServiceLevel(), stress.getStockoutUnits());
+        Map<String, Object> extra = new LinkedHashMap<String, Object>();
+        extra.put("stressDemandMultiplier", 2);
+        extra.put("stressSkipped", false);
+        extra.put("stressServiceLevel", stress.getServiceLevel());
+        extra.put("stressStockoutUnits", stress.getStockoutUnits());
+        extra.put("stressCashUsed", stress.getCashUsed());
+        extra.put("stressCapitalVerdict", stress.getCapitalVerdict());
+        extra.put("stressReliable", reliable);
+        mergeIntoResult(scenario, extra);
+    }
+
+    public void mergeIntoResult(CtScenario scenario, Map<String, Object> extra) {
+        if (scenario == null || extra == null || extra.isEmpty()) {
+            return;
+        }
+        Map<String, Object> result = result(scenario);
+        result.putAll(extra);
+        scenario.setResultJson(write(result));
+        if (scenario.getId() != null) {
+            scenarioMapper.updateById(scenario);
+        }
+    }
+
+    public List<Map<String, Object>> listAutoHistory(int size) {
+        int limit = size < 1 ? 8 : Math.min(size, 30);
+        List<CtScenario> rows = scenarioMapper.selectList(new LambdaQueryWrapper<CtScenario>()
+                .eq(CtScenario::getKind, "AUTO")
+                .eq(CtScenario::getRecommended, true)
+                .orderByDesc(CtScenario::getId)
+                .last("LIMIT " + limit));
+        List<Map<String, Object>> history = new ArrayList<Map<String, Object>>();
+        for (CtScenario row : rows) {
+            Map<String, Object> item = new LinkedHashMap<String, Object>();
+            Map<String, Object> result = resultOf(row);
+            item.put("id", row.getId());
+            item.put("runNo", row.getRunNo());
+            item.put("name", row.getName());
+            item.put("serviceLevel", row.getServiceLevel());
+            item.put("stockoutUnits", row.getStockoutUnits());
+            item.put("totalCost", row.getTotalCost());
+            item.put("cashUsed", result.get("cashUsed"));
+            item.put("stressReliable", result.get("stressReliable"));
+            item.put("pickRationale", result.get("pickRationale"));
+            item.put("createdAt", row.getCreatedAt());
+            history.add(item);
+        }
+        return history;
     }
 
     public ScenarioParams paramsOf(CtScenario scenario) {

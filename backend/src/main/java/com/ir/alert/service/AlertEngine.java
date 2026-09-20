@@ -138,6 +138,21 @@ public class AlertEngine {
         return n;
     }
 
+    public Map<String, Integer> openCountsByType() {
+        Map<String, Integer> counts = new LinkedHashMap<String, Integer>();
+        for (CtAlert alert : all()) {
+            if (!"OPEN".equals(alert.getStatus())) {
+                continue;
+            }
+            String type = alert.getType() == null ? "OTHER" : alert.getType();
+            counts.put(type, counts.getOrDefault(type, 0) + 1);
+            if ("SAP_LOW_STOCK".equals(alert.getRuleCode())) {
+                counts.put("SAP_LOW_STOCK", counts.getOrDefault("SAP_LOW_STOCK", 0) + 1);
+            }
+        }
+        return counts;
+    }
+
     public Page<CtAlert> page(
             String status,
             String severity,

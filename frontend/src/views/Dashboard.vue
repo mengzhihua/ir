@@ -150,6 +150,10 @@
             <div class="value">{{ formatMoney(overview.recommendation.totalCost) }}</div>
           </div>
           <div class="stat">
+            <div class="label">2倍需求</div>
+            <div class="value">{{ overview.recommendation.stressReliable ? '稳健' : '未过' }}</div>
+          </div>
+          <div class="stat">
             <div class="label">资金盘</div>
             <div class="value">
               {{ formatMoney(overview.recommendation.workingCapital) }}
@@ -157,7 +161,10 @@
             </div>
           </div>
         </div>
-        <el-empty v-else description="尚未产生自动沙盘推荐" />
+        <p v-if="overview.recommendation?.pickRationale?.reason" class="muted">
+          {{ overview.recommendation.pickRationale.reason }}
+        </p>
+        <el-empty v-if="!overview.recommendation" description="尚未产生自动沙盘推荐" />
       </div>
     </div>
     <div class="panel">
