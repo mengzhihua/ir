@@ -116,6 +116,12 @@ public class SandboxController {
         return R.ok(autoSandbox.latest());
     }
 
+    @GetMapping("/auto/history")
+    public R<List<Map<String, Object>>> autoHistory(
+            @RequestParam(defaultValue = "8") int size) {
+        return R.ok(autoSandbox.history(size));
+    }
+
     @GetMapping("/policy")
     public R<Map<String, Object>> policy() {
         return R.ok(policy.snapshot());

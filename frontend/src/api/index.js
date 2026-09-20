@@ -50,6 +50,7 @@ export const sandboxApi = {
     http.post(`/sandbox/scenario/${id}/apply`, {}, { params: { execute } }),
   autoRun: () => http.post('/sandbox/auto/run', {}, { timeout: 120000 }),
   autoLatest: () => http.get('/sandbox/auto/latest'),
+  autoHistory: (size = 8) => http.get('/sandbox/auto/history', { params: { size } }),
   policy: () => http.get('/sandbox/policy'),
   savePolicy: (data) => http.put('/sandbox/policy', data),
   capital: (data) => http.post('/sandbox/capital', data || { workingCapital: 100000000 }, { timeout: 120000 }),

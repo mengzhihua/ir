@@ -4,7 +4,7 @@
       <div>
         <h2>系统自动沙盘</h2>
         <p class="subtitle">
-          按成本与效率策略网格批量推演，先保服务水平再选占用现金最低的方案
+          固定网格 + 预警/仓网派生方案批量推演；先保服务水平，再选占用现金最低，2 倍需求仍可行且现金差不超过 12% 时改推稳健方案
           <template v-if="latest.stance">
             · 当前立场 {{ stanceLabel }}（成本 {{ Number(latest.costWeight || 0).toFixed(2) }} /
             效率 {{ Number(latest.efficiencyWeight || 0).toFixed(2) }}）
@@ -12,6 +12,18 @@
         </p>
       </div>
       <el-button v-if="canWrite()" type="primary" :loading="running" @click="run">立即推演</el-button>
+    </div>
+    <el-alert
+      v-if="rationale.reason"
+      class="rationale"
+      type="success"
+      :closable="false"
+      :title="rationale.reason"
+    />
+    <div class="toolbar" v-if="signalList.length">
+      <span class="muted">本轮信号</span>
+      <el-tag v-for="item in signalList" :key="item" size="small" effect="plain">{{ item }}</el-tag>
+      <el-tag v-if="latest.usedRobust" type="warning" size="small">已改推稳健方案</el-tag>
     </div>
     <div class="stats" v-if="recommended">
       <div class="stat">
@@ -21,6 +33,12 @@
       <div class="stat">
         <div class="label">占用现金</div>
         <div class="value">{{ formatMoney(recommended.result?.cashUsed || recommended.cashUsed) }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">2倍需求</div>
+        <div class="value" :class="stressOk(recommended) ? 'success' : 'warning'">
+          {{ stressOk(recommended) ? '稳健' : '未过' }}
+        </div>
       </div>
       <div class="stat">
         <div class="label">补货策略</div>
@@ -37,16 +55,12 @@
         <div class="value">{{ latest.forecastStockoutAlerts ?? '-' }}</div>
       </div>
       <div class="stat">
+        <div class="label">候选 / 派生</div>
+        <div class="value">{{ rows.length }} / {{ derivedCount }}</div>
+      </div>
+      <div class="stat">
         <div class="label">综合分</div>
         <div class="value">{{ formatNumber(recommended.balanceScore, 4) }}</div>
-      </div>
-      <div class="stat">
-        <div class="label">成本分</div>
-        <div class="value">{{ formatNumber(recommended.costScore, 4) }}</div>
-      </div>
-      <div class="stat">
-        <div class="label">效率分</div>
-        <div class="value">{{ formatNumber(recommended.efficiencyScore, 4) }}</div>
       </div>
     </div>
     <div class="grid-2">
@@ -56,26 +70,30 @@
           <el-button @click="load">刷新</el-button>
         </div>
         <el-table v-loading="loading" :data="rows" stripe @row-click="select">
-          <el-table-column prop="name" label="场景" min-width="180">
+          <el-table-column prop="name" label="场景" min-width="200">
             <template #default="{ row }">
               {{ row.name }}
               <el-tag v-if="row.recommended" type="success" size="small" class="rec-tag">推荐</el-tag>
+              <el-tag v-if="sourceOf(row) && sourceOf(row) !== 'GRID'" size="small" class="rec-tag">{{
+                sourceLabel(sourceOf(row))
+              }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="占用现金" align="right" width="120">
             <template #default="{ row }">{{ formatMoney(row.result?.cashUsed || row.cashUsed) }}</template>
+          </el-table-column>
+          <el-table-column label="2倍需求" width="90">
+            <template #default="{ row }">
+              <el-tag :type="stressOk(row) ? 'success' : 'info'" size="small">
+                {{ stressOk(row) ? '稳健' : '未过' }}
+              </el-tag>
+            </template>
           </el-table-column>
           <el-table-column label="总成本" align="right" width="120">
             <template #default="{ row }">{{ formatMoney(row.totalCost) }}</template>
           </el-table-column>
           <el-table-column label="服务水平" align="right" width="100">
             <template #default="{ row }">{{ percent(row.serviceLevel) }}</template>
-          </el-table-column>
-          <el-table-column label="成本分" align="right" width="90">
-            <template #default="{ row }">{{ formatNumber(row.costScore, 4) }}</template>
-          </el-table-column>
-          <el-table-column label="效率分" align="right" width="90">
-            <template #default="{ row }">{{ formatNumber(row.efficiencyScore, 4) }}</template>
           </el-table-column>
           <el-table-column label="综合分" align="right" width="90">
             <template #default="{ row }">{{ formatNumber(row.balanceScore, 4) }}</template>
@@ -115,6 +133,10 @@
             <div class="value">{{ formatNumber(selected.avgLeadDays, 2) }}天</div>
           </div>
           <div class="stat">
+            <div class="label">2倍服务</div>
+            <div class="value">{{ percent(selected.stressServiceLevel) }}</div>
+          </div>
+          <div class="stat">
             <div class="label">资金结论</div>
             <div class="value">
               {{ labelOf(selected.capitalVerdict, capitalVerdictLabels) }}
@@ -129,6 +151,30 @@
         </div>
         <el-empty v-else description="选择一个自动方案查看结果" />
       </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">
+        <h3>最近自动轮次</h3>
+      </div>
+      <el-table :data="history" stripe>
+        <el-table-column prop="runNo" label="轮次" width="140" />
+        <el-table-column prop="name" label="推荐方案" min-width="180" />
+        <el-table-column label="占用现金" align="right" width="130">
+          <template #default="{ row }">{{ formatMoney(row.cashUsed) }}</template>
+        </el-table-column>
+        <el-table-column label="服务水平" align="right" width="100">
+          <template #default="{ row }">{{ percent(row.serviceLevel) }}</template>
+        </el-table-column>
+        <el-table-column label="2倍需求" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.stressReliable ? 'success' : 'info'" size="small">
+              {{ row.stressReliable ? '稳健' : '未过' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="时间" min-width="160" />
+        <template #empty><el-empty description="还没有历史轮次" /></template>
+      </el-table>
     </div>
     <el-dialog v-model="actionDialog" title="已生成协同指令" width="680px">
       <el-table :data="pendingActions">
@@ -160,6 +206,7 @@ const latest = ref({})
 const rows = ref([])
 const recommended = ref(null)
 const selected = ref(null)
+const history = ref([])
 const actionDialog = ref(false)
 const pendingActions = ref([])
 const stanceLabel = computed(() => {
@@ -167,6 +214,9 @@ const stanceLabel = computed(() => {
   if (latest.value.stance === 'EFFICIENCY') return '效率优先'
   return '均衡'
 })
+const rationale = computed(() => latest.value.rationale || {})
+const signalList = computed(() => latest.value.signals || rationale.value.signals || [])
+const derivedCount = computed(() => Math.max(0, rows.value.length - 10))
 const recParams = computed(() => {
   const raw = recommended.value?.params || recommended.value?.paramsJson
   if (raw && typeof raw === 'object') return raw
@@ -215,13 +265,39 @@ const carrierOption = computed(() => ({
   series: [{ type: 'bar', data: Object.values(selected.value?.costByCarrier || {}) }]
 }))
 
+function applyPayload(data) {
+  latest.value = data || {}
+  rows.value = data?.scenarios || []
+  recommended.value = data?.recommended || null
+  history.value = data?.history || []
+}
+
+function resultOf(row) {
+  if (!row) return {}
+  if (row.result && typeof row.result === 'object') return row.result
+  return parseJson(row.result || row.resultJson, {})
+}
+
+function sourceOf(row) {
+  return resultOf(row).candidateSource
+}
+
+function sourceLabel(source) {
+  if (source === 'ALERT') return '预警'
+  if (source === 'WAREHOUSE') return '仓网'
+  if (source === 'STANCE') return '立场'
+  return '网格'
+}
+
+function stressOk(row) {
+  return Boolean(resultOf(row).stressReliable)
+}
+
 async function load() {
   loading.value = true
   try {
     const data = await sandboxApi.autoLatest()
-    latest.value = data || {}
-    rows.value = data?.scenarios || []
-    recommended.value = data?.recommended || null
+    applyPayload(data)
     if (recommended.value) {
       await select(recommended.value)
     }
@@ -234,10 +310,8 @@ async function run() {
   running.value = true
   try {
     const data = await sandboxApi.autoRun()
-    latest.value = data || {}
-    rows.value = data?.scenarios || []
-    recommended.value = data?.recommended || null
-    ElMessage.success('自动沙盘推演完成，已按成本与效率综合分选出推荐方案')
+    applyPayload(data)
+    ElMessage.success(rationale.value.reason || '自动沙盘推演完成')
     if (recommended.value) {
       await select(recommended.value)
     }
@@ -264,5 +338,8 @@ load()
 <style scoped>
 .rec-tag {
   margin-left: 6px;
+}
+.rationale {
+  margin-bottom: 16px;
 }
 </style>

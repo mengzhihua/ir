@@ -203,6 +203,9 @@ public class TowerService {
             rec.put("capitalUtilization", recResult.get("capitalUtilization"));
             rec.put("cashUsed", recResult.get("cashUsed"));
             rec.put("workingCapital", recResult.get("workingCapital"));
+            rec.put("stressReliable", recResult.get("stressReliable"));
+            rec.put("pickRationale", recResult.get("pickRationale"));
+            rec.put("candidateSource", recResult.get("candidateSource"));
             ScenarioParams recParams = sandbox.paramsOf(recommendation);
             if (recParams != null) {
                 rec.put("safetyDays", recParams.getSafetyDays());

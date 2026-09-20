@@ -151,7 +151,11 @@ class FullFlowTest {
         assertTrue(auto.path("recommended").path("serviceLevel").decimalValue()
                 .compareTo(new BigDecimal("0.995")) >= 0);
         assertEquals(0, auto.path("recommended").path("stockoutUnits").decimalValue().signum());
+        assertEquals("SERVICE_FIRST_CASH_ROBUST", auto.path("rationale").path("rule").asText());
+        assertTrue(auto.path("rationale").path("reason").asText().length() > 8);
+        assertTrue(auto.path("scenarios").size() >= 10);
         BigDecimal recCash = auto.path("recommended").path("result").path("cashUsed").decimalValue();
+        BigDecimal minCash = recCash;
         for (JsonNode row : auto.path("scenarios")) {
             if (row.path("serviceLevel").decimalValue().compareTo(new BigDecimal("0.995")) < 0) {
                 continue;
@@ -159,8 +163,13 @@ class FullFlowTest {
             if (row.path("stockoutUnits").decimalValue().signum() > 0) {
                 continue;
             }
-            assertTrue(recCash.compareTo(row.path("result").path("cashUsed").decimalValue()) <= 0);
+            BigDecimal cash = row.path("result").path("cashUsed").decimalValue();
+            if (cash.compareTo(minCash) < 0) {
+                minCash = cash;
+            }
         }
+        assertTrue(recCash.compareTo(minCash) >= 0);
+        assertTrue(recCash.compareTo(minCash.multiply(new BigDecimal("1.12"))) <= 0);
         JsonNode latest = get(token, "/api/sandbox/auto/latest");
         assertEquals(auto.path("recommended").path("id").asLong(),
                 latest.path("recommended").path("id").asLong());
