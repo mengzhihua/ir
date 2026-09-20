@@ -51,6 +51,10 @@ public class SandboxEngine {
         private Boolean capitalFeasible = Boolean.TRUE;
         private String capitalVerdict = "RELIABLE";
         private String capitalReason = "";
+        private int skuCount;
+        private BigDecimal inventoryUnits = BigDecimal.ZERO;
+        private BigDecimal inventoryValue = BigDecimal.ZERO;
+        private boolean skuSummaryTruncated;
     }
 
     public Result run(ScenarioParams params, BaselineData baseline) {
@@ -66,29 +70,39 @@ public class SandboxEngine {
         BigDecimal totalLead = BigDecimal.ZERO;
         int leadCount = 0;
 
-        for (Map.Entry<String, List<BigDecimal>> entry
-                : baseline.getDemandBySku().entrySet()) {
-            String sku = entry.getKey();
-            List<BigDecimal> forecastValues =
-                    forecast.seasonalNaive(entry.getValue(), days);
-            Map<String, BigDecimal> channelShare = baseline.getChannelShare()
-                    .getOrDefault(sku, Collections.singletonMap("ALL",
-                            BigDecimal.ONE));
-            Map<String, BigDecimal> regionShare = baseline.getRegionShare()
-                    .getOrDefault(sku, baseline.getRegionShare().getOrDefault(
-                            "*", Collections.singletonMap("华东",
-                                    BigDecimal.ONE)));
-            BigDecimal skuDemand = BigDecimal.ZERO;
-            BigDecimal skuFulfilled = BigDecimal.ZERO;
-            BigDecimal skuStockout = BigDecimal.ZERO;
+        List<SkuPlan> plans = new ArrayList<>();
+        if (baseline != null && baseline.getDemandBySku() != null) {
+            for (Map.Entry<String, List<BigDecimal>> entry
+                    : baseline.getDemandBySku().entrySet()) {
+                SkuPlan plan = new SkuPlan();
+                plan.sku = entry.getKey();
+                plan.forecast = forecast.seasonalNaive(entry.getValue(), days);
+                plan.channelShare = baseline.getChannelShare()
+                        .getOrDefault(plan.sku, Collections.singletonMap("ALL",
+                                BigDecimal.ONE));
+                plan.regionShare = baseline.getRegionShare()
+                        .getOrDefault(plan.sku, baseline.getRegionShare().getOrDefault(
+                                "*", Collections.singletonMap("华东",
+                                        BigDecimal.ONE)));
+                plans.add(plan);
+            }
+        }
 
-            for (int day = 0; day < days; day++) {
-                receive(arrivals, day, stock);
-                BigDecimal averageDemand = average(forecastValues)
+        BigDecimal[] dayDemand = new BigDecimal[days];
+        BigDecimal[] dayFulfilled = new BigDecimal[days];
+        BigDecimal[] dayCost = new BigDecimal[days];
+        Arrays.fill(dayDemand, BigDecimal.ZERO);
+        Arrays.fill(dayFulfilled, BigDecimal.ZERO);
+        Arrays.fill(dayCost, BigDecimal.ZERO);
+
+        for (int day = 0; day < days; day++) {
+            receive(arrivals, day, stock);
+            for (SkuPlan plan : plans) {
+                BigDecimal averageDemand = average(plan.forecast)
                         .multiply(params.getDemandMultiplier())
                         .max(BigDecimal.ZERO);
-                BigDecimal demand = channelDemand(params, channelShare,
-                        forecastValues.get(day))
+                BigDecimal demand = channelDemand(params, plan.channelShare,
+                        plan.forecast.get(day))
                         .multiply(params.getDemandMultiplier())
                         .max(BigDecimal.ZERO);
                 BigDecimal fulfilled = BigDecimal.ZERO;
@@ -102,17 +116,17 @@ public class SandboxEngine {
                         new LinkedHashMap<>();
 
                 for (Map.Entry<String, BigDecimal> region
-                        : regionShare.entrySet()) {
+                        : plan.regionShare.entrySet()) {
                     BigDecimal regionalDemand = demand.multiply(region.getValue());
-                    String warehouse = chooseWarehouse(params, sku,
+                    String warehouse = chooseWarehouse(params, plan.sku,
                             region.getKey(), regionalDemand, stock);
                     BigDecimal available = stock.getOrDefault(
-                            key(warehouse, sku), BigDecimal.ZERO);
+                            key(warehouse, plan.sku), BigDecimal.ZERO);
                     BigDecimal regionalFulfilled = available.min(
                             regionalDemand).max(BigDecimal.ZERO);
                     BigDecimal regionalStockout = regionalDemand.subtract(
                             regionalFulfilled).max(BigDecimal.ZERO);
-                    stock.put(key(warehouse, sku),
+                    stock.put(key(warehouse, plan.sku),
                             available.subtract(regionalFulfilled));
                     fulfilled = fulfilled.add(regionalFulfilled);
                     stockout = stockout.add(regionalStockout);
@@ -139,11 +153,11 @@ public class SandboxEngine {
                 }
 
                 spendOps(cash, dayFreight.add(dayHandling).add(dayPackaging));
-                scheduleReplenishment(params, sku, averageDemand, day,
+                scheduleReplenishment(params, plan.sku, averageDemand, day,
                         stock, arrivals, cash);
                 BigDecimal penalty = stockout.multiply(
                         params.getStockoutPenaltyPerUnit());
-                BigDecimal storage = storageCost(params, sku, stock);
+                BigDecimal storage = storageCost(params, plan.sku, stock);
                 BigDecimal dailyCost = dayFreight.add(dayHandling)
                         .add(dayPackaging).add(storage).add(penalty);
                 add(result.getCostByType(), "FREIGHT", dayFreight);
@@ -156,8 +170,9 @@ public class SandboxEngine {
                     add(result.getCostByWarehouse(), row.getKey(),
                             row.getValue());
                 }
-                result.getDailySeries().add(day(day, demand, fulfilled,
-                        dailyCost));
+                dayDemand[day] = dayDemand[day].add(demand);
+                dayFulfilled[day] = dayFulfilled[day].add(fulfilled);
+                dayCost[day] = dayCost[day].add(dailyCost);
 
                 if (dayLeadCount > 0) {
                     totalLead = totalLead.add(dayLead.divide(
@@ -165,22 +180,26 @@ public class SandboxEngine {
                             RoundingMode.HALF_UP));
                     leadCount++;
                 }
-                skuDemand = skuDemand.add(demand);
-                skuFulfilled = skuFulfilled.add(fulfilled);
-                skuStockout = skuStockout.add(stockout);
+                plan.demand = plan.demand.add(demand);
+                plan.fulfilled = plan.fulfilled.add(fulfilled);
+                plan.stockout = plan.stockout.add(stockout);
                 totalDemand = totalDemand.add(demand);
                 totalFulfilled = totalFulfilled.add(fulfilled);
                 totalStockout = totalStockout.add(stockout);
             }
-
-            Map<String, Object> summary = new LinkedHashMap<>();
-            summary.put("sku", sku);
-            summary.put("demand", round(skuDemand, 2));
-            summary.put("fulfilled", round(skuFulfilled, 2));
-            summary.put("stockout", round(skuStockout, 2));
-            result.getPerSkuSummary().add(summary);
         }
 
+        for (int day = 0; day < days; day++) {
+            result.getDailySeries().add(day(day, dayDemand[day],
+                    dayFulfilled[day], dayCost[day]));
+        }
+        fillSkuSummary(result, plans);
+
+        result.setSkuCount(plans.size());
+        result.setInventoryUnits(round(sum(stockAfterInit(params, baseline)), 2));
+        BigDecimal unit = params.getPurchaseCostPerUnit() == null
+                ? BigDecimal.valueOf(50) : params.getPurchaseCostPerUnit();
+        result.setInventoryValue(round(result.getInventoryUnits().multiply(unit), 2));
         result.setStockoutUnits(round(totalStockout, 2));
         result.setTotalCost(round(sum(result.getCostByType()), 2));
         result.setServiceLevel(totalDemand.signum() == 0
@@ -196,6 +215,37 @@ public class SandboxEngine {
         roundMap(result.getCostByCarrier(), 2);
         finishCapital(result, params, cash);
         return result;
+    }
+
+    private Map<String, BigDecimal> stockAfterInit(
+            ScenarioParams params, BaselineData baseline) {
+        return initialStock(params, baseline);
+    }
+
+    private void fillSkuSummary(Result result, List<SkuPlan> plans) {
+        List<SkuPlan> ranked = new ArrayList<SkuPlan>(plans);
+        ranked.sort((left, right) -> right.stockout.compareTo(left.stockout));
+        int limit = Math.min(CapitalTiers.MAX_SKU_SUMMARY, ranked.size());
+        for (int i = 0; i < limit; i++) {
+            SkuPlan plan = ranked.get(i);
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("sku", plan.sku);
+            summary.put("demand", round(plan.demand, 2));
+            summary.put("fulfilled", round(plan.fulfilled, 2));
+            summary.put("stockout", round(plan.stockout, 2));
+            result.getPerSkuSummary().add(summary);
+        }
+        result.setSkuSummaryTruncated(plans.size() > limit);
+    }
+
+    private static final class SkuPlan {
+        private String sku;
+        private List<BigDecimal> forecast;
+        private Map<String, BigDecimal> channelShare;
+        private Map<String, BigDecimal> regionShare;
+        private BigDecimal demand = BigDecimal.ZERO;
+        private BigDecimal fulfilled = BigDecimal.ZERO;
+        private BigDecimal stockout = BigDecimal.ZERO;
     }
 
     private BigDecimal channelDemand(

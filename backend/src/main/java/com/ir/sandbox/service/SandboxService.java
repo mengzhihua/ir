@@ -11,7 +11,9 @@ import com.ir.common.CodeGenerator;
 import com.ir.common.WarehouseCodes;
 import com.ir.sandbox.engine.BalanceScorer;
 import com.ir.sandbox.engine.BaselineData;
+import com.ir.sandbox.engine.CapitalTiers;
 import com.ir.sandbox.engine.SandboxEngine;
+import com.ir.sandbox.engine.ScaleCatalog;
 import com.ir.sandbox.engine.ScenarioParams;
 import com.ir.sandbox.engine.ServiceFirstPicker;
 import com.ir.sandbox.entity.CtScenario;
@@ -295,20 +297,44 @@ public class SandboxService {
     }
 
     public Map<String, Object> analyzeCapital(BigDecimal amount) {
-        BigDecimal capital = amount == null || amount.signum() <= 0
-                ? new BigDecimal("100000000") : amount;
-        BaselineData data = baselineData();
+        return analyzeCapital(amount, null, null);
+    }
+
+    public Map<String, Object> analyzeCapital(
+            BigDecimal amount, Integer skuCount, BigDecimal inventoryQty) {
+        return analyzeCapital(amount, skuCount, inventoryQty, true);
+    }
+
+    public Map<String, Object> analyzeCapital(
+            BigDecimal amount, Integer skuCount, BigDecimal inventoryQty, boolean detailed) {
+        BigDecimal capital = CapitalTiers.clampAmount(amount);
+        BaselineData data = catalog(skuCount, inventoryQty);
+        boolean large = data.getDemandBySku().size() > 200;
         SandboxEngine.Result normal = runCapital(data, capital, BigDecimal.ONE);
         SandboxEngine.Result stress = runCapital(data, capital, BigDecimal.valueOf(2));
         SandboxEngine.Result surge = runCapital(data, capital, BigDecimal.valueOf(5));
-        BigDecimal minReliable = minReliableCapital(data, capital);
-        int maxMultiplier = maxReliableMultiplier(data, capital);
+        BigDecimal minReliable;
+        int maxMultiplier;
+        if (detailed && !large) {
+            minReliable = minReliableCapital(data, capital);
+            maxMultiplier = maxReliableMultiplier(data, capital);
+        } else {
+            minReliable = "RELIABLE".equals(normal.getCapitalVerdict())
+                    ? nz(normal.getCashUsed()).max(BigDecimal.ONE) : capital;
+            maxMultiplier = "RELIABLE".equals(surge.getCapitalVerdict())
+                    ? 5
+                    : "RELIABLE".equals(stress.getCapitalVerdict()) ? 2 : 1;
+        }
         BigDecimal used = nz(normal.getCashUsed());
         BigDecimal headroom = used.signum() == 0
                 ? BigDecimal.ZERO
                 : capital.divide(used, 2, RoundingMode.HALF_UP);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("workingCapital", capital);
+        result.put("label", CapitalTiers.labelOf(capital));
+        result.put("skuCount", normal.getSkuCount());
+        result.put("inventoryUnits", normal.getInventoryUnits());
+        result.put("inventoryValue", normal.getInventoryValue());
         result.put("baseline", capitalView(normal));
         result.put("demand2x", capitalView(stress));
         result.put("demand5x", capitalView(surge));
@@ -328,6 +354,93 @@ public class SandboxService {
         return result;
     }
 
+    public Map<String, Object> sweepCapital(
+            List<BigDecimal> extraAmounts, Integer skuCount, BigDecimal inventoryQty) {
+        List<BigDecimal> amounts = new ArrayList<BigDecimal>(CapitalTiers.amounts());
+        if (extraAmounts != null) {
+            for (BigDecimal extra : extraAmounts) {
+                if (extra == null || extra.signum() <= 0) {
+                    continue;
+                }
+                BigDecimal clamped = CapitalTiers.clampAmount(extra);
+                if (!containsAmount(amounts, clamped)) {
+                    amounts.add(clamped);
+                }
+            }
+        }
+        amounts.sort(BigDecimal::compareTo);
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+        List<String> issues = new ArrayList<String>();
+        boolean flowOk = true;
+        String previousVerdict = null;
+        BigDecimal previousAmount = null;
+        for (BigDecimal amount : amounts) {
+            long started = System.currentTimeMillis();
+            Map<String, Object> row = new LinkedHashMap<String, Object>();
+            row.put("workingCapital", amount);
+            row.put("label", CapitalTiers.labelOf(amount));
+            try {
+                Map<String, Object> analysis = analyzeCapital(amount, skuCount, inventoryQty, false);
+                row.put("verdict", analysis.get("verdict"));
+                row.put("reliable", analysis.get("reliable"));
+                row.put("reason", analysis.get("reason"));
+                row.put("cashUsed", nested(analysis, "baseline", "cashUsed"));
+                row.put("serviceLevel", nested(analysis, "baseline", "serviceLevel"));
+                row.put("stockoutUnits", nested(analysis, "baseline", "stockoutUnits"));
+                row.put("capitalUtilization", nested(analysis, "baseline", "capitalUtilization"));
+                row.put("headroom", analysis.get("headroom"));
+                row.put("minReliableCapital", analysis.get("minReliableCapital"));
+                row.put("skuCount", analysis.get("skuCount"));
+                row.put("inventoryUnits", analysis.get("inventoryUnits"));
+                row.put("inventoryValue", analysis.get("inventoryValue"));
+                row.put("recommendedName", nested(analysis, "recommended", "name"));
+                row.put("recommendedLead", nested(analysis, "recommended", "replenishLeadDays"));
+                row.put("elapsedMs", System.currentTimeMillis() - started);
+                List<String> local = validateTier(analysis, amount);
+                row.put("issues", local);
+                if (!local.isEmpty()) {
+                    flowOk = false;
+                    issues.addAll(local);
+                }
+                String verdict = String.valueOf(analysis.get("verdict"));
+                if (previousVerdict != null
+                        && "RELIABLE".equals(previousVerdict)
+                        && !"RELIABLE".equals(verdict)
+                        && previousAmount.compareTo(amount) < 0) {
+                    String msg = CapitalTiers.labelOf(previousAmount)
+                            + " 可靠但更大的 "
+                            + CapitalTiers.labelOf(amount)
+                            + " 反而不可靠";
+                    flowOk = false;
+                    issues.add(msg);
+                    @SuppressWarnings("unchecked")
+                    List<String> rowIssues = (List<String>) row.get("issues");
+                    rowIssues.add(msg);
+                }
+                previousVerdict = verdict;
+                previousAmount = amount;
+            } catch (RuntimeException ex) {
+                flowOk = false;
+                String msg = CapitalTiers.labelOf(amount) + " 推演失败: " + ex.getMessage();
+                issues.add(msg);
+                row.put("verdict", "ERROR");
+                row.put("reliable", false);
+                row.put("issues", Collections.singletonList(msg));
+                row.put("elapsedMs", System.currentTimeMillis() - started);
+            }
+            rows.add(row);
+        }
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
+        result.put("tiers", CapitalTiers.presets());
+        result.put("rows", rows);
+        result.put("issues", issues);
+        result.put("flowOk", flowOk);
+        result.put("skuCount", skuCount == null || skuCount <= 0
+                ? snapshotSkuCount() : CapitalTiers.clampSku(skuCount));
+        result.put("inventoryQty", inventoryQty == null ? null : CapitalTiers.clampQty(inventoryQty));
+        return result;
+    }
+
     public CtScenario adoptRecommended(BigDecimal amount) {
         ensureBaseline();
         Map<String, Object> analysis = analyzeCapital(amount);
@@ -336,8 +449,7 @@ public class SandboxService {
         if (recommended == null || recommended.get("name") == null) {
             throw new IllegalStateException("没有可采纳的资金盘策略");
         }
-        BigDecimal capital = amount == null || amount.signum() <= 0
-                ? new BigDecimal("100000000") : amount;
+        BigDecimal capital = CapitalTiers.clampAmount(amount);
         @SuppressWarnings("unchecked")
         Map<String, BigDecimal> mix = recommended.get("carrierMix") instanceof Map
                 ? (Map<String, BigDecimal>) recommended.get("carrierMix")
@@ -350,7 +462,8 @@ public class SandboxService {
                 BigDecimal.ONE,
                 mix);
         policy.updateReplenish(params.getSafetyDays(), params.getReplenishLeadDays());
-        return persist("资金盘推荐·" + recommended.get("name"), params, false, "MANUAL", null, false, null);
+        return persist("资金盘推荐·" + recommended.get("name")
+                + "·" + CapitalTiers.labelOf(capital), params, false, "MANUAL", null, false, null);
     }
 
     public Map<String, Object> resultOf(CtScenario scenario) {
@@ -719,7 +832,60 @@ public class SandboxService {
         row.put("capitalFeasible", result.getCapitalFeasible());
         row.put("capitalVerdict", result.getCapitalVerdict());
         row.put("capitalReason", result.getCapitalReason());
+        row.put("skuCount", result.getSkuCount());
+        row.put("inventoryUnits", result.getInventoryUnits());
+        row.put("inventoryValue", result.getInventoryValue());
         return row;
+    }
+
+    private BaselineData catalog(Integer skuCount, BigDecimal inventoryQty) {
+        if (skuCount == null || skuCount <= 0) {
+            return baselineData();
+        }
+        return ScaleCatalog.build(skuCount, inventoryQty);
+    }
+
+    private int snapshotSkuCount() {
+        return baselineData().getDemandBySku().size();
+    }
+
+    private Object nested(Map<String, Object> root, String a, String b) {
+        Object layer = root.get(a);
+        if (!(layer instanceof Map)) {
+            return null;
+        }
+        return ((Map<?, ?>) layer).get(b);
+    }
+
+    private List<String> validateTier(Map<String, Object> analysis, BigDecimal amount) {
+        List<String> issues = new ArrayList<String>();
+        String label = CapitalTiers.labelOf(amount);
+        if (analysis.get("verdict") == null) {
+            issues.add(label + " 没有资金结论");
+        }
+        BigDecimal cash = decimal(nested(analysis, "baseline", "cashUsed"));
+        BigDecimal service = decimal(nested(analysis, "baseline", "serviceLevel"));
+        BigDecimal stockout = decimal(nested(analysis, "baseline", "stockoutUnits"));
+        BigDecimal util = decimal(nested(analysis, "baseline", "capitalUtilization"));
+        if (cash.signum() < 0) {
+            issues.add(label + " 占用现金为负");
+        }
+        if (stockout.signum() < 0) {
+            issues.add(label + " 缺货件数为负");
+        }
+        if (service.signum() < 0 || service.compareTo(BigDecimal.ONE) > 0) {
+            issues.add(label + " 服务水平越界: " + service);
+        }
+        if (util.signum() < 0) {
+            issues.add(label + " 资金占用率为负");
+        }
+        if (Boolean.TRUE.equals(analysis.get("reliable")) && util.compareTo(BigDecimal.ONE) > 0) {
+            issues.add(label + " 标为可靠但占用超过资金盘");
+        }
+        if (nested(analysis, "recommended", "name") == null) {
+            issues.add(label + " 没有推荐策略");
+        }
+        return issues;
     }
 
     private String overallVerdict(SandboxEngine.Result normal, SandboxEngine.Result stress) {
@@ -733,14 +899,19 @@ public class SandboxService {
     }
 
     private List<Map<String, Object>> playbook(BaselineData data, BigDecimal capital) {
+        int n = data.getDemandBySku().size();
         List<Map<String, Object>> rows = new ArrayList<>();
         rows.add(play(data, capital, "就近默认", capitalParams(capital, "NEAREST", 3, 3, BigDecimal.ONE, null)));
         rows.add(play(data, capital, "短交期补货", capitalParams(capital, "BALANCED", 3, 1, BigDecimal.ONE, null)));
         rows.add(play(data, capital, "低安全短交期", capitalParams(capital, "BALANCED", 1, 1, BigDecimal.ONE, null)));
-        rows.add(play(data, capital, "低安全库存", capitalParams(capital, "BALANCED", 1, 3, BigDecimal.ONE, null)));
-        rows.add(play(data, capital, "经济承运", capitalParams(capital, "LOWEST_COST", 3, 4, BigDecimal.ONE, economicMix())));
-        rows.add(play(data, capital, "低安全短交期·5倍需求",
-                capitalParams(capital, "BALANCED", 1, 1, BigDecimal.valueOf(5), null)));
+        if (n < 5000) {
+            rows.add(play(data, capital, "低安全库存", capitalParams(capital, "BALANCED", 1, 3, BigDecimal.ONE, null)));
+            rows.add(play(data, capital, "经济承运", capitalParams(capital, "LOWEST_COST", 3, 4, BigDecimal.ONE, economicMix())));
+        }
+        if (n < 1000) {
+            rows.add(play(data, capital, "低安全短交期·5倍需求",
+                    capitalParams(capital, "BALANCED", 1, 1, BigDecimal.valueOf(5), null)));
+        }
         return rows;
     }
 
@@ -749,6 +920,7 @@ public class SandboxService {
             BigDecimal capital,
             String name,
             ScenarioParams params) {
+        params.setHorizonDays(capitalHorizon(data));
         SandboxEngine.Result result = engine.run(params, data);
         Map<String, Object> row = capitalView(result);
         row.put("name", name);
@@ -814,10 +986,33 @@ public class SandboxService {
     private SandboxEngine.Result runCapital(
             BaselineData data, BigDecimal capital, BigDecimal multiplier) {
         ScenarioParams params = new ScenarioParams();
-        params.setHorizonDays(30);
+        params.setHorizonDays(capitalHorizon(data));
         params.setWorkingCapital(capital);
         params.setDemandMultiplier(multiplier);
         return engine.run(params, data);
+    }
+
+    private int capitalHorizon(BaselineData data) {
+        int n = data == null || data.getDemandBySku() == null ? 0 : data.getDemandBySku().size();
+        if (n >= 10000) {
+            return 3;
+        }
+        if (n >= 1000) {
+            return 7;
+        }
+        if (n >= 200) {
+            return 14;
+        }
+        return 30;
+    }
+
+    private boolean containsAmount(List<BigDecimal> amounts, BigDecimal extra) {
+        for (BigDecimal amount : amounts) {
+            if (amount.compareTo(extra) == 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private BigDecimal minReliableCapital(BaselineData data, BigDecimal capital) {
@@ -904,7 +1099,7 @@ public class SandboxService {
             }
         }
         if (headroom.compareTo(BigDecimal.valueOf(20)) >= 0) {
-            rows.add("1 亿相对当前 30 天现金需求过大，约 "
+            rows.add(CapitalTiers.labelOf(capital) + " 相对当前履约现金需求过大，约 "
                     + minReliable.toPlainString()
                     + " 即可覆盖常态和 2 倍需求并保持可靠。");
         }

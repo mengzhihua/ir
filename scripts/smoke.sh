@@ -37,7 +37,9 @@ SCENARIO_NAME="2倍需求-$(date +%H%M%S)"
 SCENARIO="$(json -X POST "$BASE/api/sandbox/scenario" -H 'Content-Type: application/json' -d "{\"name\":\"$SCENARIO_NAME\",\"params\":{\"demandMultiplier\":2,\"allocationStrategy\":\"SINGLE_WAREHOUSE\",\"singleWarehouse\":\"WH-SH\"}}" | jq -r '.data.id')"
 json -X POST "$BASE/api/sandbox/scenario/$SCENARIO/run" | jq -e '.code==0' >/dev/null
 json "$BASE/api/sandbox/compare?ids=$BASELINE,$SCENARIO" | jq -e '.code==0 and (.data|length)>=2' >/dev/null
+json "$BASE/api/sandbox/capital/tiers" | jq -e '.code==0 and (.data.presets|length)==5 and .data.maxSku==100000 and (.data.presets[0].label|test("10")) and (.data.presets[4].label|test("十亿"))' >/dev/null
 json -X POST "$BASE/api/sandbox/capital" -H 'Content-Type: application/json' -d '{"workingCapital":100000000}' | jq -e '.code==0 and .data.verdict=="RELIABLE" and .data.reliable==true and .data.baseline.capitalVerdict=="RELIABLE" and .data.demand5x.capitalVerdict=="RELIABLE" and (.data.headroom|tonumber)>20 and (.data.optimizations|length)>0 and (.data.recommended.name|test("短交期")) and .data.recommended.replenishLeadDays==1 and (.data.recommended.serviceLevel|tonumber)>=0.995' >/dev/null
+json -X POST "$BASE/api/sandbox/capital/sweep" -H 'Content-Type: application/json' -d '{"customAmount":500000}' | jq -e '.code==0 and .data.flowOk==true and (.data.rows|length)==6 and ([.data.rows[].issues[]?]|length)==0' >/dev/null
 json -X POST "$BASE/api/sandbox/capital/adopt" -H 'Content-Type: application/json' -d '{"workingCapital":100000000}' | jq -e '.code==0 and (.data.name|test("短交期")) and .data.kind=="MANUAL" and .data.id!=null' >/dev/null
 AUTO="$(json -X POST "$BASE/api/sandbox/auto/run" | jq -r '.data.recommended.id')"
 test -n "$AUTO" && test "$AUTO" != "null"

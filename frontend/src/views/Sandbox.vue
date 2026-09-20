@@ -3,10 +3,10 @@
     <div class="page-title">
       <div>
         <h2>人工沙盘</h2>
-        <p class="subtitle">手工设定需求、仓配和承运策略，评估成本与效率后再下发协同指令</p>
+        <p class="subtitle">手工设定需求、仓配、承运和资金盘金额，评估成本与效率后再下发协同指令</p>
       </div>
       <div>
-        <el-button v-if="canWrite()" @click="analyzeCapital">推演 1 亿资金盘</el-button>
+        <el-button v-if="canWrite()" @click="openCapital">资金盘推演</el-button>
         <el-button v-if="canWrite()" type="primary" @click="openCreate">创建场景</el-button>
       </div>
     </div>
@@ -150,6 +150,7 @@
             }}</template></el-table-column
           ></el-table
         ><el-empty v-else description="选择一个场景查看结果" />
+        <p v-if="selected?.skuSummaryTruncated" class="muted">仅展示缺货最多的 50 个 SKU</p>
       </div>
     </div>
     <el-dialog v-model="visible" title="创建沙盘场景" width="760px"
@@ -193,10 +194,21 @@
         ><el-form-item label="补货提前期"
           ><el-input-number v-model="form.params.replenishLeadDays" :min="0" /></el-form-item
         ><el-form-item label="资金盘"
-          ><el-input-number
+          ><div class="tier-row">
+            <el-button
+              v-for="tier in capitalTiers"
+              :key="tier.code"
+              size="small"
+              :type="Number(form.params.workingCapital) === Number(tier.amount) ? 'primary' : ''"
+              @click="form.params.workingCapital = Number(tier.amount)"
+              >{{ tier.label }}</el-button
+            >
+          </div>
+          <el-input-number
             v-model="form.params.workingCapital"
-            :min="0"
-            :step="1000000" /></el-form-item
+            :min="1"
+            :step="100000"
+            :max="100000000000" /></el-form-item
         ><el-divider content-position="left">承运</el-divider
         ><el-form-item label="承运商比例"
           ><el-table :data="carrierRows" size="small"
@@ -217,7 +229,29 @@
         ><el-button type="primary" :loading="saving" @click="save">创建场景</el-button></template
       ></el-dialog
     >
-    <el-dialog v-model="capitalDialog" title="1 亿资金盘推演" width="860px">
+    <el-dialog v-model="capitalDialog" title="资金盘量级推演" width="920px">
+      <div class="tier-row">
+        <el-button
+          v-for="tier in capitalTiers"
+          :key="tier.code"
+          :type="Number(capitalAmount) === Number(tier.amount) ? 'primary' : ''"
+          @click="capitalAmount = Number(tier.amount)"
+          >{{ tier.label }}</el-button
+        >
+      </div>
+      <el-form label-width="120px" class="capital-form">
+        <el-form-item label="自定义金额">
+          <el-input-number v-model="capitalAmount" :min="1" :step="100000" :max="100000000000" />
+        </el-form-item>
+        <el-form-item label="SKU 个数">
+          <el-input-number v-model="scaleSkuCount" :min="0" :max="100000" :step="100" />
+          <span class="muted"> 0 表示用当前快照；上限 10 万</span>
+        </el-form-item>
+        <el-form-item label="单 SKU 库存">
+          <el-input-number v-model="scaleInventoryQty" :min="0" :max="10000000" :step="1000" />
+          <span class="muted"> 上限 1000 万</span>
+        </el-form-item>
+      </el-form>
       <div v-if="capitalResult">
         <p>{{ capitalResult.reason }}</p>
         <p v-if="capitalResult.recommended" class="subtitle">
@@ -235,6 +269,14 @@
           <div class="stat">
             <div class="label">资金盘</div>
             <div class="value">{{ formatMoney(capitalResult.workingCapital) }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">档位</div>
+            <div class="value">{{ capitalResult.label || '-' }}</div>
+          </div>
+          <div class="stat">
+            <div class="label">SKU / 库存</div>
+            <div class="value">{{ capitalResult.skuCount ?? '-' }} / {{ formatNumber(capitalResult.inventoryUnits, 0) }}</div>
           </div>
           <div class="stat">
             <div class="label">安全垫</div>
@@ -292,8 +334,40 @@
           <li v-for="item in capitalResult.optimizations" :key="item">{{ item }}</li>
         </ul>
       </div>
+      <div v-if="sweepResult" class="sweep-block">
+        <h4>
+          量级扫描
+          <el-tag :type="sweepResult.flowOk ? 'success' : 'danger'" size="small">
+            {{ sweepResult.flowOk ? '全流程通过' : '发现问题' }}
+          </el-tag>
+        </h4>
+        <el-table :data="sweepResult.rows || []" size="small">
+          <el-table-column prop="label" label="档位" width="90" />
+          <el-table-column label="金额">
+            <template #default="{ row }">{{ formatMoney(row.workingCapital) }}</template>
+          </el-table-column>
+          <el-table-column label="结论" width="90">
+            <template #default="{ row }">
+              {{ labelOf(row.verdict, capitalVerdictLabels) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="占用现金">
+            <template #default="{ row }">{{ formatMoney(row.cashUsed) }}</template>
+          </el-table-column>
+          <el-table-column label="服务水平">
+            <template #default="{ row }">{{ percent(row.serviceLevel) }}</template>
+          </el-table-column>
+          <el-table-column prop="recommendedName" label="推荐策略" min-width="140" />
+          <el-table-column label="问题">
+            <template #default="{ row }">{{ (row.issues || []).join('；') || '无' }}</template>
+          </el-table-column>
+        </el-table>
+        <p v-if="sweepResult.issues?.length" class="danger">{{ sweepResult.issues.join('；') }}</p>
+      </div>
       <template #footer>
         <el-button @click="capitalDialog = false">关闭</el-button>
+        <el-button :loading="capitalLoading" @click="analyzeCapital">推演当前金额</el-button>
+        <el-button type="warning" :loading="sweeping" @click="sweepCapital">自动跑完所有档位</el-button>
         <el-button
           v-if="canWrite() && capitalResult?.recommended"
           type="primary"
@@ -344,8 +418,22 @@ const loading = ref(false)
 const saving = ref(false)
 const visible = ref(false)
 const actionDialog = ref(false)
+const FALLBACK_TIERS = [
+  { code: '100K', label: '10 万', amount: 100000 },
+  { code: '1M', label: '百万', amount: 1000000 },
+  { code: '10M', label: '千万', amount: 10000000 },
+  { code: '100M', label: '亿', amount: 100000000 },
+  { code: '1B', label: '十亿', amount: 1000000000 }
+]
 const capitalDialog = ref(false)
 const capitalResult = ref(null)
+const capitalTiers = ref(FALLBACK_TIERS)
+const capitalAmount = ref(100000000)
+const scaleSkuCount = ref(0)
+const scaleInventoryQty = ref(1000)
+const sweepResult = ref(null)
+const sweeping = ref(false)
+const capitalLoading = ref(false)
 const adopting = ref(false)
 const pendingActions = ref([])
 const formRef = ref()
@@ -472,17 +560,67 @@ async function openCreate() {
 function playbookRowClass({ row }) {
   return row.recommended ? 'is-recommended' : ''
 }
-async function analyzeCapital() {
-  capitalResult.value = await sandboxApi.capital({ workingCapital: 100000000 })
+function scalePayload(extra = {}) {
+  const payload = { workingCapital: capitalAmount.value, ...extra }
+  if (Number(scaleSkuCount.value) > 0) {
+    payload.skuCount = Number(scaleSkuCount.value)
+  }
+  if (Number(scaleInventoryQty.value) > 0) {
+    payload.inventoryQty = Number(scaleInventoryQty.value)
+  }
+  return payload
+}
+async function loadTiers() {
+  try {
+    const data = await sandboxApi.capitalTiers()
+    const presets = data?.presets || data
+    if (Array.isArray(presets) && presets.length) {
+      capitalTiers.value = presets
+    }
+  } catch (error) {
+    capitalTiers.value = FALLBACK_TIERS
+  }
+}
+async function openCapital() {
   capitalDialog.value = true
-  ElMessage.success(
-    capitalResult.value?.reliable ? '1 亿资金盘推演完成，结论可靠' : '1 亿资金盘推演完成，需要关注资金压力'
-  )
+  await loadTiers()
+}
+async function analyzeCapital() {
+  capitalLoading.value = true
+  try {
+    capitalResult.value = await sandboxApi.capital(scalePayload())
+    const label = capitalResult.value?.label || ''
+    ElMessage.success(
+      capitalResult.value?.reliable
+        ? `${label}资金盘推演完成，结论可靠`
+        : `${label}资金盘推演完成，需要关注资金压力`
+    )
+  } finally {
+    capitalLoading.value = false
+  }
+}
+async function sweepCapital() {
+  sweeping.value = true
+  try {
+    const payload = scalePayload()
+    const presetAmounts = new Set(capitalTiers.value.map((tier) => Number(tier.amount)))
+    if (!presetAmounts.has(Number(capitalAmount.value))) {
+      payload.customAmount = capitalAmount.value
+    }
+    sweepResult.value = await sandboxApi.capitalSweep(payload)
+    ElMessage.success(
+      sweepResult.value?.flowOk
+        ? '量级扫描通过，全流程没有发现问题'
+        : '量级扫描完成，存在需要关注的问题'
+    )
+  } finally {
+    sweeping.value = false
+  }
 }
 async function adoptRecommended() {
   adopting.value = true
   try {
-    const scenario = await sandboxApi.adoptCapital({ workingCapital: 100000000 })
+    const scenario = await sandboxApi.adoptCapital({ workingCapital: capitalAmount.value })
     capitalDialog.value = false
     ElMessage.success(`已生成场景「${scenario.name}」`)
     await load()
@@ -506,10 +644,37 @@ async function save() {
     saving.value = false
   }
 }
+loadTiers()
 load()
 </script>
 <style scoped>
 :deep(.is-recommended) td {
   background: var(--el-color-success-light-9);
+}
+.tier-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.capital-form {
+  margin-top: 4px;
+}
+.muted {
+  color: var(--el-text-color-secondary);
+  margin-left: 8px;
+  font-size: 12px;
+}
+.danger {
+  color: var(--el-color-danger);
+}
+.sweep-block {
+  margin-top: 16px;
+}
+.sweep-block h4 {
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

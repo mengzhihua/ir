@@ -46,6 +46,8 @@ class SandboxEngineTest {
         assertTrue(result.getCapitalFeasible());
         assertTrue(result.getCapitalUtilization().compareTo(new BigDecimal("0.10")) < 0);
         assertEquals(0, result.getDeferredPurchaseQty().signum());
+        assertEquals(30, result.getDailySeries().size());
+        assertEquals(1, result.getSkuCount());
     }
 
     @Test void tightCapitalDefersReplenishment(){

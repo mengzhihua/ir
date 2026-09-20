@@ -261,6 +261,35 @@ class FullFlowTest {
         assertEquals(0, capital.path("recommended").path("stockoutUnits").decimalValue().signum());
         assertTrue(capital.path("playbook").size() >= 5);
 
+        JsonNode tiers = get(token, "/api/sandbox/capital/tiers");
+        assertEquals(5, tiers.path("presets").size());
+        assertEquals(100000, tiers.path("maxSku").asInt());
+        assertEquals(0, new BigDecimal("10000000").compareTo(tiers.path("maxQty").decimalValue()));
+        assertEquals("10 万", tiers.path("presets").get(0).path("label").asText());
+        assertEquals("十亿", tiers.path("presets").get(4).path("label").asText());
+
+        JsonNode sweep = post(token, "/api/sandbox/capital/sweep",
+                "{\"customAmount\":500000,\"skuCount\":40,\"inventoryQty\":200}");
+        assertTrue(sweep.path("flowOk").asBoolean(), String.valueOf(sweep.path("issues")));
+        assertEquals(6, sweep.path("rows").size());
+        assertEquals("自定义", sweep.path("rows").get(1).path("label").asText());
+        assertEquals(40, sweep.path("skuCount").asInt());
+        boolean sawReliable = false;
+        for (JsonNode row : sweep.path("rows")) {
+            assertTrue(row.path("issues").isArray());
+            assertEquals(0, row.path("issues").size(), row.path("label").asText() + row.path("issues"));
+            assertTrue(row.path("serviceLevel").decimalValue().signum() >= 0);
+            assertTrue(row.path("serviceLevel").decimalValue().compareTo(BigDecimal.ONE) <= 0);
+            assertTrue(row.path("cashUsed").decimalValue().signum() >= 0);
+            assertTrue(row.path("stockoutUnits").decimalValue().signum() >= 0);
+            assertNotNull(row.path("recommendedName").asText(null));
+            assertFalse(row.path("recommendedName").asText().isEmpty());
+            if (row.path("reliable").asBoolean()) {
+                sawReliable = true;
+            }
+        }
+        assertTrue(sawReliable);
+
         JsonNode adopted = post(token, "/api/sandbox/capital/adopt",
                 "{\"workingCapital\":100000000}");
         assertEquals("MANUAL", adopted.path("kind").asText());
