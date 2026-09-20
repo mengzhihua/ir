@@ -265,14 +265,15 @@ CREATE TABLE IF NOT EXISTS ct_purchase_snapshot (
     amount DECIMAL(18,2),
     expected_date DATE,
     received_at TIMESTAMP,
-    lines_json VARCHAR(4000),
+    lines_json CLOB,
     synced_at TIMESTAMP,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     UNIQUE(doc_type, code)
 );
 ALTER TABLE ct_purchase_snapshot ALTER COLUMN sku SET DATA TYPE VARCHAR(1024);
-ALTER TABLE ct_purchase_snapshot ADD COLUMN IF NOT EXISTS lines_json VARCHAR(4000);
+ALTER TABLE ct_purchase_snapshot ADD COLUMN IF NOT EXISTS lines_json CLOB;
+ALTER TABLE ct_purchase_snapshot ALTER COLUMN lines_json SET DATA TYPE CLOB;
 
 CREATE TABLE IF NOT EXISTS ct_supplier_score (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
