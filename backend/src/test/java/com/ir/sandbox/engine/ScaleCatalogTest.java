@@ -12,6 +12,7 @@ class ScaleCatalogTest {
         assertEquals(80, data.getInventory().size());
         assertEquals(0, new BigDecimal("250").compareTo(data.getInventory().get(0).getQtyAvailable()));
         assertEquals(14, data.getDemandBySku().get("SKU-S00001").size());
+        assertSame(data.getDemandBySku().get("SKU-S00001"), data.getDemandBySku().get("SKU-S00002"));
         assertEquals("WH-SH", data.getSkuWarehouse().get("SKU-S00001"));
         assertEquals("WH-BJ", data.getSkuWarehouse().get("SKU-S00002"));
     }

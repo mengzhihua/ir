@@ -252,12 +252,17 @@
           <span class="muted"> 上限 1000 万</span>
         </el-form-item>
       </el-form>
+      <p v-if="scaleWarning" class="muted">{{ scaleWarning }}</p>
       <div v-if="capitalResult">
         <p>{{ capitalResult.reason }}</p>
         <p v-if="capitalResult.recommended" class="subtitle">
           推荐策略：{{ capitalResult.recommended.name }}（安全
           {{ capitalResult.recommended.safetyDays }} 天 / 补货
           {{ capitalResult.recommended.replenishLeadDays }} 天）
+        </p>
+        <p class="muted" v-if="capitalResult.elapsedMs != null">
+          {{ capitalResult.elapsedMs }}ms · {{ capitalResult.engineRuns || '-' }} 次引擎
+          <el-tag v-if="capitalResult.stressProjected" size="small" type="info">2x/5x 投影</el-tag>
         </p>
         <div class="stats">
           <div class="stat">
@@ -345,6 +350,9 @@
           <el-tag :type="sweepResult.flowOk ? 'success' : 'danger'" size="small">
             {{ sweepResult.flowOk ? '全流程通过' : '发现问题' }}
           </el-tag>
+          <span class="muted" v-if="sweepResult.elapsedMs != null">
+            {{ sweepResult.elapsedMs }}ms · {{ sweepResult.engineRuns || '-' }} 次引擎
+          </span>
         </h4>
         <el-table :data="sweepResult.rows || []" size="small">
           <el-table-column prop="label" label="档位" width="90" />
@@ -363,6 +371,12 @@
             <template #default="{ row }">{{ percent(row.serviceLevel) }}</template>
           </el-table-column>
           <el-table-column prop="recommendedName" label="推荐策略" min-width="140" />
+          <el-table-column label="方式" width="80">
+            <template #default="{ row }">{{ row.projected ? '投影' : '实算' }}</template>
+          </el-table-column>
+          <el-table-column label="耗时" width="80">
+            <template #default="{ row }">{{ row.elapsedMs }}ms</template>
+          </el-table-column>
           <el-table-column label="问题">
             <template #default="{ row }">{{ (row.issues || []).join('；') || '无' }}</template>
           </el-table-column>
@@ -470,11 +484,29 @@ const rules = { name: [{ required: true, message: '请输入场景名称', trigg
 const channelRows = computed(() => channels.map((key) => ({ key })))
 const capitalRows = computed(() => {
   if (!capitalResult.value) return []
+  const days = capitalResult.value.horizonDays || 30
+  const stressTag = capitalResult.value.stressProjected ? '（投影）' : ''
   return [
-    { name: '常态 30 天', ...(capitalResult.value.baseline || {}) },
-    { name: '2 倍需求', ...(capitalResult.value.demand2x || {}) },
-    { name: '5 倍需求', ...(capitalResult.value.demand5x || {}) }
+    { name: `常态 ${days} 天`, ...(capitalResult.value.baseline || {}) },
+    { name: `2 倍需求${stressTag}`, ...(capitalResult.value.demand2x || {}) },
+    { name: `5 倍需求${stressTag}`, ...(capitalResult.value.demand5x || {}) }
   ]
+})
+const scaleWarning = computed(() => {
+  const skus = Number(scaleSkuCount.value) || 0
+  const qty = Number(scaleInventoryQty.value) || 0
+  const capital = Number(capitalAmount.value) || 0
+  const value = skus * qty * 50
+  if (skus >= 10000) {
+    if (capital > 0 && value > capital) {
+      return `按单价 50 估算库存约 ${value.toLocaleString()}，已超过资金盘。过万 SKU 只补已有库存的仓库，并对资金充足档位复用一次全量推演。`
+    }
+    return 'SKU 过万时只补已有库存的仓库，2x/5x 在余量足够时投影，并对资金充足的档位复用无约束推演。'
+  }
+  if (skus > 0 && capital > 0 && value > capital) {
+    return `按单价 50 估算库存约 ${value.toLocaleString()}，已超过当前资金盘，该档位可能不足。`
+  }
+  return ''
 })
 const carrierRows = computed(() => carriers.map((key) => ({ key })))
 const typeOption = computed(() => ({

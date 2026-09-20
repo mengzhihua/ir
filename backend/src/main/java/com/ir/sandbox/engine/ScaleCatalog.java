@@ -2,11 +2,11 @@ package com.ir.sandbox.engine;
 
 import com.ir.snapshot.entity.InventorySnapshot;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 大规模沙盘目录：最多 10 万 SKU、单 SKU 库存最多 1000 万。
@@ -24,6 +24,10 @@ public final class ScaleCatalog {
         BigDecimal qty = CapitalTiers.clampQty(qtyPerSku == null
                 ? BigDecimal.valueOf(1000) : qtyPerSku);
         BaselineData data = new BaselineData();
+        BigDecimal daily = qty.divide(BigDecimal.valueOf(200), 2, java.math.RoundingMode.HALF_UP)
+                .max(BigDecimal.ONE);
+        List<BigDecimal> history = Collections.nCopies(14, daily);
+        Map<String, BigDecimal> sharedChannel = Collections.singletonMap("ALL", BigDecimal.ONE);
         for (int i = 0; i < skus; i++) {
             String sku = skuCode(i);
             String warehouse = WAREHOUSES.get(i % WAREHOUSES.size());
@@ -34,15 +38,9 @@ public final class ScaleCatalog {
             item.setQtyAvailable(qty);
             item.setQtyOnHand(qty);
             data.getInventory().add(item);
-            List<BigDecimal> history = new ArrayList<BigDecimal>();
-            BigDecimal daily = qty.divide(BigDecimal.valueOf(200), 2, java.math.RoundingMode.HALF_UP)
-                    .max(BigDecimal.ONE);
-            for (int day = 0; day < 14; day++) {
-                history.add(daily);
-            }
             data.getDemandBySku().put(sku, history);
             data.getSkuWarehouse().put(sku, warehouse);
-            data.getChannelShare().put(sku, Collections.singletonMap("ALL", BigDecimal.ONE));
+            data.getChannelShare().put(sku, sharedChannel);
             data.getRegionShare().put(sku, Collections.singletonMap(region, BigDecimal.ONE));
         }
         data.getRegionShare().put("*", new LinkedHashMap<String, BigDecimal>(

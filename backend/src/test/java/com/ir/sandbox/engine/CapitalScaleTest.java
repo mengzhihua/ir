@@ -90,6 +90,29 @@ class CapitalScaleTest {
         assertTrue(result.getServiceLevel().signum() >= 0);
         assertTrue(result.getServiceLevel().compareTo(BigDecimal.ONE) <= 0);
         assertTrue(result.getPerSkuSummary().size() <= CapitalTiers.MAX_SKU_SUMMARY);
-        assertTrue(System.currentTimeMillis() - started < 60_000);
+        assertTrue(System.currentTimeMillis() - started < 20_000);
+        assertTrue(result.getElapsedMs() > 0);
+        assertTrue(result.getElapsedMs() < 20_000);
+    }
+
+    @Test
+    void doesNotSpendCashStockingEmptyWarehouses() {
+        BaselineData data = new BaselineData();
+        com.ir.snapshot.entity.InventorySnapshot item = new com.ir.snapshot.entity.InventorySnapshot();
+        item.setWarehouseCode("WH-SH");
+        item.setSku("SKU001");
+        item.setQtyAvailable(new BigDecimal("1000"));
+        data.getInventory().add(item);
+        data.getDemandBySku().put("SKU001", java.util.Collections.nCopies(7, BigDecimal.TEN));
+        data.getSkuWarehouse().put("SKU001", "WH-SH");
+        ScenarioParams params = new ScenarioParams();
+        params.setHorizonDays(7);
+        params.setWorkingCapital(new BigDecimal("4000"));
+        params.setSafetyDays(3);
+        params.setPurchaseCostPerUnit(new BigDecimal("50"));
+        SandboxEngine.Result result = new SandboxEngine().run(params, data);
+        assertEquals("RELIABLE", result.getCapitalVerdict(),
+                "只补主仓时 4000 资金应盖住运费，不应再给空仓铺货");
+        assertEquals(0, result.getDeferredPurchaseQty().signum());
     }
 }
