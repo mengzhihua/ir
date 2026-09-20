@@ -8,6 +8,7 @@ import com.ir.action.entity.CtAction;
 import com.ir.action.service.ActionService;
 import com.ir.common.CarrierCodes;
 import com.ir.common.CodeGenerator;
+import com.ir.common.WarehouseCodes;
 import com.ir.sandbox.engine.BalanceScorer;
 import com.ir.sandbox.engine.BaselineData;
 import com.ir.sandbox.engine.SandboxEngine;
@@ -216,54 +217,60 @@ public class SandboxService {
 
         Map<String, Object> scenarioResult = result(scenario);
         Object summaries = scenarioResult.get("perSkuSummary");
-        int purchases = 0;
-        Set<String> queuedSku = new HashSet<>();
+        Set<String> stockoutSku = new HashSet<>();
         if (summaries instanceof List) {
             for (Object row : (List<?>) summaries) {
-                if (purchases >= 8) {
-                    break;
-                }
                 if (!(row instanceof Map)) {
                     continue;
                 }
                 Map<?, ?> summary = (Map<?, ?>) row;
-                BigDecimal stockout = decimal(summary.get("stockout"));
-                if (stockout.signum() <= 0) {
-                    continue;
+                if (decimal(summary.get("stockout")).signum() > 0) {
+                    stockoutSku.add(String.valueOf(summary.get("sku")));
                 }
-                String sku = String.valueOf(summary.get("sku"));
-                queuedSku.add(sku);
-                jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
-                        map("sku", sku, "qty", stockout, "suggestQty", stockout,
-                                "replenishLeadDays", params.getReplenishLeadDays()),
-                        null));
-                purchases++;
             }
         }
-        if (purchases < 8) {
-            for (Map<String, Object> row : forecasts.replenish(
-                    null, null, 14, params.getSafetyDays(), params.getReplenishLeadDays())) {
-                if (purchases >= 8) {
-                    break;
-                }
-                BigDecimal qty = decimal(row.get("suggestQty"));
-                if (qty.signum() <= 0) {
-                    continue;
-                }
-                String sku = String.valueOf(row.get("sku"));
-                if (queuedSku.contains(sku)) {
-                    continue;
-                }
-                queuedSku.add(sku);
-                jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
-                        map("sku", sku,
-                                "qty", qty,
-                                "suggestQty", qty,
-                                "warehouseCode", row.get("warehouseCode"),
-                                "replenishLeadDays", params.getReplenishLeadDays()),
-                        null));
-                purchases++;
+        List<Map<String, Object>> gaps = forecasts.replenish(
+                null, null, 14, params.getSafetyDays(), params.getReplenishLeadDays());
+        gaps.sort((left, right) -> {
+            boolean leftHot = stockoutSku.contains(String.valueOf(left.get("sku")));
+            boolean rightHot = stockoutSku.contains(String.valueOf(right.get("sku")));
+            if (leftHot != rightHot) {
+                return leftHot ? -1 : 1;
             }
+            int byQty = decimal(right.get("suggestQty")).compareTo(decimal(left.get("suggestQty")));
+            if (byQty != 0) {
+                return byQty;
+            }
+            return String.valueOf(left.get("sku")).compareTo(String.valueOf(right.get("sku")));
+        });
+        int purchases = 0;
+        Set<String> queuedKeys = new HashSet<>();
+        for (Map<String, Object> row : gaps) {
+            if (purchases >= 8) {
+                break;
+            }
+            BigDecimal qty = decimal(row.get("suggestQty"));
+            if (qty.signum() <= 0) {
+                continue;
+            }
+            String sku = String.valueOf(row.get("sku"));
+            String warehouse = row.get("warehouseCode") == null
+                    ? "" : String.valueOf(row.get("warehouseCode"));
+            String key = WarehouseCodes.stockKey(sku, warehouse);
+            if (queuedKeys.contains(key)) {
+                continue;
+            }
+            queuedKeys.add(key);
+            jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
+                    map("sku", sku,
+                            "qty", qty,
+                            "suggestQty", qty,
+                            "warehouseCode", warehouse,
+                            "replenishLeadDays", params.getReplenishLeadDays(),
+                            "coverDays", row.get("coverDays"),
+                            "targetQty", row.get("targetQty")),
+                    null));
+            purchases++;
         }
         BigDecimal leftover = expected;
         int unassigned = 0;

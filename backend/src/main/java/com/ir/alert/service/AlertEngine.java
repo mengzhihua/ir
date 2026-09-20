@@ -119,6 +119,24 @@ public class AlertEngine {
         return all();
     }
 
+    public int openCount() {
+        return openCount(null);
+    }
+
+    public int openCount(String type) {
+        int n = 0;
+        for (CtAlert alert : all()) {
+            if (!"OPEN".equals(alert.getStatus())) {
+                continue;
+            }
+            if (type != null && !type.equals(alert.getType())) {
+                continue;
+            }
+            n++;
+        }
+        return n;
+    }
+
     public Page<CtAlert> page(
             String status,
             String severity,

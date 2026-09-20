@@ -3,7 +3,9 @@ package com.ir.forecast.service;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import com.ir.action.entity.CtAction;
 import java.math.BigDecimal;
 import java.util.Collections;
@@ -16,6 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 @ActiveProfiles("test")
+@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:forecastsvc;MODE=MySQL;DB_CLOSE_DELAY=-1")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ForecastServiceTest {
     @Autowired
     private ForecastService forecasts;
@@ -36,6 +40,8 @@ class ForecastServiceTest {
         assertEquals(first.get("suggestQty"), first.get("suggestedQty"));
         assertEquals(3, first.get("replenishLeadDays"));
         assertEquals(6, first.get("coverDays"));
+        assertTrue(first.get("onHandDays") instanceof BigDecimal);
+        assertEquals(first.get("belowRop"), ((BigDecimal) first.get("suggestQty")).signum() > 0);
         assertTrue(first.get("orderByDate") != null);
         BigDecimal demand = (BigDecimal) first.get("forecastDemand");
         BigDecimal suggest = (BigDecimal) first.get("suggestQty");

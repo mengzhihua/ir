@@ -131,7 +131,10 @@ public class SandboxController {
         Map<String, Object> snapshot = policy.update(cost, efficiency, safety, lead);
         snapshot.put("superseded", actions.supersedeOpposing(policy.stance()));
         if (truthy(request.get("reevaluate"))) {
-            snapshot.put("alerts", alerts.evaluate().size());
+            alerts.evaluate();
+            snapshot.put("alerts", alerts.openCount());
+            snapshot.put("openAlerts", alerts.openCount());
+            snapshot.put("forecastStockoutAlerts", alerts.openCount("FORECAST_STOCKOUT"));
         }
         return R.ok(snapshot);
     }

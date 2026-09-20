@@ -171,11 +171,37 @@ public class ForecastService {
             row.put("targetQty", target);
             row.put("suggestQty", suggest);
             row.put("suggestedQty", suggest);
+            BigDecimal onHandDays = daily.signum() <= 0
+                    ? BigDecimal.ZERO
+                    : cover.divide(daily, 2, RoundingMode.HALF_UP);
+            row.put("onHandDays", onHandDays);
+            row.put("belowRop", suggest.signum() > 0);
             LocalDate stockout = stockoutDate(cover, daily);
             row.put("stockoutDate", stockout);
             row.put("orderByDate", orderByDate(stockout, lead));
             result.add(row);
         }
+        result.sort((left, right) -> {
+            int byGap = Boolean.compare(
+                    Boolean.TRUE.equals(right.get("belowRop")),
+                    Boolean.TRUE.equals(left.get("belowRop")));
+            if (byGap != 0) {
+                return byGap;
+            }
+            LocalDate leftDue = (LocalDate) left.get("orderByDate");
+            LocalDate rightDue = (LocalDate) right.get("orderByDate");
+            if (leftDue != null && rightDue != null) {
+                int byDue = leftDue.compareTo(rightDue);
+                if (byDue != 0) {
+                    return byDue;
+                }
+            } else if (leftDue != null) {
+                return -1;
+            } else if (rightDue != null) {
+                return 1;
+            }
+            return String.valueOf(left.get("sku")).compareTo(String.valueOf(right.get("sku")));
+        });
         return result;
     }
 
