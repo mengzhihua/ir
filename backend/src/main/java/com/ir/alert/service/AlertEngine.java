@@ -35,6 +35,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -404,25 +405,50 @@ public class AlertEngine {
     }
 
     private void evaluateInventory(CtRule rule, Set<String> active) {
+        Map<String, Map<String, Object>> gaps = new HashMap<>();
+        for (Map<String, Object> row : forecastService.replenish(
+                null, null, 14, policy.safetyDays(), policy.replenishLeadDays())) {
+            gaps.put(com.ir.common.WarehouseCodes.stockKey(
+                    String.valueOf(row.get("sku")),
+                    String.valueOf(row.get("warehouseCode"))), row);
+        }
         for (InventorySnapshot inventory : inventoryMapper.selectList(null)) {
             java.math.BigDecimal available = inventory.getQtyAvailable() == null
                     ? java.math.BigDecimal.ZERO : inventory.getQtyAvailable();
-            java.math.BigDecimal safety = inventory.getSafetyQty() == null
-                    ? java.math.BigDecimal.ZERO : inventory.getSafetyQty();
             java.math.BigDecimal inTransit = forecastService.inboundOf(
                     inventory.getSku(), inventory.getWarehouseCode());
-            if (available.add(inTransit).compareTo(safety) < 0) {
-                add(rule, "SKU_WAREHOUSE",
-                        com.ir.common.WarehouseCodes.stockKey(
-                                inventory.getSku(), inventory.getWarehouseCode()),
-                        inventory.getWarehouseCode(),
-                        "低库存", "可用+在途仍低于安全库存（在途 "
-                                + inTransit + "），"
-                                + (balanceAdvisor.costFirst()
-                                ? "成本优先加大采购批量"
-                                : "兼顾时效，采购建议同时仓内补货"),
-                        rule.getSuggestedAction(), active);
+            java.math.BigDecimal cover = available.add(inTransit);
+            String key = com.ir.common.WarehouseCodes.stockKey(
+                    inventory.getSku(), inventory.getWarehouseCode());
+            Map<String, Object> row = gaps.get(key);
+            java.math.BigDecimal demand = row == null
+                    ? java.math.BigDecimal.ZERO : decimalOf(row.get("forecastDemand"));
+            boolean below;
+            String detail;
+            if (demand.signum() > 0) {
+                java.math.BigDecimal suggest = decimalOf(row.get("suggestQty"));
+                below = suggest.signum() > 0;
+                detail = "可用+在途低于再订货点 " + row.get("coverDays")
+                        + " 天（可覆盖 " + row.get("onHandDays")
+                        + "），建议补 " + suggest + "，"
+                        + (balanceAdvisor.costFirst()
+                        ? "成本优先加大采购批量"
+                        : "兼顾时效，采购建议同时仓内补货");
+            } else {
+                java.math.BigDecimal safety = inventory.getSafetyQty() == null
+                        ? java.math.BigDecimal.ZERO : inventory.getSafetyQty();
+                below = cover.compareTo(safety) < 0;
+                detail = "可用+在途仍低于安全库存（在途 "
+                        + inTransit + "），"
+                        + (balanceAdvisor.costFirst()
+                        ? "成本优先加大采购批量"
+                        : "兼顾时效，采购建议同时仓内补货");
             }
+            if (!below) {
+                continue;
+            }
+            add(rule, "SKU_WAREHOUSE", key, inventory.getWarehouseCode(),
+                    "低库存", detail, rule.getSuggestedAction(), active);
         }
     }
 
@@ -744,6 +770,18 @@ public class AlertEngine {
         return alert.getTargetKey();
     }
 
+    private java.math.BigDecimal ropSuggestQty(String sku, String warehouse) {
+        java.util.List<Map<String, Object>> rows = forecastService.replenish(
+                warehouse, sku, 14, policy.safetyDays(), policy.replenishLeadDays());
+        if (rows == null || rows.isEmpty()) {
+            return java.math.BigDecimal.ZERO;
+        }
+        if (decimalOf(rows.get(0).get("forecastDemand")).signum() <= 0) {
+            return java.math.BigDecimal.ZERO;
+        }
+        return decimalOf(rows.get(0).get("suggestQty"));
+    }
+
     private java.math.BigDecimal suggestQty(java.math.BigDecimal onHand) {
         java.math.BigDecimal target = java.math.BigDecimal.TEN;
         if (onHand == null) {
@@ -795,17 +833,25 @@ public class AlertEngine {
                 warehouse = parts[1];
             }
         }
-        java.math.BigDecimal gap = java.math.BigDecimal.TEN;
-        InventorySnapshot inventory = inventoryMapper.selectOne(
-                new LambdaQueryWrapper<InventorySnapshot>()
-                        .eq(InventorySnapshot::getSku, sku)
-                        .eq(warehouse != null && !warehouse.trim().isEmpty(),
-                                InventorySnapshot::getWarehouseCode, warehouse)
-                        .last("LIMIT 1"));
-        if (inventory != null && inventory.getSafetyQty() != null
-                && inventory.getQtyAvailable() != null) {
-            gap = inventory.getSafetyQty().subtract(inventory.getQtyAvailable())
-                    .max(java.math.BigDecimal.ONE);
+        java.math.BigDecimal gap = ropSuggestQty(sku, warehouse);
+        if (gap.signum() <= 0) {
+            InventorySnapshot inventory = inventoryMapper.selectOne(
+                    new LambdaQueryWrapper<InventorySnapshot>()
+                            .eq(InventorySnapshot::getSku, sku)
+                            .eq(warehouse != null && !warehouse.trim().isEmpty(),
+                                    InventorySnapshot::getWarehouseCode, warehouse)
+                            .last("LIMIT 1"));
+            if (inventory != null && inventory.getSafetyQty() != null
+                    && inventory.getQtyAvailable() != null) {
+                java.math.BigDecimal inTransit = forecastService.inboundOf(
+                        inventory.getSku(), inventory.getWarehouseCode());
+                gap = inventory.getSafetyQty()
+                        .subtract(inventory.getQtyAvailable())
+                        .subtract(inTransit)
+                        .max(java.math.BigDecimal.ONE);
+            } else {
+                gap = java.math.BigDecimal.ONE;
+            }
         }
         java.util.List<BalanceAdvisor.Advice> advice = balanceAdvisor.adviseStockout(
                 sku, warehouse, gap);
