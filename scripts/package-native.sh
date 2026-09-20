@@ -25,9 +25,16 @@ else
 fi
 
 UNAME="$(uname -s 2>/dev/null || echo unknown)"
+ARCH="$(uname -m 2>/dev/null || echo x86_64)"
 case "$UNAME" in
-  Linux*) PLATFORM="linux-x64" ;;
-  Darwin*) PLATFORM="macos-x64" ;;
+  Linux*)
+    if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then PLATFORM="linux-arm64"
+    else PLATFORM="linux-x64"; fi
+    ;;
+  Darwin*)
+    if [[ "$ARCH" == "arm64" || "$ARCH" == "aarch64" ]]; then PLATFORM="macos-arm64"
+    else PLATFORM="macos-x64"; fi
+    ;;
   MINGW*|MSYS*|CYGWIN*|Windows_NT*) PLATFORM="windows-x64" ;;
   *) PLATFORM="unknown" ;;
 esac
@@ -83,6 +90,7 @@ Windows:
 
 macOS:
   双击 $NAME.app
+  Apple Silicon（M 系列）用 macos-arm64 包；Intel 用 macos-x64 包。
 
 浏览器打开 http://127.0.0.1:$PORT
 EOF

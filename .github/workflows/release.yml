@@ -66,8 +66,10 @@ jobs:
             label: linux-x64
           - os: windows-latest
             label: windows-x64
-          - os: macos-latest
+          - os: macos-13
             label: macos-x64
+          - os: macos-14
+            label: macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -110,9 +112,7 @@ jobs:
         with:
           name: native-${{ matrix.label }}
           path: |
-            release/*-linux-x64.zip
-            release/*-windows-x64.zip
-            release/*-macos-x64.zip
+            release/*-${{ matrix.label }}.zip
 
   publish:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -147,7 +147,8 @@ jobs:
             - 便携包（需 JDK 17）：`ir-1.0.0.zip` → `start.sh` / `start.bat` / `start.command`
             - Linux 原生：`ir-1.0.0-linux-x64.zip`
             - Windows 原生：`ir-1.0.0-windows-x64.zip`
-            - macOS 原生：`ir-1.0.0-macos-x64.zip`
+            - macOS Apple Silicon：`ir-1.0.0-macos-arm64.zip`
+            - macOS Intel：`ir-1.0.0-macos-x64.zip`
 
             浏览器 http://127.0.0.1:8090
             提交 `${{ github.sha }}`
