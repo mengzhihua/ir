@@ -122,6 +122,47 @@ class HttpProcureContractTest {
         server.verify();
     }
 
+    @Test
+    void sapStockUsesOpenIrWhenApiKeySet() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://sap.local/api/open/ir/snapshots"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Api-Key", "sap-open-key"))
+                .andRespond(withSuccess(
+                        "{\"code\":0,\"data\":{\"system\":\"SAP\",\"snapshots\":[{"
+                                + "\"dataType\":\"STOCK\",\"bizKey\":\"M1099/1000/0001\","
+                                + "\"status\":\"LOW\",\"sku\":\"MAT-1000\",\"qty\":3,"
+                                + "\"plantCode\":\"1000\"}]}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP");
+        CtSystem sap = system("SAP", "http://sap.local", "sap-open-key");
+        List<?> stock = factory.sap(sap).fetchStock();
+        assertEquals(1, stock.size());
+        server.verify();
+    }
+
+    @Test
+    void ecosystemExecuteForwardsIdempotencyKey() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://inv.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "inv-open-key"))
+                .andExpect(jsonPath("$.type").value("INV_VERIFY_INPUT"))
+                .andExpect(jsonPath("$.idempotencyKey").value("ACT-1"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"verifyStatus\":\"VERIFIED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "INV");
+        CtSystem inv = system("INV", "http://inv.local", "inv-open-key");
+        ActionCommand command = new ActionCommand();
+        command.setType("INV_VERIFY_INPUT");
+        command.setTargetKey("10001001");
+        command.setIdempotencyKey("ACT-1");
+        factory.ecosystem(inv).execute(command);
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),

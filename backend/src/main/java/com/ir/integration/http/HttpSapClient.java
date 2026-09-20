@@ -19,17 +19,45 @@ public class HttpSapClient implements SapClient {
     private final String baseUrl;
     private final String username;
     private final String password;
+    private final String apiKey;
     private volatile String token;
 
     public HttpSapClient(RestTemplate http, String baseUrl, String username, String password) {
+        this(http, baseUrl, username, password, null);
+    }
+
+    public HttpSapClient(RestTemplate http, String baseUrl, String username, String password, String apiKey) {
         this.http = http;
         this.baseUrl = baseUrl == null ? "" : baseUrl.replaceAll("/$", "");
         this.username = username;
         this.password = password;
+        this.apiKey = apiKey;
     }
 
     @Override
     public List<InventorySnapshot> fetchStock() {
+        if (hasApiKey()) {
+            List<InventorySnapshot> result = new ArrayList<>();
+            for (Map<String, Object> row : HttpEcosystemClient.snapshots(
+                    HttpSupport.getMap(http, baseUrl + "/api/open/ir/snapshots",
+                            HttpSupport.apiKey(apiKey)))) {
+                if (!"STOCK".equals(HttpSupport.string(row, "dataType"))) {
+                    continue;
+                }
+                InventorySnapshot item = new InventorySnapshot();
+                item.setSourceSystem("SAP");
+                item.setWarehouseCode(HttpSupport.string(row, "plantCode", "werks"));
+                item.setSku(HttpSupport.string(row, "sku", "matnr", "materialCode"));
+                BigDecimal qty = BigDecimal.valueOf(HttpSupport.doubleValue(row, "qty", "unrestrictedQty"));
+                item.setQtyOnHand(qty);
+                item.setQtyReserved(BigDecimal.ZERO);
+                item.setQtyAvailable(qty);
+                item.setSafetyQty("LOW".equals(HttpSupport.string(row, "status"))
+                        ? BigDecimal.TEN : BigDecimal.ZERO);
+                result.add(item);
+            }
+            return result;
+        }
         List<InventorySnapshot> result = new ArrayList<>();
         Map<String, Object> response = HttpSupport.getMap(http, baseUrl + "/api/mm/stock", headers());
         for (Map<String, Object> row : HttpSupport.rows(response)) {
@@ -70,6 +98,10 @@ public class HttpSapClient implements SapClient {
     @Override
     public boolean health() {
         try {
+            if (hasApiKey()) {
+                HttpSupport.getMap(http, baseUrl + "/api/open/ir/snapshots", HttpSupport.apiKey(apiKey));
+                return true;
+            }
             dashboard();
             return true;
         } catch (IntegrationException ex) {
@@ -125,5 +157,9 @@ public class HttpSapClient implements SapClient {
             throw new IntegrationException("SAP 登录未返回 token");
         }
         return token;
+    }
+
+    private boolean hasApiKey() {
+        return apiKey != null && !apiKey.trim().isEmpty();
     }
 }

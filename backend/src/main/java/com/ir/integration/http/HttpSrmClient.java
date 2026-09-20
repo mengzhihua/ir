@@ -93,6 +93,10 @@ public class HttpSrmClient implements SrmClient {
 
     @Override
     public List<SupplierScore> fetchSupplierScores() {
+        List<SupplierScore> fromOpen = openScores();
+        if (fromOpen != null) {
+            return fromOpen;
+        }
         List<SupplierScore> result = new ArrayList<>();
         for (Map<String, Object> row : pages("/api/evaluation/page")) {
             SupplierScore score = new SupplierScore();
@@ -130,6 +134,9 @@ public class HttpSrmClient implements SrmClient {
             body.put("plantCode", params.get("plantCode"));
             body.put("remark", params.getOrDefault("reason", params.get("remark")));
             body.put("params", params);
+            if (command.getIdempotencyKey() != null) {
+                body.put("idempotencyKey", command.getIdempotencyKey());
+            }
             Map<String, Object> response = HttpSupport.postMap(
                     http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
             Object data = response.get("data");
@@ -239,6 +246,33 @@ public class HttpSrmClient implements SrmClient {
                 }
                 fillLines(doc, raw);
                 result.add(doc);
+            }
+            return result;
+        } catch (IntegrationException ex) {
+            return null;
+        }
+    }
+
+    private List<SupplierScore> openScores() {
+        if (!hasApiKey()) {
+            return null;
+        }
+        try {
+            List<SupplierScore> result = new ArrayList<>();
+            for (Map<String, Object> raw : HttpEcosystemClient.snapshots(snapshot())) {
+                if (!"SUPPLIER".equals(HttpSupport.string(raw, "dataType"))) {
+                    continue;
+                }
+                SupplierScore score = new SupplierScore();
+                score.setSupplierCode(HttpSupport.string(raw, "supplierCode", "bizKey"));
+                score.setPeriod(HttpSupport.string(raw, "period"));
+                if (score.getPeriod() == null || score.getPeriod().trim().isEmpty()) {
+                    LocalDate today = LocalDate.now();
+                    score.setPeriod(today.getYear() + "-" + String.format("%02d", today.getMonthValue()));
+                }
+                score.setAvgScore(decimal(raw, "avgScore", "amount", "qty"));
+                score.setGrade(HttpSupport.string(raw, "grade"));
+                result.add(score);
             }
             return result;
         } catch (IntegrationException ex) {

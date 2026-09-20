@@ -80,6 +80,12 @@ KEY (code)
 VALUES ('INV_REQUEST_DRAFT', '开票申请待提交', 'EXT_STATUS', '{"system":"INV","dataType":"INVOICE_REQUEST","status":"DRAFT"}', 'LOW', TRUE, 'INV_SUBMIT_REQUEST');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
+VALUES ('INV_INPUT_UNVERIFIED', '进项发票待查验', 'EXT_STATUS', '{"system":"INV","dataType":"INPUT_INVOICE","status":"UNVERIFIED"}', 'MEDIUM', TRUE, 'INV_VERIFY_INPUT');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
+VALUES ('BOM_ECN_DRAFT', '工程变更待提交', 'EXT_STATUS', '{"system":"BOM","dataType":"ECN","status":"DRAFT"}', 'MEDIUM', TRUE, 'BOM_SUBMIT_ECN');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
 VALUES ('CRM_STALE_OPP', '商机停留在资格评估', 'EXT_STATUS', '{"system":"CRM","dataType":"OPPORTUNITY","status":"QUALIFICATION"}', 'MEDIUM', TRUE, 'CRM_ADVANCE_STAGE');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
@@ -100,7 +106,7 @@ KEY (code)
 VALUES ('ASN_DELAY', '供应商到货延误', 'ASN_DELAY', '{"days":0}', 'HIGH', TRUE, 'SRM_EXPEDITE_PO');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
-VALUES ('SUPPLIER_RISK', '供应商绩效风险', 'SUPPLIER_RISK', '{"minScore":85}', 'MEDIUM', TRUE, NULL);
+VALUES ('SUPPLIER_RISK', '供应商绩效风险', 'SUPPLIER_RISK', '{"minScore":85}', 'MEDIUM', TRUE, 'SRM_EXPEDITE_PO');
 
 MERGE INTO ct_objective (code, name, category, metric, direction, target_value, weight, unit, enabled)
 KEY (code)

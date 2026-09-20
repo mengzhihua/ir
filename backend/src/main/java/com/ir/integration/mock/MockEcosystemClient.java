@@ -60,6 +60,11 @@ public class MockEcosystemClient implements EcosystemClient {
                     bd("12"), null, "P001", "发货通知 ASN-77001"));
             rows.get(rows.size() - 1).put("poCode", "PO-88001");
             rows.get(rows.size() - 1).put("refCode", "PO-88001");
+            rows.add(row("SUPPLIER", "SUP03", "RISK", null,
+                    bd("72"), bd("72"), null, "苏州包装"));
+            rows.get(rows.size() - 1).put("supplierCode", "SUP03");
+            rows.get(rows.size() - 1).put("grade", "C");
+            rows.get(rows.size() - 1).put("avgScore", bd("72"));
         } else if ("BOM".equals(code)) {
             rows.add(row("BOM", "EBOM-A1", "RELEASED", "VEH-A1",
                     bd("1"), null, "P001", "车型 A1 工程 BOM"));

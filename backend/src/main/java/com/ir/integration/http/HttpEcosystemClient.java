@@ -36,6 +36,9 @@ public class HttpEcosystemClient implements EcosystemClient {
         body.put("type", command.getType());
         body.put("targetKey", command.getTargetKey());
         body.put("params", command.getParams());
+        if (command.getIdempotencyKey() != null && !command.getIdempotencyKey().trim().isEmpty()) {
+            body.put("idempotencyKey", command.getIdempotencyKey());
+        }
         HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, headers());
     }
 
