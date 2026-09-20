@@ -66,4 +66,24 @@ class SandboxEngineTest {
         assertTrue(new SandboxEngine().run(rich,data()).getStockoutUnits()
                 .compareTo(result.getStockoutUnits()) <= 0);
     }
+    @Test void sameDayAndNextDayReplenishmentIncreaseStock(){
+        ScenarioParams immediate=new ScenarioParams();
+        immediate.setHorizonDays(3);
+        immediate.setInitialInventoryMultiplier(BigDecimal.ZERO);
+        immediate.setReplenishLeadDays(0);
+        ScenarioParams nextDay=new ScenarioParams();
+        nextDay.setHorizonDays(3);
+        nextDay.setInitialInventoryMultiplier(BigDecimal.ZERO);
+        nextDay.setReplenishLeadDays(1);
+        ScenarioParams never = new ScenarioParams();
+        never.setHorizonDays(3);
+        never.setInitialInventoryMultiplier(BigDecimal.ZERO);
+        never.setReplenishLeadDays(999);
+        SandboxEngine e=new SandboxEngine();
+        BigDecimal immediateStockout = e.run(immediate, data()).getStockoutUnits();
+        BigDecimal nextDayStockout = e.run(nextDay, data()).getStockoutUnits();
+        BigDecimal neverStockout = e.run(never, data()).getStockoutUnits();
+        assertTrue(immediateStockout.compareTo(neverStockout) < 0);
+        assertTrue(nextDayStockout.compareTo(neverStockout) < 0);
+    }
 }

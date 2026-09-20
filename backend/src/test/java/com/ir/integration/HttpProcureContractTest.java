@@ -90,7 +90,8 @@ class HttpProcureContractTest {
 
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
-                null, null, null, null, null, new MockEcosystemClient(), http, systems);
+                null, null, null, null, null, null, new MockEcosystemClient(),
+                new com.ir.integration.client.BaseUrlValidator(true), http, systems);
     }
 
     private static CtSystem system(String code, String url, String apiKey) {

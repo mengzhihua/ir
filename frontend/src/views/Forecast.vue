@@ -22,9 +22,7 @@
           ><el-select v-model="form.method"
             ><el-option label="自动选择" value="AUTO" /><el-option
               label="移动平均"
-              value="MOVING_AVERAGE" /><el-option
-              label="季节朴素"
-              value="SEASONAL_NAIVE" /></el-select
+              value="MA" /><el-option label="季节朴素" value="SEASONAL_NAIVE" /></el-select
         ></el-form-item>
         <el-form-item label="预测天数"
           ><el-input-number v-model="form.horizon" :min="1" :max="90"

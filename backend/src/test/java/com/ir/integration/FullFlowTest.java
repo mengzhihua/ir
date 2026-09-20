@@ -97,17 +97,17 @@ class FullFlowTest {
         JsonNode snapshots = get(token, "/api/integration/snapshot/page?systemCode=SRM&dataType=PO&size=50");
         assertTrue(hasBizKey(snapshots, "IR-PO-SRM-SKU-FLOW-WH-WH-GZ"));
         JsonNode gz = get(token, "/api/forecast/replenish?warehouseCode=WH-GZ&sku=SKU-FLOW-WH&horizon=14&serviceDays=3");
-        assertTrue(gz.get(0).path("inTransit").decimalValue().signum() > 0);
+        assertTrue(records(gz).get(0).path("inTransit").decimalValue().signum() > 0);
         JsonNode bj = get(token, "/api/forecast/replenish?warehouseCode=WH-BJ&sku=SKU-FLOW-WH&horizon=14&serviceDays=3");
-        if (bj.isArray() && bj.size() > 0) {
-            assertEquals(0, bj.get(0).path("inTransit").decimalValue().signum());
+        if (records(bj).isArray() && records(bj).size() > 0) {
+            assertEquals(0, records(bj).get(0).path("inTransit").decimalValue().signum());
         }
 
         JsonNode sh = get(token, "/api/forecast/replenish?warehouseCode=WH-SH&sku=SKU002&horizon=14&serviceDays=3");
-        assertTrue(sh.get(0).path("inTransit").decimalValue().compareTo(new BigDecimal("12")) >= 0);
+        assertTrue(records(sh).get(0).path("inTransit").decimalValue().compareTo(new BigDecimal("12")) >= 0);
         JsonNode sku002Bj = get(token,
                 "/api/forecast/replenish?warehouseCode=WH-BJ&sku=SKU002&horizon=14&serviceDays=3");
-        assertEquals(0, sku002Bj.get(0).path("inTransit").decimalValue().signum());
+        assertEquals(0, records(sku002Bj).get(0).path("inTransit").decimalValue().signum());
 
         JsonNode sapPo = get(token, "/api/integration/snapshot/page?systemCode=SAP&dataType=PO&size=50");
         if (!hasBizKey(sapPo, "IR-PO-SAP-MAT-1000-WH-SH") && !hasBizKey(sapPo, "IR-PO-SAP-MAT-1000")) {
@@ -194,9 +194,9 @@ class FullFlowTest {
                     + params.path("warehouseCode").asText()
                     + "&sku=" + job.path("targetKey").asText()
                     + "&horizon=14");
-            if (gap.isArray() && gap.size() > 0) {
-                assertEquals(0, qty.compareTo(gap.get(0).path("suggestQty").decimalValue()));
-                assertTrue(qty.compareTo(gap.get(0).path("forecastDemand").decimalValue()) <= 0);
+            if (records(gap).isArray() && records(gap).size() > 0) {
+                assertEquals(0, qty.compareTo(records(gap).get(0).path("suggestQty").decimalValue()));
+                assertTrue(qty.compareTo(records(gap).get(0).path("forecastDemand").decimalValue()) <= 0);
             }
         }
 
@@ -214,14 +214,14 @@ class FullFlowTest {
         assertEquals(recLead, policyAfterAuto.path("replenishLeadDays").asInt());
         JsonNode replenishDefault = get(token,
                 "/api/forecast/replenish?warehouseCode=WH-SH&sku=SKU002&horizon=14");
-        assertEquals(recSafety, replenishDefault.get(0).path("serviceDays").asInt());
-        assertEquals(recLead, replenishDefault.get(0).path("replenishLeadDays").asInt());
-        assertEquals(recSafety + recLead, replenishDefault.get(0).path("coverDays").asInt());
-        assertTrue(replenishDefault.get(0).has("orderByDate"));
-        assertTrue(replenishDefault.get(0).path("suggestQty").decimalValue()
-                .compareTo(replenishDefault.get(0).path("forecastDemand").decimalValue()) <= 0);
-        assertTrue(replenishDefault.get(0).has("belowRop"));
-        assertTrue(replenishDefault.get(0).has("onHandDays"));
+        assertEquals(recSafety, records(replenishDefault).get(0).path("serviceDays").asInt());
+        assertEquals(recLead, records(replenishDefault).get(0).path("replenishLeadDays").asInt());
+        assertEquals(recSafety + recLead, records(replenishDefault).get(0).path("coverDays").asInt());
+        assertTrue(records(replenishDefault).get(0).has("orderByDate"));
+        assertTrue(records(replenishDefault).get(0).path("suggestQty").decimalValue()
+                .compareTo(records(replenishDefault).get(0).path("forecastDemand").decimalValue()) <= 0);
+        assertTrue(records(replenishDefault).get(0).has("belowRop"));
+        assertTrue(records(replenishDefault).get(0).has("onHandDays"));
         assertTrue(auto.path("alerts").isNumber());
         assertEquals(auto.path("openAlerts").asInt(), auto.path("alerts").asInt());
         assertTrue(auto.path("forecastStockoutAlerts").isNumber());
@@ -229,7 +229,7 @@ class FullFlowTest {
         JsonNode replenishAll = get(token, "/api/forecast/replenish?horizon=14");
         java.util.Set<String> belowRop = new java.util.HashSet<>();
         java.util.Set<String> demanded = new java.util.HashSet<>();
-        for (JsonNode row : replenishAll) {
+        for (JsonNode row : records(replenishAll)) {
             String key = row.path("sku").asText() + "/" + row.path("warehouseCode").asText();
             if (row.path("forecastDemand").decimalValue().signum() <= 0) {
                 continue;
@@ -406,6 +406,10 @@ class FullFlowTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andReturn();
         return mapper.readTree(result.getResponse().getContentAsString()).path("data");
+    }
+
+    private JsonNode records(JsonNode page) {
+        return page.isObject() && page.has("records") ? page.path("records") : page;
     }
 
     private JsonNode post(String token, String url, String json) throws Exception {

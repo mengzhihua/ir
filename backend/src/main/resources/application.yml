@@ -27,6 +27,8 @@ ir:
     origins: ${IR_CORS_ORIGINS:http://localhost:5174,http://127.0.0.1:5174}
   sync:
     enabled: ${IR_SYNC_ENABLED:true}
+  integration:
+    allow-private-hosts: ${IR_ALLOW_PRIVATE_HOSTS:true}
   cost:
     handling-per-order: ${IR_COST_HANDLING_PER_ORDER:1.5}
     packaging-per-order: ${IR_COST_PACKAGING_PER_ORDER:0.8}
@@ -41,5 +43,13 @@ ir:
     safety-days: ${IR_SANDBOX_SAFETY_DAYS:3}
     replenish-lead-days: ${IR_SANDBOX_REPLENISH_LEAD_DAYS:3}
   http:
-    # 逗号分隔系统编码，或 * / ALL。启动时把对应 ct_system.mode 写成 HTTP。
     systems: ${IR_HTTP_SYSTEMS:}
+  balance:
+    mode: ${IR_BALANCE_MODE:AUTO}
+    schedule-enabled: ${IR_BALANCE_SCHEDULE:true}
+    cron: ${IR_BALANCE_CRON:0 10/30 * * * ?}
+    max-decisions-per-run: ${IR_BALANCE_MAX_DECISIONS:20}
+    max-auto-execute-per-run: ${IR_BALANCE_MAX_AUTO:10}
+    auto-purchase-amount-limit: ${IR_BALANCE_PURCHASE_LIMIT:20000}
+    cooldown-hours: ${IR_BALANCE_COOLDOWN_HOURS:24}
+    service-guard-attainment: ${IR_BALANCE_SERVICE_GUARD:0.9}

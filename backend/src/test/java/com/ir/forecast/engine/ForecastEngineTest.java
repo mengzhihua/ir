@@ -11,4 +11,14 @@ class ForecastEngineTest {
     @Test void eachMethodReturnsHorizonPoints(){List<BigDecimal>x=weekly();assertEquals(14,engine.movingAverage(x,14).size());assertEquals(14,engine.ses(x,14).size());assertEquals(14,engine.holt(x,14).size());assertEquals(14,engine.seasonalNaive(x,14).size());}
     @Test void autoPicksLowestMape(){ForecastEngine.Result r=engine.forecast(weekly(),14,"AUTO");assertEquals("SEASONAL_NAIVE",r.getMethod());}
     @Test void seasonalNaiveReproducesWeeklyPattern(){List<BigDecimal>r=engine.seasonalNaive(weekly(),7);assertEquals(0,BigDecimal.ONE.compareTo(r.get(0)));assertEquals(0,BigDecimal.valueOf(7).compareTo(r.get(6)));}
+    @Test void seasonalNaiveLongHorizonsStayPositive(){
+        assertTrue(engine.seasonalNaive(weekly(),14).stream()
+                .allMatch(value -> value.signum() > 0));
+        assertTrue(engine.seasonalNaive(weekly(),30).stream()
+                .allMatch(value -> value.signum() > 0));
+    }
+    @Test void unknownMethodIsRejected(){
+        assertThrows(IllegalArgumentException.class,
+                () -> engine.run(weekly(), 7, "UNKNOWN"));
+    }
 }

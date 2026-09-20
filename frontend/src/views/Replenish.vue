@@ -138,8 +138,11 @@ function batchAction() {
   visible.value = true
 }
 async function submitAction() {
-  const payload = currentRows.value.map((row) => ({ ...row, type: actionType.value }))
-  const results = await forecastApi.toAction(payload)
+  const results = await forecastApi.toAction({
+    type: actionType.value,
+    supplier: '默认供应商',
+    rows: currentRows.value
+  })
   visible.value = false
   const failed = (Array.isArray(results) ? results : []).filter((item) => item.status === 'FAILED')
   if (failed.length) {

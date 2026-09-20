@@ -15,6 +15,24 @@ export const menus = [
     icon: 'Search',
     component: () => import('../views/Trace.vue')
   },
+  {
+    path: '/objective',
+    name: '业务目标',
+    icon: 'Aim',
+    component: () => import('../views/Objective.vue')
+  },
+  {
+    path: '/balance',
+    name: '自动平衡',
+    icon: 'Operation',
+    component: () => import('../views/Balance.vue')
+  },
+  {
+    path: '/supply',
+    name: '供应协同',
+    icon: 'Box',
+    component: () => import('../views/Supply.vue')
+  },
   { path: '/alert', name: '预警中心', icon: 'Bell', component: () => import('../views/Alert.vue') },
   { path: '/rule', name: '规则管理', icon: 'SetUp', component: () => import('../views/Rule.vue') },
   {

@@ -17,11 +17,11 @@
       ><el-select v-model="filters.status" clearable placeholder="状态" @change="search"
         ><el-option label="待执行" value="PENDING" /><el-option
           label="执行中"
-          value="RUNNING" /><el-option
-          label="成功"
-          value="SUCCESS" /><el-option label="失败" value="FAILED" /><el-option
-          label="已作废"
-          value="SUPERSEDED" /></el-select
+          value="RUNNING" /><el-option label="成功" value="SUCCESS" /><el-option
+          label="失败"
+          value="FAILED" /><el-option label="已作废" value="SUPERSEDED" /><el-option
+          label="待对账"
+          value="UNKNOWN" /><el-option label="已重试" value="RETRIED" /></el-select
       ><el-input
         v-model="filters.targetKey"
         clearable
@@ -39,10 +39,10 @@
           ><template #default="{ row }">{{
             labelOf(row.type, actionTypeLabels)
           }}</template></el-table-column
-        ><el-table-column
-          prop="targetKey"
-          label="目标对象"
-          width="180" /><el-table-column prop="status" label="状态" width="100"
+        ><el-table-column prop="targetKey" label="目标对象" width="180" /><el-table-column
+          prop="status"
+          label="状态"
+          width="100"
           ><template #default="{ row }"
             ><el-tag :type="tagTypes.actionStatus[row.status]">{{
               labelOf(row.status, actionStatusLabels)

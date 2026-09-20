@@ -141,8 +141,8 @@
           <div class="stat">
             <div class="label">补货策略</div>
             <div class="value">
-              安全 {{ overview.recommendation.safetyDays ?? '-' }} /
-              提前期 {{ overview.recommendation.replenishLeadDays ?? '-' }} 天
+              安全 {{ overview.recommendation.safetyDays ?? '-' }} / 提前期
+              {{ overview.recommendation.replenishLeadDays ?? '-' }} 天
             </div>
           </div>
           <div class="stat">
@@ -208,11 +208,20 @@ import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { sandboxApi, towerApi } from '../api'
 import { canWrite } from '../auth'
+import { balanceApi, objectiveApi } from '../api'
 import Chart from '../components/Chart.vue'
 import { formatDate, formatMoney, formatNumber, percent } from '../utils/format'
-import { capitalVerdictLabels, labelOf, severityLabels, systemModeLabels, tagTypes } from '../utils/labels'
+import {
+  capitalVerdictLabels,
+  labelOf,
+  severityLabels,
+  systemModeLabels,
+  tagTypes
+} from '../utils/labels'
 
 const loading = ref(false)
+const board = reactive({ score: 0, metrics: {} })
+const balance = reactive({})
 const overview = reactive({
   kpi: {},
   funnel: {},
@@ -222,7 +231,13 @@ const overview = reactive({
   systems: [],
   recommendation: null,
   ecosystem: {},
-  policy: { costWeight: 0.5, efficiencyWeight: 0.5, stance: 'BALANCED', safetyDays: 3, replenishLeadDays: 3 }
+  policy: {
+    costWeight: 0.5,
+    efficiencyWeight: 0.5,
+    stance: 'BALANCED',
+    safetyDays: 3,
+    replenishLeadDays: 3
+  }
 })
 const saving = ref(false)
 const costPercent = ref(50)
@@ -269,7 +284,10 @@ const cards = computed(() => [
   { label: 'SRM待提交PR', value: formatNumber(overview.kpi.srmOpenPr, 0), color: '#e6a23c' },
   { label: 'DMS备件缺货', value: formatNumber(overview.kpi.dmsShortage, 0), color: '#f56c6c' },
   { label: 'CRM新工单', value: formatNumber(overview.kpi.crmOpenCases, 0), color: '#e6a23c' },
-  { label: 'OA待办', value: formatNumber(overview.kpi.oaPendingTasks, 0), color: '#909399' }
+  { label: 'OA待办', value: formatNumber(overview.kpi.oaPendingTasks, 0), color: '#909399' },
+  { label: 'NPS估算', value: formatNumber(board.metrics.npsEstimate, 1), color: '#67c23a' },
+  { label: '目标达成分', value: formatNumber(board.score, 1), color: '#409eff' },
+  { label: '待审批决策', value: formatNumber(balance.pendingDecisions, 0), color: '#e6a23c' }
 ])
 
 const costOption = computed(() => {
@@ -338,6 +356,8 @@ async function load() {
     if (!Number.isNaN(cost)) {
       costPercent.value = Math.round(cost * 100)
     }
+    Object.assign(board, await objectiveApi.scoreboard())
+    Object.assign(balance, await balanceApi.overview())
   } finally {
     loading.value = false
   }

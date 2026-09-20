@@ -8,8 +8,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.ConnectException;
+import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -33,17 +36,48 @@ final class HttpSupport {
     }
 
     static Map<String, Object> postMap(RestTemplate http, String url, Object body, HttpHeaders headers) {
+        return exchange(http, HttpMethod.POST, url, body, headers);
+    }
+
+    static Map<String, Object> putMap(RestTemplate http, String url, Object body, HttpHeaders headers) {
+        return exchange(http, HttpMethod.PUT, url, body, headers);
+    }
+
+    private static Map<String, Object> exchange(RestTemplate http, HttpMethod method, String url,
+                                                Object body, HttpHeaders headers) {
         try {
             ResponseEntity<Map<String, Object>> response = http.exchange(
                     url,
-                    HttpMethod.POST,
+                    method,
                     new HttpEntity<>(body, headers),
                     new ParameterizedTypeReference<Map<String, Object>>() {
                     });
             return response.getBody() == null ? Collections.emptyMap() : response.getBody();
         } catch (Exception ex) {
-            throw new IntegrationException("调用 OTWB 接口失败: " + url, ex);
+            throw new IntegrationException("调用 OTWB 接口失败: " + url, ex, outcomeUnknown(ex));
         }
+    }
+
+    /** 登录等辅助请求失败意味着业务指令尚未发出,一律视为确定未受理. */
+    static Map<String, Object> loginPost(RestTemplate http, String url, Object body) {
+        try {
+            return postMap(http, url, body, new HttpHeaders());
+        } catch (IntegrationException ex) {
+            throw new IntegrationException(ex.getMessage(), ex.getCause(), false);
+        }
+    }
+
+    /** 连接未建立可确定未受理;其余传输层异常(如读超时)视为结果未知. */
+    static boolean outcomeUnknown(Throwable ex) {
+        if (!(ex instanceof ResourceAccessException)) {
+            return false;
+        }
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof ConnectException || t instanceof UnknownHostException) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @SuppressWarnings("unchecked")

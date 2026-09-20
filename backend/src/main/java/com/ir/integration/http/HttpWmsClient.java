@@ -50,6 +50,7 @@ public class HttpWmsClient implements WmsClient {
             WmsOrderSnapshot order = new WmsOrderSnapshot();
             order.setCode(HttpSupport.string(row, "code", "orderNo", "orderCode"));
             order.setExternalNo(HttpSupport.string(row, "externalNo", "sourceNo"));
+            order.setSku(HttpSupport.string(row, "sku", "skuCode"));
             order.setWarehouseCode(HttpSupport.string(row, "warehouseCode", "warehouse"));
             order.setStatus(HttpSupport.string(row, "status"));
             order.setTotalQty(decimal(row, "totalQty", "qty"));
@@ -106,8 +107,12 @@ public class HttpWmsClient implements WmsClient {
             HttpSupport.postMap(http, baseUrl + "/api/outbound/order/"
                     + command.getTargetKey() + "/allocate", command.getParams(), headers());
         } else if ("WMS_REPLENISH".equals(command.getType())) {
+            Map<String, Object> body = new LinkedHashMap<>(command.getParams());
+            if (command.getIdempotencyKey() != null) {
+                body.put("requestNo", command.getIdempotencyKey());
+            }
             HttpSupport.postMap(http, baseUrl + "/api/inventory/replenish/generate",
-                    command.getParams(), headers());
+                    body, headers());
         }
     }
 
@@ -166,8 +171,8 @@ public class HttpWmsClient implements WmsClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("username", username);
         body.put("password", password);
-        Map<String, Object> response = HttpSupport.postMap(
-                http, baseUrl + "/api/auth/login", body, new HttpHeaders());
+        Map<String, Object> response = HttpSupport.loginPost(
+                http, baseUrl + "/api/auth/login", body);
         Object data = response.get("data");
         if (data instanceof Map) {
             token = HttpSupport.string((Map<String, Object>) data, "token", "accessToken");

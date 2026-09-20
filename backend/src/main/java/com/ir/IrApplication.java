@@ -7,7 +7,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableScheduling
-@MapperScan("com.ir.**.mapper")
+@MapperScan({"com.ir.**.mapper", "com.ir.snapshot", "com.ir.balance",
+        "com.ir.objective"})
 public class IrApplication {
     public static void main(String[] args) {
         SpringApplication.run(IrApplication.class, args);

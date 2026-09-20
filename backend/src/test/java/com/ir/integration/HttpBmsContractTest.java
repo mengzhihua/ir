@@ -36,7 +36,8 @@ class HttpBmsContractTest {
                         MediaType.APPLICATION_JSON));
 
         ClientFactory factory = new ClientFactory(
-                null, null, null, null, null, new MockEcosystemClient(), http, "BMS");
+                null, null, null, null, null, null, new MockEcosystemClient(),
+                new com.ir.integration.client.BaseUrlValidator(true), http, "BMS");
         CtSystem bms = new CtSystem();
         bms.setCode("BMS");
         bms.setMode("MOCK");

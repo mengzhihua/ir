@@ -29,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import com.ir.common.BizException;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -83,8 +85,7 @@ class ActionQueueTest {
         assertEquals(created.getId(), reused.getId());
         assertEquals(0, new BigDecimal("25").compareTo(reused.getExpectedSaving()));
         assertEquals("SUCCESS", reused.getStatus());
-        CtAction retried = actions.retry(reused.getId());
-        assertEquals(0, new BigDecimal("25").compareTo(retried.getExpectedSaving()));
+        assertThrows(BizException.class, () -> actions.retry(reused.getId()));
     }
 
     @Test

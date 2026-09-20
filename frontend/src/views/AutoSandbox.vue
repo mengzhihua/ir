@@ -4,14 +4,17 @@
       <div>
         <h2>系统自动沙盘</h2>
         <p class="subtitle">
-          固定网格 + 预警/仓网派生方案批量推演；先保服务水平，再选占用现金最低，2 倍需求仍可行且现金差不超过 12% 时改推稳健方案
+          固定网格 + 预警/仓网派生方案批量推演；先保服务水平，再选占用现金最低，2
+          倍需求仍可行且现金差不超过 12% 时改推稳健方案
           <template v-if="latest.stance">
             · 当前立场 {{ stanceLabel }}（成本 {{ Number(latest.costWeight || 0).toFixed(2) }} /
             效率 {{ Number(latest.efficiencyWeight || 0).toFixed(2) }}）
           </template>
         </p>
       </div>
-      <el-button v-if="canWrite()" type="primary" :loading="running" @click="run">立即推演</el-button>
+      <el-button v-if="canWrite()" type="primary" :loading="running" @click="run"
+        >立即推演</el-button
+      >
     </div>
     <el-alert
       v-if="rationale.reason"
@@ -32,7 +35,9 @@
       </div>
       <div class="stat">
         <div class="label">占用现金</div>
-        <div class="value">{{ formatMoney(recommended.result?.cashUsed || recommended.cashUsed) }}</div>
+        <div class="value">
+          {{ formatMoney(recommended.result?.cashUsed || recommended.cashUsed) }}
+        </div>
       </div>
       <div class="stat">
         <div class="label">2倍需求</div>
@@ -42,9 +47,7 @@
       </div>
       <div class="stat">
         <div class="label">补货策略</div>
-        <div class="value">
-          安全 {{ recSafety }} / 提前期 {{ recLead }} 天
-        </div>
+        <div class="value">安全 {{ recSafety }} / 提前期 {{ recLead }} 天</div>
       </div>
       <div class="stat">
         <div class="label">未关闭预警</div>
@@ -73,14 +76,21 @@
           <el-table-column prop="name" label="场景" min-width="200">
             <template #default="{ row }">
               {{ row.name }}
-              <el-tag v-if="row.recommended" type="success" size="small" class="rec-tag">推荐</el-tag>
-              <el-tag v-if="sourceOf(row) && sourceOf(row) !== 'GRID'" size="small" class="rec-tag">{{
-                sourceLabel(sourceOf(row))
-              }}</el-tag>
+              <el-tag v-if="row.recommended" type="success" size="small" class="rec-tag"
+                >推荐</el-tag
+              >
+              <el-tag
+                v-if="sourceOf(row) && sourceOf(row) !== 'GRID'"
+                size="small"
+                class="rec-tag"
+                >{{ sourceLabel(sourceOf(row)) }}</el-tag
+              >
             </template>
           </el-table-column>
           <el-table-column label="占用现金" align="right" width="120">
-            <template #default="{ row }">{{ formatMoney(row.result?.cashUsed || row.cashUsed) }}</template>
+            <template #default="{ row }">{{
+              formatMoney(row.result?.cashUsed || row.cashUsed)
+            }}</template>
           </el-table-column>
           <el-table-column label="2倍需求" width="90">
             <template #default="{ row }">
@@ -145,9 +155,9 @@
           </div>
         </div>
         <div v-if="selected" class="grid-2">
-          <Chart :option="typeOption" /><Chart :option="dailyOption" /><Chart :option="warehouseOption" /><Chart
-            :option="carrierOption"
-          />
+          <Chart :option="typeOption" /><Chart :option="dailyOption" /><Chart
+            :option="warehouseOption"
+          /><Chart :option="carrierOption" />
         </div>
         <el-empty v-else description="选择一个自动方案查看结果" />
       </div>
@@ -222,9 +232,7 @@ const recParams = computed(() => {
   if (raw && typeof raw === 'object') return raw
   return parseJson(raw, {})
 })
-const recSafety = computed(
-  () => recParams.value.safetyDays ?? latest.value.safetyDays ?? '-'
-)
+const recSafety = computed(() => recParams.value.safetyDays ?? latest.value.safetyDays ?? '-')
 const recLead = computed(
   () => recParams.value.replenishLeadDays ?? latest.value.replenishLeadDays ?? '-'
 )
@@ -235,7 +243,10 @@ const typeOption = computed(() => ({
     {
       type: 'pie',
       radius: '60%',
-      data: Object.entries(selected.value?.costByType || {}).map(([name, value]) => ({ name, value }))
+      data: Object.entries(selected.value?.costByType || {}).map(([name, value]) => ({
+        name,
+        value
+      }))
     }
   ]
 }))
@@ -244,8 +255,16 @@ const dailyOption = computed(() => ({
   xAxis: { type: 'category', data: (selected.value?.dailySeries || []).map((row) => row.date) },
   yAxis: [{ type: 'value' }, { type: 'value' }],
   series: [
-    { name: '需求', type: 'line', data: (selected.value?.dailySeries || []).map((row) => row.demand) },
-    { name: '满足', type: 'line', data: (selected.value?.dailySeries || []).map((row) => row.fulfilled) },
+    {
+      name: '需求',
+      type: 'line',
+      data: (selected.value?.dailySeries || []).map((row) => row.demand)
+    },
+    {
+      name: '满足',
+      type: 'line',
+      data: (selected.value?.dailySeries || []).map((row) => row.fulfilled)
+    },
     {
       name: '成本',
       type: 'line',

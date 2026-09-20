@@ -52,6 +52,7 @@ public class HttpOmsClient implements OmsClient {
         for (Map<String, Object> row : rows) {
             OrderSnapshot order = new OrderSnapshot();
             order.setOrderNo(HttpSupport.string(row, "orderNo", "orderSn", "orderCode"));
+            order.setSku(HttpSupport.string(row, "sku", "skuCode"));
             order.setChannelCode(HttpSupport.string(row, "channelCode", "channel"));
             order.setShopCode(HttpSupport.string(row, "shopCode", "shopName"));
             order.setWarehouseCode(HttpSupport.string(row, "warehouseCode"));
@@ -219,8 +220,8 @@ public class HttpOmsClient implements OmsClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("username", username);
         body.put("password", password);
-        Map<String, Object> response = HttpSupport.postMap(
-                http, baseUrl + "/api/auth/login", body, new HttpHeaders());
+        Map<String, Object> response = HttpSupport.loginPost(
+                http, baseUrl + "/api/auth/login", body);
         Object data = response.get("data");
         if (data instanceof Map) {
             token = HttpSupport.string((Map<String, Object>) data, "token", "accessToken");

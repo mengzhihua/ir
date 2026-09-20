@@ -39,6 +39,8 @@ export const actionStatusLabels = {
   RUNNING: '执行中',
   SUCCESS: '成功',
   FAILED: '失败',
+  UNKNOWN: '待对账',
+  RETRIED: '已重试',
   SUPERSEDED: '已作废'
 }
 
@@ -51,6 +53,16 @@ export const severityLabels = {
 export const systemModeLabels = {
   MOCK: '模拟',
   HTTP: '在线'
+}
+
+export const integrationStatusLabels = {
+  PENDING: '待处理',
+  CREATED: '已创建',
+  DRAFT: '草稿',
+  LOW: '偏低',
+  OPEN: '开放',
+  CLOSED: '已关闭',
+  COMPLETED: '已完成'
 }
 
 export const tagTypes = {
@@ -85,6 +97,8 @@ export const tagTypes = {
     RUNNING: 'primary',
     SUCCESS: 'success',
     FAILED: 'danger',
+    UNKNOWN: 'info',
+    RETRIED: 'info',
     SUPERSEDED: 'info'
   },
   severity: {

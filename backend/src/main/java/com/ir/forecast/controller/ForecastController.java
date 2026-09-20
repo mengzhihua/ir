@@ -51,9 +51,11 @@ public class ForecastController {
     }
 
     @GetMapping("/replenish")
-    public R<List<Map<String, Object>>> replenish(
+    public R<Page<Map<String, Object>>> replenish(
             @RequestParam(required = false) String warehouseCode,
             @RequestParam(required = false) String sku,
+            @RequestParam(defaultValue = "1") long current,
+            @RequestParam(defaultValue = "20") long size,
             @RequestParam(defaultValue = "14") int horizon,
             @RequestParam(required = false) Integer serviceDays,
             @RequestParam(required = false) Integer leadDays,
@@ -69,14 +71,35 @@ public class ForecastController {
                     gaps.add(row);
                 }
             }
-            return R.ok(gaps);
+            rows = gaps;
         }
-        return R.ok(rows);
+        long total = rows.size();
+        long from = Math.max(0, (current - 1) * size);
+        long to = Math.min(total, from + size);
+        List<Map<String, Object>> pageRows = from >= to
+                ? java.util.Collections.emptyList()
+                : rows.subList((int) from, (int) to);
+        Page<Map<String, Object>> page = new Page<>(current, size, total);
+        page.setRecords(pageRows);
+        return R.ok(page);
     }
 
     @PostMapping("/replenish/to-action")
     public R<List<CtAction>> toAction(
-            @RequestBody List<Map<String, Object>> rows) {
+            @RequestBody Map<String, Object> request) {
+        String type = request.get("type") == null
+                ? "SRM_PURCHASE_SUGGEST"
+                : String.valueOf(request.get("type"));
+        String supplier = request.get("supplier") == null
+                ? "" : String.valueOf(request.get("supplier"));
+        Object value = request.get("rows");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = value instanceof List
+                ? (List<Map<String, Object>>) value : java.util.Collections.emptyList();
+        for (Map<String, Object> row : rows) {
+            row.put("type", type);
+            row.put("supplier", supplier);
+        }
         return R.ok(service.toActions(rows));
     }
 
