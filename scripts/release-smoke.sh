@@ -3,6 +3,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 PORT="${SERVER_PORT:-8090}"
 cd "$DIR"
+export SKIP_BROWSER=1
 ./start.sh > "$DIR/smoke.log" 2>&1 &
 PID=$!
 cleanup() { kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; }
@@ -26,5 +27,4 @@ body="$(curl -sS -X POST "http://127.0.0.1:${PORT}/api/auth/login" \
   -d '{"username":"admin","password":"admin123"}')"
 echo "$body" | grep -q '"code":0' || { echo "SMOKE FAIL ir: login code != 0: $body"; exit 1; }
 echo "$body" | grep -q '"token"' || { echo "SMOKE FAIL ir: login has no token: $body"; exit 1; }
-
 echo "SMOKE OK ir :$PORT"

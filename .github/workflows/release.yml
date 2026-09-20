@@ -1,12 +1,29 @@
 name: release
+
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - "devin/1788774439-control-tower"
+    paths-ignore:
+      - "**/*.md"
+      - ".gitignore"
+  pull_request:
+    branches:
+      - "devin/1788774439-control-tower"
+    paths-ignore:
+      - "**/*.md"
+      - ".gitignore"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
+
 jobs:
-  package:
+  portable:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,12 +35,119 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Build release zip
+      - name: Build portable zip (server JAR)
         env:
           SKIP_TESTS: "1"
+          SKIP_NATIVE: "1"
         run: bash scripts/package-release.sh
+      - name: Smoke portable zip
+        run: |
+          set -euo pipefail
+          unzip -q "release/ir-1.0.0.zip" -d /tmp/relsmoke
+          cd "/tmp/relsmoke/ir-1.0.0"
+          chmod +x start.sh smoke.sh
+          SKIP_BROWSER=1 ./smoke.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable-zip
+          path: release/ir-1.0.0.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: backend/target/ir-backend-1.0.0.jar
+
+  native:
+    needs: portable
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: windows-latest
+            label: windows-x64
+          - os: macos-latest
+            label: macos-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: backend/target
+      - name: Build native app-image
+        env:
+          REQUIRE_NATIVE: "1"
+        shell: bash
+        run: bash scripts/package-native.sh
+      - name: Smoke Linux native
+        if: matrix.label == 'linux-x64'
+        run: |
+          set -euo pipefail
+          unzip -q "release/ir-1.0.0-linux-x64.zip" -d /tmp/natsmoke
+          BIN="/tmp/natsmoke/ir-1.0.0-linux-x64/ir/bin/ir"
+          chmod +x "$BIN"
+          "$BIN" > /tmp/native.log 2>&1 &
+          NPID=$!
+          ok=0
+          for _ in $(seq 1 90); do
+            if curl -sf "http://127.0.0.1:8090/" >/dev/null 2>&1; then ok=1; break; fi
+            sleep 1
+          done
+          if [[ "$ok" != "1" ]]; then
+            echo "NATIVE SMOKE FAIL ir"
+            tail -n 80 /tmp/native.log || true
+            kill "$NPID" 2>/dev/null || true
+            exit 1
+          fi
+          echo "NATIVE SMOKE OK ir :8090"
+          kill "$NPID" 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.label }}
+          path: |
+            release/*-linux-x64.zip
+            release/*-windows-x64.zip
+            release/*-macos-x64.zip
+
+  publish:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [portable, native]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Flatten artifacts
+        id: ver
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+          find dist -type f \( -name '*.zip' -o -name '*.jar' \) -exec cp {} upload/ \;
+          ls -lh upload
+          TAG="v$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "title=IR 供应链控制塔 $TAG" >> "$GITHUB_OUTPUT"
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.zip
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.title }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
+          make_latest: true
+          files: upload/*
+          body: |
+            自动发行：默认分支构建完成，便携包冒烟通过。
+
+            - 便携包（需 JDK 17）：`ir-1.0.0.zip` → `start.sh` / `start.bat` / `start.command`
+            - Linux 原生：`ir-1.0.0-linux-x64.zip`
+            - Windows 原生：`ir-1.0.0-windows-x64.zip`
+            - macOS 原生：`ir-1.0.0-macos-x64.zip`
+
+            浏览器 http://127.0.0.1:8090
+            提交 `${{ github.sha }}`

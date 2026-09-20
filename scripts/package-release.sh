@@ -27,9 +27,9 @@ cp -R "$ROOT/frontend/dist/." "$STATIC/"
 
 cd "$ROOT/backend"
 if [[ "${SKIP_TESTS:-0}" == "1" ]]; then
-  mvn -q -DskipTests package
+  mvn -q -DskipTests clean package
 else
-  mvn -q package
+  mvn -q clean package
 fi
 
 JAR="$ROOT/backend/target/${ARTIFACT}-${VERSION}.jar"
@@ -39,11 +39,37 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 cp "$JAR" "$STAGE/"
 cp "$ROOT/scripts/release-start.sh" "$STAGE/start.sh"
+cp "$ROOT/scripts/release-start.command" "$STAGE/start.command"
+cp "$ROOT/scripts/release-start.bat" "$STAGE/start.bat"
 cp "$ROOT/scripts/release-smoke.sh" "$STAGE/smoke.sh"
 cp "$ROOT/scripts/release-README.txt" "$STAGE/README.txt"
-chmod +x "$STAGE/start.sh" "$STAGE/smoke.sh"
+chmod +x "$STAGE/start.sh" "$STAGE/start.command" "$STAGE/smoke.sh" || true
 
-cd "$DIST"
-rm -f "${NAME}-${VERSION}.zip"
-zip -qr "${NAME}-${VERSION}.zip" "${NAME}-${VERSION}"
-echo "PACKAGED $DIST/${NAME}-${VERSION}.zip"
+zip_portable() {
+  local out="$DIST/${NAME}-${VERSION}.zip"
+  rm -f "$out"
+  if command -v zip >/dev/null 2>&1; then
+    (cd "$DIST" && zip -qr "${NAME}-${VERSION}.zip" "${NAME}-${VERSION}")
+  else
+    python3 - "$STAGE" "$out" <<'PY'
+import sys, zipfile, pathlib
+src, dest = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+    for p in src.rglob("*"):
+        if p.is_file():
+            z.write(p, p.relative_to(src.parent))
+PY
+  fi
+}
+zip_portable
+echo "PACKAGED $DIST/${NAME}-${VERSION}.zip  (portable / server JAR)"
+
+if [[ "${SKIP_NATIVE:-0}" != "1" ]]; then
+  bash "$ROOT/scripts/package-native.sh" || {
+    if [[ "${REQUIRE_NATIVE:-0}" == "1" ]]; then
+      echo "native package failed"
+      exit 1
+    fi
+    echo "WARN: native package skipped (jpackage 不可用或失败)。便携 zip 仍可用。"
+  }
+fi
