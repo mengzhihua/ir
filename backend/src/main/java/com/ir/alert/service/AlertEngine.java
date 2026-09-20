@@ -357,7 +357,7 @@ public class AlertEngine {
         LocalDate limit = LocalDate.now().plusDays(horizon);
         for (Map<String, Object> row : forecastService.replenish(
                 null, null, horizon, serviceDays, leadDays)) {
-            BigDecimal suggest = decimalOf(row.get("suggestQty"));
+            java.math.BigDecimal suggest = decimalOf(row.get("suggestQty"));
             if (suggest.signum() <= 0) {
                 continue;
             }
