@@ -6,7 +6,7 @@ on:
 permissions:
   contents: write
 jobs:
-  package:
+  portable:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,12 +18,64 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Build release zip
+      - name: Build portable zip (server JAR)
         env:
           SKIP_TESTS: "1"
+          SKIP_NATIVE: "1"
         run: bash scripts/package-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable-zip
+          path: release/*.zip
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: windows-latest
+            label: windows-x64
+          - os: macos-latest
+            label: macos-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build native app-image
+        env:
+          SKIP_TESTS: "1"
+          REQUIRE_NATIVE: "1"
+        shell: bash
+        run: bash scripts/package-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.label }}
+          path: |
+            release/*-linux-x64.zip
+            release/*-windows-x64.zip
+            release/*-macos-x64.zip
+  publish:
+    needs: [portable, native]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Flatten artifacts
+        run: |
+          mkdir -p upload
+          find dist -type f \( -name '*.zip' -o -name '*.jar' \) -exec cp {} upload/ \;
+          ls -lh upload
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.zip
+          files: upload/*
           generate_release_notes: true

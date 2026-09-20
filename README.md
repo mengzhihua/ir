@@ -50,19 +50,41 @@ npm run dev
 后端启动后运行 `bash scripts/smoke.sh`，脚本使用 `curl` 和 `jq` 检查登录、看板、追踪（含卡单筛选）、预警统计、挂起/解挂回写、执行建议、按仓在途、采购 PO、预测、补货、baseline/场景/对比、**1 亿资金盘**、成本以及健康同步。
 前端构建使用 `cd frontend && npm run build`。
 
-## 发布包（单 JAR 成品）
+## 发布包（开箱即用）
 
-把前端生产构建打进后端可执行 JAR，解压即可运行：
+前端生产构建打进 Spring Boot 可执行 JAR。三种用法：
+
+### 1. 服务端（任意已装 JDK 17 的机器）
+
+```bash
+java -jar ir-backend-1.0.0.jar --server.port=8090
+```
+
+Linux systemd 示例见发布包 `README.txt`。
+
+### 2. 便携包（需本机已装 Java）
 
 ```bash
 bash scripts/package-release.sh
 unzip release/ir-1.0.0.zip
 cd ir-1.0.0
-./start.sh
 ```
 
-浏览器访问 `http://127.0.0.1:8090`。默认账号（如启用登录）`admin / admin123`。
+| 系统 | 怎么用 |
+| --- | --- |
+| Linux | `./start.sh` |
+| macOS | 双击 `start.command`，或 `./start.sh` |
+| Windows | 双击 `start.bat` |
 
-十二套系统可同时启动，端口互不冲突：OMS 8081 / WMS 8082 / TMS 8083 / BMS 8084 / SAP 8085 / OA 8086 / SRM 8087 / BOM 8088 / INV 8089 / IR 8090 / CRM 8091 / DMS 8092。
+### 3. 原生包（捆绑 JRE，不必装 Java）
 
-打 GitHub Release：在默认分支合并后执行 `git tag v1.0.0 && git push origin v1.0.0`，Actions 会上传 zip。
+打 `v*` 标签后，GitHub Actions 分别在 Ubuntu / Windows / macOS 生成：
+
+- `ir-1.0.0-linux-x64.zip` → `bin/ir`
+- `ir-1.0.0-windows-x64.zip` → 双击 `ir.exe`
+- `ir-1.0.0-macos-x64.zip` → 双击 `ir.app`
+
+浏览器访问 `http://127.0.0.1:8090`。默认账号 `admin / admin123`。
+
+十二套系统可同时启动：OMS 8081 / WMS 8082 / TMS 8083 / BMS 8084 / SAP 8085 / OA 8086 / SRM 8087 / BOM 8088 / INV 8089 / IR 8090 / CRM 8091 / DMS 8092。
+
