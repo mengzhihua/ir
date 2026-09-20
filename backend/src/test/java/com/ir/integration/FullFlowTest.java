@@ -270,6 +270,40 @@ class FullFlowTest {
         assertEquals(0, capital.path("recommended").path("stockoutUnits").decimalValue().signum());
         assertTrue(capital.path("playbook").size() >= 5);
 
+        JsonNode tiers = get(token, "/api/sandbox/capital/tiers");
+        assertEquals(5, tiers.path("presets").size());
+        assertEquals(100000, tiers.path("maxSku").asInt());
+        assertEquals(0, new BigDecimal("10000000").compareTo(tiers.path("maxQty").decimalValue()));
+        assertEquals("100K", tiers.path("presets").get(0).path("code").asText());
+        assertEquals("1B", tiers.path("presets").get(4).path("code").asText());
+        assertEquals(0, new BigDecimal("100000").compareTo(
+                tiers.path("presets").get(0).path("amount").decimalValue()));
+        assertEquals(0, new BigDecimal("1000000000").compareTo(
+                tiers.path("presets").get(4).path("amount").decimalValue()));
+
+        JsonNode sweep = post(token, "/api/sandbox/capital/sweep",
+                "{\"customAmount\":500000,\"skuCount\":40,\"inventoryQty\":200}");
+        assertTrue(sweep.path("flowOk").asBoolean(), String.valueOf(sweep.path("issues")));
+        assertEquals(6, sweep.path("rows").size());
+        assertEquals(0, new BigDecimal("500000").compareTo(
+                sweep.path("rows").get(1).path("workingCapital").decimalValue()));
+        assertEquals(40, sweep.path("skuCount").asInt());
+        boolean sawReliable = false;
+        for (JsonNode row : sweep.path("rows")) {
+            assertTrue(row.path("issues").isArray());
+            assertEquals(0, row.path("issues").size(), row.path("label").asText() + row.path("issues"));
+            assertTrue(row.path("serviceLevel").decimalValue().signum() >= 0);
+            assertTrue(row.path("serviceLevel").decimalValue().compareTo(BigDecimal.ONE) <= 0);
+            assertTrue(row.path("cashUsed").decimalValue().signum() >= 0);
+            assertTrue(row.path("stockoutUnits").decimalValue().signum() >= 0);
+            assertNotNull(row.path("recommendedName").asText(null));
+            assertFalse(row.path("recommendedName").asText().isEmpty());
+            if (row.path("reliable").asBoolean()) {
+                sawReliable = true;
+            }
+        }
+        assertTrue(sawReliable);
+
         JsonNode adopted = post(token, "/api/sandbox/capital/adopt",
                 "{\"workingCapital\":100000000}");
         assertEquals("MANUAL", adopted.path("kind").asText());

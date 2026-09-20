@@ -84,9 +84,30 @@ public class SandboxController {
         return R.ok(params);
     }
 
+    @GetMapping("/capital/tiers")
+    public R<Map<String, Object>> capitalTiers() {
+        java.util.Map<String, Object> row = new java.util.LinkedHashMap<String, Object>();
+        row.put("presets", com.ir.sandbox.engine.CapitalTiers.presets());
+        row.put("maxSku", com.ir.sandbox.engine.CapitalTiers.MAX_SKU);
+        row.put("maxQty", com.ir.sandbox.engine.CapitalTiers.MAX_QTY);
+        row.put("maxAmount", com.ir.sandbox.engine.CapitalTiers.MAX_AMOUNT);
+        return R.ok(row);
+    }
+
     @PostMapping("/capital")
     public R<Map<String, Object>> capital(@RequestBody(required = false) Map<String, Object> request) {
-        return R.ok(service.analyzeCapital(workingCapital(request)));
+        return R.ok(service.analyzeCapital(
+                workingCapital(request),
+                intOrNull(request == null ? null : request.get("skuCount")),
+                optionalDecimal(request == null ? null : request.get("inventoryQty"))));
+    }
+
+    @PostMapping("/capital/sweep")
+    public R<Map<String, Object>> capitalSweep(@RequestBody(required = false) Map<String, Object> request) {
+        return R.ok(service.sweepCapital(
+                extraAmounts(request),
+                intOrNull(request == null ? null : request.get("skuCount")),
+                optionalDecimal(request == null ? null : request.get("inventoryQty"))));
     }
 
     @PostMapping("/capital/adopt")
@@ -147,9 +168,37 @@ public class SandboxController {
 
     private java.math.BigDecimal workingCapital(Map<String, Object> request) {
         Object raw = request == null ? null : request.get("workingCapital");
-        return raw == null || String.valueOf(raw).trim().isEmpty()
-                ? new java.math.BigDecimal("100000000")
-                : new java.math.BigDecimal(String.valueOf(raw));
+        if (raw == null || String.valueOf(raw).trim().isEmpty()) {
+            return new java.math.BigDecimal("100000000");
+        }
+        return new java.math.BigDecimal(String.valueOf(raw));
+    }
+
+    private java.math.BigDecimal optionalDecimal(Object value) {
+        if (value == null || String.valueOf(value).trim().isEmpty()) {
+            return null;
+        }
+        return new java.math.BigDecimal(String.valueOf(value));
+    }
+
+    private java.util.List<java.math.BigDecimal> extraAmounts(Map<String, Object> request) {
+        java.util.List<java.math.BigDecimal> extras = new java.util.ArrayList<java.math.BigDecimal>();
+        if (request == null) {
+            return extras;
+        }
+        Object custom = request.get("customAmount");
+        if (custom != null && !String.valueOf(custom).trim().isEmpty()) {
+            extras.add(new java.math.BigDecimal(String.valueOf(custom)));
+        }
+        Object list = request.get("amounts");
+        if (list instanceof java.util.List) {
+            for (Object item : (java.util.List<?>) list) {
+                if (item != null && !String.valueOf(item).trim().isEmpty()) {
+                    extras.add(new java.math.BigDecimal(String.valueOf(item)));
+                }
+            }
+        }
+        return extras;
     }
 
     private java.math.BigDecimal decimal(Object value, java.math.BigDecimal fallback) {
