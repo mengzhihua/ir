@@ -23,10 +23,13 @@ import com.ir.forecast.service.ForecastService;
 import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.entity.SalesDaily;
 import com.ir.snapshot.entity.ShipmentSnapshot;
+import com.ir.snapshot.entity.WmsOrderSnapshot;
 import com.ir.snapshot.mapper.InventorySnapshotMapper;
 import com.ir.snapshot.mapper.OrderSnapshotMapper;
 import com.ir.snapshot.mapper.SalesDailyMapper;
 import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
+import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -51,7 +54,9 @@ public class SandboxService {
     private final ObjectMapper objectMapper;
     private final BalancePolicy policy;
     private final ForecastService forecasts;
+    private final WmsOrderSnapshotMapper outboundMapper;
 
+    @Autowired
     public SandboxService(
             CtScenarioMapper scenarioMapper,
             InventorySnapshotMapper inventoryMapper,
@@ -63,7 +68,8 @@ public class SandboxService {
             CodeGenerator codes,
             ObjectMapper objectMapper,
             BalancePolicy policy,
-            ForecastService forecasts) {
+            ForecastService forecasts,
+            WmsOrderSnapshotMapper outboundMapper) {
         this.scenarioMapper = scenarioMapper;
         this.inventoryMapper = inventoryMapper;
         this.salesMapper = salesMapper;
@@ -75,6 +81,23 @@ public class SandboxService {
         this.objectMapper = objectMapper;
         this.policy = policy;
         this.forecasts = forecasts;
+        this.outboundMapper = outboundMapper;
+    }
+
+    public SandboxService(
+            CtScenarioMapper scenarioMapper,
+            InventorySnapshotMapper inventoryMapper,
+            SalesDailyMapper salesMapper,
+            OrderSnapshotMapper orderMapper,
+            ShipmentSnapshotMapper shipmentMapper,
+            com.ir.snapshot.mapper.WmsOrderSnapshotMapper ignoredOutboundMapper,
+            SandboxEngine engine,
+            ActionService actions,
+            CodeGenerator codes,
+            ObjectMapper objectMapper) {
+        this(scenarioMapper, inventoryMapper, salesMapper, orderMapper,
+                shipmentMapper, engine, actions, codes, objectMapper, null, null,
+                ignoredOutboundMapper);
     }
 
     public synchronized CtScenario baseline() {
@@ -175,105 +198,106 @@ public class SandboxService {
             return new ArrayList<>();
         }
         ScenarioParams params = read(scenario.getParamsJson(), ScenarioParams.class).normalized();
-        ScenarioParams baseParams = read(baseline().getParamsJson(), ScenarioParams.class).normalized();
-        policy.updateReplenish(params.getSafetyDays(), params.getReplenishLeadDays());
+        Map<String, BigDecimal> carrierMix = rawCarrierMix(scenario.getParamsJson(),
+                params.getCarrierMix());
+        if (policy != null) {
+            policy.updateReplenish(params.getSafetyDays(), params.getReplenishLeadDays());
+        }
+        Map<String, Object> scenarioResult = result(scenario);
+        if (!scenarioResult.containsKey("skuWarehouse")
+                || !scenarioResult.containsKey("stockoutByWarehouseSku")) {
+            scenario = run(id);
+            scenarioResult = result(scenario);
+        }
         List<CtAction> result = new ArrayList<>();
         List<Map<String, Object>> jobs = new ArrayList<>();
-        BigDecimal expected = expectedSaving(baseline(), scenario);
+        CtScenario baseline = scenarioMapper.selectOne(
+                new LambdaQueryWrapper<CtScenario>()
+                        .eq(CtScenario::getBaseline, true)
+                        .orderByAsc(CtScenario::getId)
+                        .last("LIMIT 1"));
+        BigDecimal expected = baseline == null
+                ? BigDecimal.ZERO : expectedSaving(baseline, scenario);
 
-        int reroutes = 0;
-        String targetWarehouse = preferredWarehouse(params);
-        if (targetWarehouse != null) {
-            for (OrderSnapshot order : pendingOrders()) {
-                if (reroutes >= 8) {
-                    break;
-                }
-                if (targetWarehouse.equals(order.getWarehouseCode())) {
-                    continue;
-                }
-                jobs.add(job("OMS_REROUTE_WAREHOUSE", order.getOrderNo(),
-                        map("warehouseCode", targetWarehouse, "sku", firstSku()),
-                        null));
-                reroutes++;
-            }
-        }
-
-        int switches = 0;
-        String targetCarrier = dominantCarrier(params.getCarrierMix());
-        String baseCarrier = dominantCarrier(baseParams.getCarrierMix());
-        if (targetCarrier != null && !targetCarrier.equals(baseCarrier)) {
-            for (ShipmentSnapshot shipment : openShipments()) {
-                if (switches >= 8) {
-                    break;
-                }
-                if (targetCarrier.equals(shipment.getCarrierCode())) {
-                    continue;
-                }
-                String mapped = CarrierCodes.toTms(targetCarrier);
-                jobs.add(job("TMS_SWITCH_CARRIER", shipment.getWaybillCode(),
-                        map("carrierCode", mapped),
-                        BalanceAdvisor.freightSaving(
-                                shipment.getCarrierCode(), mapped, shipment.getFreightAmount())));
-                switches++;
-            }
-        }
-
-        Map<String, Object> scenarioResult = result(scenario);
-        Object summaries = scenarioResult.get("perSkuSummary");
-        Set<String> stockoutSku = new HashSet<>();
-        if (summaries instanceof List) {
-            for (Object row : (List<?>) summaries) {
-                if (!(row instanceof Map)) {
-                    continue;
-                }
-                Map<?, ?> summary = (Map<?, ?>) row;
-                if (decimal(summary.get("stockout")).signum() > 0) {
-                    stockoutSku.add(String.valueOf(summary.get("sku")));
-                }
-            }
-        }
-        List<Map<String, Object>> gaps = forecasts.replenish(
-                null, null, 14, params.getSafetyDays(), params.getReplenishLeadDays());
-        gaps.sort((left, right) -> {
-            boolean leftHot = stockoutSku.contains(String.valueOf(left.get("sku")));
-            boolean rightHot = stockoutSku.contains(String.valueOf(right.get("sku")));
-            if (leftHot != rightHot) {
-                return leftHot ? -1 : 1;
-            }
-            int byQty = decimal(right.get("suggestQty")).compareTo(decimal(left.get("suggestQty")));
-            if (byQty != 0) {
-                return byQty;
-            }
-            return String.valueOf(left.get("sku")).compareTo(String.valueOf(right.get("sku")));
-        });
-        int purchases = 0;
-        Set<String> queuedKeys = new HashSet<>();
-        for (Map<String, Object> row : gaps) {
-            if (purchases >= 8) {
+        Map<String, Object> skuWarehouse = mapValue(scenarioResult.get("skuWarehouse"));
+        for (OrderSnapshot order : pendingOrders()) {
+            if (jobs.size() >= 50) {
                 break;
             }
-            BigDecimal qty = decimal(row.get("suggestQty"));
-            if (qty.signum() <= 0) {
+            String sku = order.getSku();
+            if ((sku == null || sku.isEmpty()) && outboundMapper != null) {
+                for (WmsOrderSnapshot outbound : outboundMapper.selectList(null)) {
+                    if (order.getOrderNo().equals(outbound.getExternalNo())
+                            || order.getOrderNo().equals(outbound.getCode())) {
+                        sku = outbound.getSku();
+                        break;
+                    }
+                }
+            }
+            String target = sku == null ? null : stringValue(skuWarehouse.get(sku));
+            if (target != null && !target.equals(order.getWarehouseCode())) {
+                jobs.add(job("OMS_REROUTE_WAREHOUSE", order.getOrderNo(),
+                        map("warehouseCode", target), null));
+            }
+        }
+
+        List<ShipmentSnapshot> shipments = openShipments();
+        Map<String, Integer> targets = carrierTargets(carrierMix,
+                shipments.size());
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (ShipmentSnapshot shipment : shipments) {
+            counts.merge(normalizeCarrier(shipment.getCarrierCode()),
+                    1, Integer::sum);
+        }
+        for (ShipmentSnapshot shipment : shipments) {
+            if (jobs.size() >= 50) {
+                break;
+            }
+            String carrier = normalizeCarrier(shipment.getCarrierCode());
+            if (counts.getOrDefault(carrier, 0) <= targets.getOrDefault(carrier, 0)) {
                 continue;
             }
-            String sku = String.valueOf(row.get("sku"));
-            String warehouse = row.get("warehouseCode") == null
-                    ? "" : String.valueOf(row.get("warehouseCode"));
-            String key = WarehouseCodes.stockKey(sku, warehouse);
-            if (queuedKeys.contains(key)) {
+            String target = targetDeficit(counts, targets);
+            if (target == null || target.equals(carrier)) {
                 continue;
             }
-            queuedKeys.add(key);
-            jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
-                    map("sku", sku,
-                            "qty", qty,
-                            "suggestQty", qty,
-                            "warehouseCode", warehouse,
-                            "replenishLeadDays", params.getReplenishLeadDays(),
-                            "coverDays", row.get("coverDays"),
-                            "targetQty", row.get("targetQty")),
-                    null));
-            purchases++;
+            counts.put(carrier, counts.get(carrier) - 1);
+            counts.put(target, counts.getOrDefault(target, 0) + 1);
+            String canonicalTarget = normalizeCarrier(target);
+            jobs.add(job("TMS_SWITCH_CARRIER", shipment.getWaybillCode(),
+                    map("carrierCode", canonicalTarget),
+                    BalanceAdvisor.freightSaving(carrier, canonicalTarget,
+                            shipment.getFreightAmount())));
+        }
+
+        Map<String, Object> stockout = mapValue(scenarioResult.get("stockoutByWarehouseSku"));
+        for (Map.Entry<String, Object> entry : stockout.entrySet()) {
+            if (jobs.size() >= 50) {
+                break;
+            }
+            BigDecimal qty = decimal(entry.getValue());
+            if (qty.signum() <= 0 || !entry.getKey().contains("/")) {
+                continue;
+            }
+            String[] parts = entry.getKey().split("/", 2);
+            jobs.add(job("WMS_REPLENISH", entry.getKey(),
+                    map("warehouseCode", parts[0], "sku", parts[1], "qty", qty), null));
+        }
+
+        if (forecasts != null) {
+            List<Map<String, Object>> gaps = forecasts.replenish(
+                    null, null, 14, params.getSafetyDays(), params.getReplenishLeadDays());
+            for (Map<String, Object> row : gaps) {
+                if (jobs.size() >= 50) {
+                    break;
+                }
+                BigDecimal qty = decimal(row.get("suggestQty"));
+                if (qty.signum() > 0) {
+                    jobs.add(job("SRM_PURCHASE_SUGGEST", String.valueOf(row.get("sku")),
+                            map("sku", row.get("sku"), "qty", qty,
+                                    "supplier", row.get("supplier")), null));
+                }
+            }
         }
         BigDecimal leftover = expected;
         int unassigned = 0;
@@ -462,7 +486,9 @@ public class SandboxService {
                 decimal(recommended.get("replenishLeadDays")).intValue(),
                 BigDecimal.ONE,
                 mix);
-        policy.updateReplenish(params.getSafetyDays(), params.getReplenishLeadDays());
+        if (policy != null) {
+            policy.updateReplenish(params.getSafetyDays(), params.getReplenishLeadDays());
+        }
         return persist("资金盘推荐·" + recommended.get("name")
                 + "·" + CapitalTiers.labelOf(capital), params, false, "MANUAL", null, false, null);
     }
@@ -724,7 +750,15 @@ public class SandboxService {
 
     private List<OrderSnapshot> pendingOrders() {
         List<OrderSnapshot> result = new ArrayList<>();
-        for (OrderSnapshot order : orderMapper.selectList(null)) {
+        List<OrderSnapshot> rows = orderMapper.selectList(new LambdaQueryWrapper<>());
+        if (rows == null) {
+            return result;
+        }
+        for (OrderSnapshot order : rows) {
+            if (!Arrays.asList("CREATED", "AUDITED", "ALLOCATED")
+                    .contains(order.getStatus())) {
+                continue;
+            }
             if (Arrays.asList("COMPLETED", "CANCELLED", "SHIPPED")
                     .contains(order.getStatus())) {
                 continue;
@@ -736,7 +770,11 @@ public class SandboxService {
 
     private List<ShipmentSnapshot> openShipments() {
         List<ShipmentSnapshot> result = new ArrayList<>();
-        for (ShipmentSnapshot shipment : shipmentMapper.selectList(null)) {
+        List<ShipmentSnapshot> rows = shipmentMapper.selectList(new LambdaQueryWrapper<>());
+        if (rows == null) {
+            return result;
+        }
+        for (ShipmentSnapshot shipment : rows) {
             if (Arrays.asList("DELIVERED", "CLOSED", "CANCELLED")
                     .contains(shipment.getStatus())) {
                 continue;
@@ -783,6 +821,122 @@ public class SandboxService {
             }
         }
         return CarrierCodes.toTms(best);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mapValue(Object value) {
+        return value instanceof Map ? (Map<String, Object>) value
+                : new LinkedHashMap<>();
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Map<String, Integer> carrierTargets(
+            Map<String, BigDecimal> mix, int total) {
+        Map<String, Integer> targets = new LinkedHashMap<>();
+        if (mix == null || mix.isEmpty() || total <= 0) {
+            return targets;
+        }
+        BigDecimal sum = mix.values().stream()
+                .map(value -> value == null ? BigDecimal.ZERO : value)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (sum.signum() <= 0) {
+            return targets;
+        }
+        Map<String, BigDecimal> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, BigDecimal> entry : mix.entrySet()) {
+            String carrier = normalizeCarrier(entry.getKey());
+            normalized.merge(carrier, entry.getValue() == null
+                    ? BigDecimal.ZERO : entry.getValue(), BigDecimal::add);
+        }
+        List<Map.Entry<String, BigDecimal>> entries = new ArrayList<>(normalized.entrySet());
+        List<BigDecimal> remainders = new ArrayList<>();
+        int assigned = 0;
+        for (Map.Entry<String, BigDecimal> entry : entries) {
+            BigDecimal exact = (entry.getValue() == null ? BigDecimal.ZERO
+                    : entry.getValue()).divide(sum, 12, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(total));
+            int floor = exact.setScale(0, RoundingMode.FLOOR).intValue();
+            targets.put(entry.getKey(), floor);
+            remainders.add(exact.subtract(BigDecimal.valueOf(floor)));
+            assigned += floor;
+        }
+        while (assigned < total) {
+            int best = 0;
+            for (int index = 1; index < entries.size(); index++) {
+                if (remainders.get(index).compareTo(remainders.get(best)) > 0
+                        || (remainders.get(index).compareTo(remainders.get(best)) == 0
+                        && entries.get(index).getValue().compareTo(
+                        entries.get(best).getValue()) > 0)) {
+                    best = index;
+                }
+            }
+            String carrier = entries.get(best).getKey();
+            targets.put(carrier, targets.get(carrier) + 1);
+            remainders.set(best, BigDecimal.valueOf(-1));
+            assigned++;
+        }
+        return targets;
+    }
+
+    private String normalizeCarrier(String code) {
+        if (code == null || code.trim().isEmpty()) {
+            return CarrierCodes.SELF01;
+        }
+        String value = code.trim().toUpperCase();
+        if ("SF".equals(value) || "SFEXPRESS".equals(value)
+                || value.contains("顺丰")
+                || "JD".equals(value) || "JDL".equals(value)
+                || "JINGDONG".equals(value) || value.contains("京东")
+                || "SELF".equals(value) || "SELF01".equals(value)
+                || "FLEET".equals(value) || value.contains("自建")
+                || value.contains("车队")
+                || "ZTO".equals(value) || "YTO".equals(value)
+                || "STO".equals(value) || "YUNDA".equals(value)) {
+            return CarrierCodes.toTms(value);
+        }
+        return value;
+    }
+
+    private Map<String, BigDecimal> rawCarrierMix(
+            String json, Map<String, BigDecimal> fallback) {
+        Map<String, Object> raw;
+        try {
+            raw = objectMapper.readValue(json, Map.class);
+        } catch (Exception ex) {
+            return fallback;
+        }
+        Object value = raw.get("carrierMix");
+        if (!(value instanceof Map)) {
+            return fallback;
+        }
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+            try {
+                result.put(String.valueOf(entry.getKey()),
+                        new BigDecimal(String.valueOf(entry.getValue())));
+            } catch (NumberFormatException ignored) {
+                // ignore malformed share
+            }
+        }
+        return result.isEmpty() ? fallback : result;
+    }
+
+    private String targetDeficit(
+            Map<String, Integer> counts, Map<String, Integer> targets) {
+        String selected = null;
+        int deficit = 0;
+        for (Map.Entry<String, Integer> target : targets.entrySet()) {
+            int current = counts.getOrDefault(target.getKey(), 0);
+            int gap = target.getValue() - current;
+            if (gap > deficit) {
+                deficit = gap;
+                selected = target.getKey();
+            }
+        }
+        return selected;
     }
 
     private String firstSku() {
@@ -841,6 +995,8 @@ public class SandboxService {
             addShare(data.getRegionShare(), "*",
                     region(row.getProvince()), BigDecimal.ONE);
         }
+        normalizeShares(data.getChannelShare());
+        normalizeShares(data.getRegionShare());
         for (String sku : data.getDemandBySku().keySet()) {
             if (!data.getRegionShare().containsKey(sku)) {
                 data.getRegionShare().put(sku,
@@ -851,7 +1007,7 @@ public class SandboxService {
         return data;
     }
 
-    private void addShare(
+    public void addShare(
             Map<String, Map<String, BigDecimal>> shares,
             String key,
             String dimension,
@@ -860,13 +1016,20 @@ public class SandboxService {
                 key, ignored -> new LinkedHashMap<>());
         values.put(dimension, values.getOrDefault(dimension,
                 BigDecimal.ZERO).add(amount));
-        BigDecimal total = BigDecimal.ZERO;
-        for (BigDecimal value : values.values()) {
-            total = total.add(value);
-        }
-        for (String name : new ArrayList<>(values.keySet())) {
-            values.put(name, values.get(name).divide(total, 6,
-                    BigDecimal.ROUND_HALF_UP));
+    }
+
+    public void normalizeShares(
+            Map<String, Map<String, BigDecimal>> shares) {
+        for (Map<String, BigDecimal> values : shares.values()) {
+            BigDecimal total = values.values().stream()
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (total.signum() == 0) {
+                continue;
+            }
+            for (String name : new ArrayList<>(values.keySet())) {
+                values.put(name, values.get(name).divide(total, 6,
+                        BigDecimal.ROUND_HALF_UP));
+            }
         }
     }
 
@@ -895,6 +1058,7 @@ public class SandboxService {
 
     private String write(Object value) {
         try {
+            objectMapper.findAndRegisterModules();
             return objectMapper.writeValueAsString(value);
         } catch (Exception ex) {
             throw new IllegalArgumentException("场景结果保存失败", ex);

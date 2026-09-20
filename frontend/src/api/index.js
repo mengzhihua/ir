@@ -53,10 +53,12 @@ export const sandboxApi = {
   autoHistory: (size = 8) => http.get('/sandbox/auto/history', { params: { size } }),
   policy: () => http.get('/sandbox/policy'),
   savePolicy: (data) => http.put('/sandbox/policy', data),
-  capital: (data) => http.post('/sandbox/capital', data || { workingCapital: 100000000 }, { timeout: 180000 }),
+  capital: (data) =>
+    http.post('/sandbox/capital', data || { workingCapital: 100000000 }, { timeout: 180000 }),
   capitalTiers: () => http.get('/sandbox/capital/tiers'),
   capitalSweep: (data) => http.post('/sandbox/capital/sweep', data || {}, { timeout: 180000 }),
-  adoptCapital: (data) => http.post('/sandbox/capital/adopt', data || { workingCapital: 100000000 }, { timeout: 180000 })
+  adoptCapital: (data) =>
+    http.post('/sandbox/capital/adopt', data || { workingCapital: 100000000 }, { timeout: 180000 })
 }
 export const costApi = {
   summary: (days = 30) => http.get('/cost/summary', { params: { days } }),
@@ -82,4 +84,27 @@ export const systemApi = {
   updateUser: (id, data) => http.put(`/system/user/${id}`, data),
   deleteUser: (id) => http.delete(`/system/user/${id}`),
   opLogs: (params) => http.get('/system/op-log/page', { params })
+}
+export const objectiveApi = {
+  list: () => http.get('/objective'),
+  save: (data) => http.post('/objective', data),
+  remove: (id) => http.delete(`/objective/${id}`),
+  scoreboard: () => http.get('/objective/scoreboard'),
+  metrics: () => http.get('/objective/metrics')
+}
+export const balanceApi = {
+  overview: () => http.get('/balance/overview'),
+  run: () => http.post('/balance/run'),
+  runs: (params) => http.get('/balance/run/page', { params }),
+  runDetail: (id) => http.get(`/balance/run/${id}`),
+  decisions: (params) => http.get('/balance/decision/page', { params }),
+  approve: (id) => http.post(`/balance/decision/${id}/approve`),
+  reject: (id, reason) => http.post(`/balance/decision/${id}/reject`, { reason }),
+  config: () => http.get('/balance/config'),
+  saveConfig: (data) => http.post('/balance/config', data)
+}
+export const supplyApi = {
+  overview: () => http.get('/supply/overview'),
+  page: (params) => http.get('/supply/purchase/page', { params }),
+  sap: () => http.get('/supply/sap')
 }

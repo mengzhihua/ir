@@ -140,4 +140,13 @@ class IrIntegrationTest {
                     .andExpect(jsonPath("$.data.stance").value("BALANCED"));
         }
     }
+    @Test void phaseTwoObjectiveAndBalanceFlow() throws Exception {
+        String t=token();
+        mvc.perform(post("/api/integration/sync/SRM").header("Authorization","Bearer "+t)).andExpect(status().isOk()).andExpect(jsonPath("$.data.purchaseOrders").value(24));
+        mvc.perform(post("/api/integration/sync/SAP").header("Authorization","Bearer "+t)).andExpect(status().isOk()).andExpect(jsonPath("$.data.stock").value(10));
+        mvc.perform(get("/api/objective/scoreboard").header("Authorization","Bearer "+t)).andExpect(status().isOk()).andExpect(jsonPath("$.data.objectives.length()").value(5)).andExpect(jsonPath("$.data.metrics.npsEstimate").exists());
+        mvc.perform(post("/api/balance/run").header("Authorization","Bearer "+t)).andExpect(status().isOk()).andExpect(jsonPath("$.data.run.status").value("DONE")).andExpect(jsonPath("$.data.decisions").isArray());
+        mvc.perform(post("/api/action").header("Authorization","Bearer "+t).contentType(MediaType.APPLICATION_JSON).content("{\"type\":\"SRM_PURCHASE_SUGGEST\",\"targetKey\":\"SKU005\",\"params\":{\"sku\":\"SKU005\",\"qty\":80}}")).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("SUCCESS"));
+        mvc.perform(get("/api/supply/overview").header("Authorization","Bearer "+t)).andExpect(status().isOk()).andExpect(jsonPath("$.data.suppliers").isArray());
+    }
 }

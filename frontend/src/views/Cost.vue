@@ -3,7 +3,10 @@
     <div class="page-title">
       <div>
         <h2>成本分析</h2>
-        <p class="subtitle">按类型、仓库、承运商分析供应链成本；运费优先认 BMS 结算，没有账单时回退 TMS 快照。预估来自成功指令运价，回写只计换商后运费差（贵换为负）</p>
+        <p class="subtitle">
+          按类型、仓库、承运商分析供应链成本；运费优先认 BMS 结算，没有账单时回退 TMS
+          快照。预估来自成功指令运价，回写只计换商后运费差（贵换为负）
+        </p>
       </div>
       <el-button @click="load">刷新</el-button>
     </div>
@@ -90,9 +93,7 @@
           label="仓库" /><el-table-column prop="carrierCode" label="承运商" /><el-table-column
           prop="sourceSystem"
           label="来源"
-          width="90" /><el-table-column
-          label="金额"
-          align="right"
+          width="90" /><el-table-column label="金额" align="right"
           ><template #default="{ row }">{{ formatMoney(row.amount) }}</template></el-table-column
         ><template #empty><el-empty description="暂无成本记录" /></template
       ></el-table>

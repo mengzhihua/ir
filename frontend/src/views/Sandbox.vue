@@ -255,7 +255,9 @@
       <div v-if="capitalResult">
         <p>{{ capitalResult.reason }}</p>
         <p v-if="capitalResult.recommended" class="subtitle">
-          推荐策略：{{ capitalResult.recommended.name }}（安全 {{ capitalResult.recommended.safetyDays }} 天 / 补货 {{ capitalResult.recommended.replenishLeadDays }} 天）
+          推荐策略：{{ capitalResult.recommended.name }}（安全
+          {{ capitalResult.recommended.safetyDays }} 天 / 补货
+          {{ capitalResult.recommended.replenishLeadDays }} 天）
         </p>
         <div class="stats">
           <div class="stat">
@@ -276,7 +278,10 @@
           </div>
           <div class="stat">
             <div class="label">SKU / 库存</div>
-            <div class="value">{{ capitalResult.skuCount ?? '-' }} / {{ formatNumber(capitalResult.inventoryUnits, 0) }}</div>
+            <div class="value">
+              {{ capitalResult.skuCount ?? '-' }} /
+              {{ formatNumber(capitalResult.inventoryUnits, 0) }}
+            </div>
           </div>
           <div class="stat">
             <div class="label">安全垫</div>
@@ -367,13 +372,16 @@
       <template #footer>
         <el-button @click="capitalDialog = false">关闭</el-button>
         <el-button :loading="capitalLoading" @click="analyzeCapital">推演当前金额</el-button>
-        <el-button type="warning" :loading="sweeping" @click="sweepCapital">自动跑完所有档位</el-button>
+        <el-button type="warning" :loading="sweeping" @click="sweepCapital"
+          >自动跑完所有档位</el-button
+        >
         <el-button
           v-if="canWrite() && capitalResult?.recommended"
           type="primary"
           :loading="adopting"
           @click="adoptRecommended"
-        >采纳推荐策略</el-button>
+          >采纳推荐策略</el-button
+        >
       </template>
     </el-dialog>
     <el-dialog v-model="actionDialog" title="已生成待执行动作" width="680px"
@@ -409,7 +417,13 @@ import {
   parseJson,
   percent
 } from '../utils/format'
-import { actionStatusLabels, capitalVerdictLabels, labelOf, scenarioStatusLabels, tagTypes } from '../utils/labels'
+import {
+  actionStatusLabels,
+  capitalVerdictLabels,
+  labelOf,
+  scenarioStatusLabels,
+  tagTypes
+} from '../utils/labels'
 const channels = ['TMALL', 'JD', 'DOUYIN', 'OFFLINE', 'API']
 const carriers = ['SF', 'JD', 'SELF01']
 const rows = ref([])

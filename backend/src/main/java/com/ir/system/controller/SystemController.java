@@ -36,8 +36,8 @@ public class SystemController {
             @RequestParam(defaultValue = "1") long current,
             @RequestParam(defaultValue = "20") long size) {
         LambdaQueryWrapper<User> query = new LambdaQueryWrapper<>();
-        if (role != null) {
-            query.eq(User::getRole, role);
+        if (role != null && !role.trim().isEmpty()) {
+            query.eq(User::getRole, role.trim());
         }
         if (keyword != null && !keyword.trim().isEmpty()) {
             query.and(wrapper -> wrapper

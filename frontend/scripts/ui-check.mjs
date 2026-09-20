@@ -5,6 +5,15 @@ const cdpUrl = process.env.CDP_URL || 'http://localhost:29229'
 const routes = [
   ['/dashboard', null],
   ['/trace', async (page) => page.getByRole('button', { name: '详情' }).first().click()],
+  ['/objective', null],
+  [
+    '/balance',
+    async (page) => {
+      await page.getByRole('button', { name: '立即平衡' }).click()
+      await page.getByRole('dialog').waitFor({ state: 'visible', timeout: 15000 })
+    }
+  ],
+  ['/supply', null],
   ['/alert', null],
   ['/rule', null],
   ['/action', null],
@@ -19,6 +28,18 @@ const routes = [
       await page.keyboard.press('Escape')
     }
     await page.locator('.el-table__body-wrapper tbody tr').first().click()
+    const applyButton = page.getByRole('button', { name: '应用到OTW' })
+    if (await applyButton.count()) {
+      await applyButton.first().click()
+    } else {
+      await page.getByRole('button', { name: '生成指令' }).first().click()
+    }
+    const dialog = page.getByRole('dialog', { name: '已生成待执行动作' })
+    await dialog.waitFor({ state: 'visible', timeout: 10000 })
+    const rows = dialog.locator('.el-table__body-wrapper tbody tr')
+    if ((await rows.count()) < 1) {
+      throw new Error('应用到OTW未生成待执行动作')
+    }
   }],
   [
     '/compare',
@@ -70,12 +91,13 @@ async function assertPage(page, route) {
     const hasEmpty = await table.locator('.el-table__empty-text').count()
     const rows = await table.locator('.el-table__body-wrapper tbody tr').count()
     const requiresData =
-      route === '/sandbox' && (await table.locator('.sandbox-sku-table').count()) > 0
+      (route === '/sandbox' && (await table.locator('.sandbox-sku-table').count()) > 0) ||
+      route === '/replenish'
     if ((hasEmpty === 0 || requiresData) && rows === 0) {
       throw new Error(`第 ${index + 1} 个表格没有数据行`)
     }
   }
-  const cells = page.locator('.el-table__body-wrapper td')
+  const cells = page.locator('.el-table__body-wrapper td:not(.rule-params)')
   const cellText = await cells.allTextContents()
   const raw = cellText.find((value) => /\b(RUN|OPEN|PENDING|MOCK)\b/.test(value))
   if (raw) {
@@ -102,7 +124,7 @@ try {
 }
 
 const context = browser.contexts()[0] || (await browser.newContext())
-const page = context.pages()[0] || (await context.newPage())
+const page = await context.newPage()
 const results = []
 
 try {

@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.TestPropertySource;
 import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
 import com.ir.action.service.ActionService;
@@ -33,6 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 @ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_CLASS)
+@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:alertengine;MODE=MySQL;DB_CLOSE_DELAY=-1")
 class AlertEngineTest {
     @Autowired
     private AlertEngine alertEngine;

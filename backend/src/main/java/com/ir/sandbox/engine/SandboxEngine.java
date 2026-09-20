@@ -55,6 +55,9 @@ public class SandboxEngine {
         private BigDecimal inventoryUnits = BigDecimal.ZERO;
         private BigDecimal inventoryValue = BigDecimal.ZERO;
         private boolean skuSummaryTruncated;
+        private Map<String, String> skuWarehouse = new LinkedHashMap<>();
+        private Map<String, BigDecimal> stockoutByWarehouseSku =
+                new LinkedHashMap<>();
     }
 
     public Result run(ScenarioParams params, BaselineData baseline) {
@@ -130,6 +133,9 @@ public class SandboxEngine {
                             available.subtract(regionalFulfilled));
                     fulfilled = fulfilled.add(regionalFulfilled);
                     stockout = stockout.add(regionalStockout);
+                    add(plan.fulfilledByWarehouse, warehouse, regionalFulfilled);
+                    add(result.getStockoutByWarehouseSku(),
+                            key(warehouse, plan.sku), regionalStockout);
 
                     BigDecimal distance = distance(warehouse, region.getKey());
                     dayFreight = dayFreight.add(carrierFreight(
@@ -214,6 +220,7 @@ public class SandboxEngine {
         roundMap(result.getCostByWarehouse(), 2);
         roundMap(result.getCostByCarrier(), 2);
         finishCapital(result, params, cash);
+        roundMap(result.getStockoutByWarehouseSku(), 2);
         return result;
     }
 
@@ -234,6 +241,10 @@ public class SandboxEngine {
             summary.put("fulfilled", round(plan.fulfilled, 2));
             summary.put("stockout", round(plan.stockout, 2));
             result.getPerSkuSummary().add(summary);
+            String warehouse = mostFulfilledWarehouse(plan.fulfilledByWarehouse);
+            if (warehouse != null) {
+                result.getSkuWarehouse().put(plan.sku, warehouse);
+            }
         }
         result.setSkuSummaryTruncated(plans.size() > limit);
     }
@@ -246,6 +257,7 @@ public class SandboxEngine {
         private BigDecimal demand = BigDecimal.ZERO;
         private BigDecimal fulfilled = BigDecimal.ZERO;
         private BigDecimal stockout = BigDecimal.ZERO;
+        private Map<String, BigDecimal> fulfilledByWarehouse = new LinkedHashMap<>();
     }
 
     private BigDecimal channelDemand(
@@ -288,8 +300,12 @@ public class SandboxEngine {
                         .subtract(outstanding).max(BigDecimal.ZERO);
                 quantity = affordPurchase(params, cash, quantity);
                 if (quantity.signum() > 0) {
-                    int arrivalDay = day + Math.max(0,
-                            params.getReplenishLeadDays());
+                    if (params.getReplenishLeadDays() == 0) {
+                        stock.put(key(warehouse, sku),
+                                available.add(quantity));
+                        continue;
+                    }
+                    int arrivalDay = day + params.getReplenishLeadDays();
                     arrivals.computeIfAbsent(arrivalDay,
                             ignored -> new LinkedHashMap<>());
                     Map<String, BigDecimal> due = arrivals.get(arrivalDay);
@@ -639,6 +655,24 @@ public class SandboxEngine {
         BigDecimal result = BigDecimal.ZERO;
         for (BigDecimal value : values.values()) {
             result = result.add(value);
+        }
+        return result;
+    }
+
+    private String mostFulfilledWarehouse(
+            Map<String, BigDecimal> fulfilledByWarehouse) {
+        String result = null;
+        BigDecimal highest = null;
+        for (Map.Entry<String, BigDecimal> entry
+                : fulfilledByWarehouse.entrySet()) {
+            if (entry.getValue().signum() <= 0) {
+                continue;
+            }
+            if (highest == null
+                    || entry.getValue().compareTo(highest) > 0) {
+                result = entry.getKey();
+                highest = entry.getValue();
+            }
         }
         return result;
     }

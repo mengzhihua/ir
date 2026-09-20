@@ -3,7 +3,9 @@
     <div class="page-title">
       <div>
         <h2>系统集成</h2>
-        <p class="subtitle">OMS / WMS / TMS / BMS / SRM / SAP / BOM / INV / CRM / DMS / OA 统一同步与指令</p>
+        <p class="subtitle">
+          OMS / WMS / TMS / BMS / SRM / SAP / BOM / INV / CRM / DMS / OA 统一同步与指令
+        </p>
       </div>
       <div>
         <el-button :disabled="!canWrite()" type="primary" @click="syncAll">全部同步</el-button>
@@ -31,18 +33,11 @@
           }}</el-descriptions-item></el-descriptions
         >
         <div class="card-actions">
-          <el-radio-group
-            v-model="system.mode"
-            :disabled="!canWrite()"
-            @change="saveMode(system)"
+          <el-radio-group v-model="system.mode" :disabled="!canWrite()" @change="saveMode(system)"
             ><el-radio-button value="MOCK" /><el-radio-button value="HTTP" /></el-radio-group
           ><el-button size="small" @click="edit(system)">编辑</el-button
           ><el-button size="small" @click="health(system)">健康检查</el-button
-          ><el-button
-            size="small"
-            type="primary"
-            :disabled="!canWrite()"
-            @click="sync(system)"
+          ><el-button size="small" type="primary" :disabled="!canWrite()" @click="sync(system)"
             >立即同步</el-button
           >
         </div></el-card
@@ -57,13 +52,18 @@
         ><el-table-column prop="sourceSystem" label="系统" width="90" /><el-table-column
           prop="dataType"
           label="类型"
-          width="140" /><el-table-column prop="bizKey" label="单号" min-width="160" /><el-table-column
-          prop="status"
-          label="状态"
-          width="120" /><el-table-column prop="sku" label="SKU/物料" width="140" /><el-table-column
+          width="140" /><el-table-column
+          prop="bizKey"
+          label="单号"
+          min-width="160" /><el-table-column label="状态" width="120"
+          ><template #default="{ row }">{{
+            labelOf(row.status, integrationStatusLabels)
+          }}</template></el-table-column
+        ><el-table-column prop="sku" label="SKU/物料" width="140" /><el-table-column
           prop="title"
           label="摘要"
-          min-width="180" /><template #empty><el-empty description="暂无生态快照，请先同步" /></template
+          min-width="180" /><template #empty
+          ><el-empty description="暂无生态快照，请先同步" /></template
       ></el-table>
       <div class="pagination">
         <el-pagination
@@ -129,7 +129,7 @@ import { ElMessage } from 'element-plus'
 import { integrationApi } from '../api'
 import { canWrite } from '../auth'
 import { formatDate, pageResult } from '../utils/format'
-import { labelOf, systemModeLabels } from '../utils/labels'
+import { integrationStatusLabels, labelOf, systemModeLabels } from '../utils/labels'
 const systems = ref([])
 const logs = ref([])
 const snapshots = ref([])

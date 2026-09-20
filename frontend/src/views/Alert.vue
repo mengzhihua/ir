@@ -119,7 +119,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { alertApi } from '../api'
 import { canWrite } from '../auth'
 import { formatDate, pageResult } from '../utils/format'
-import { actionTypeLabels, alertStatusLabels, labelOf, severityLabels, tagTypes } from '../utils/labels'
+import {
+  actionTypeLabels,
+  alertStatusLabels,
+  labelOf,
+  severityLabels,
+  tagTypes
+} from '../utils/labels'
 const filters = reactive({ status: '', severity: '', type: '' })
 const pager = reactive({ current: 1, size: 20, total: 0 })
 const stats = reactive({})

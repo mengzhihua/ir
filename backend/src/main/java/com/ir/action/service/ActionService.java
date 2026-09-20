@@ -14,14 +14,19 @@ import com.ir.common.CodeGenerator;
 import com.ir.common.WarehouseCodes;
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.ClientFactory;
+import com.ir.integration.client.IntegrationException;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSystemMapper;
 import com.ir.sandbox.service.BalanceAdvisor;
 import com.ir.snapshot.entity.ExtSnapshot;
+import com.ir.snapshot.entity.InventorySnapshot;
 import com.ir.snapshot.entity.OrderSnapshot;
+import com.ir.snapshot.PurchaseSnapshot;
+import com.ir.snapshot.PurchaseSnapshotMapper;
 import com.ir.snapshot.entity.ShipmentSnapshot;
 import com.ir.snapshot.entity.WmsOrderSnapshot;
 import com.ir.snapshot.mapper.ExtSnapshotMapper;
+import com.ir.snapshot.mapper.InventorySnapshotMapper;
 import com.ir.snapshot.mapper.OrderSnapshotMapper;
 import com.ir.snapshot.mapper.ShipmentSnapshotMapper;
 import com.ir.snapshot.mapper.WmsOrderSnapshotMapper;
@@ -39,12 +44,16 @@ import java.util.Map;
 
 @Service
 public class ActionService {
+    public static final String IDEMPOTENCY_KEY = "idempotencyKey";
+    public static final String RETRY_OF = "retryOf";
     private final CtActionMapper actionMapper;
     private final CtSystemMapper systemMapper;
     private final OrderSnapshotMapper orderMapper;
     private final WmsOrderSnapshotMapper wmsMapper;
     private final ShipmentSnapshotMapper shipmentMapper;
     private final ExtSnapshotMapper extMapper;
+    private final InventorySnapshotMapper inventoryMapper;
+    private final PurchaseSnapshotMapper purchaseMapper;
     private final ClientFactory clients;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
@@ -56,6 +65,8 @@ public class ActionService {
             WmsOrderSnapshotMapper wmsMapper,
             ShipmentSnapshotMapper shipmentMapper,
             ExtSnapshotMapper extMapper,
+            InventorySnapshotMapper inventoryMapper,
+            PurchaseSnapshotMapper purchaseMapper,
             ClientFactory clients,
             CodeGenerator codes,
             ObjectMapper objectMapper) {
@@ -65,6 +76,8 @@ public class ActionService {
         this.wmsMapper = wmsMapper;
         this.shipmentMapper = shipmentMapper;
         this.extMapper = extMapper;
+        this.inventoryMapper = inventoryMapper;
+        this.purchaseMapper = purchaseMapper;
         this.clients = clients;
         this.codes = codes;
         this.objectMapper = objectMapper;
@@ -72,6 +85,11 @@ public class ActionService {
 
     @Transactional
     public CtAction createAndExecute(Map<String, Object> request) {
+        return createAndExecute(request, null);
+    }
+
+    private CtAction createAndExecute(
+            Map<String, Object> request, String idempotencyKey) {
         String type = String.valueOf(request.get("type"));
         String targetKey = String.valueOf(request.get("targetKey"));
         supersedeRelatedPending(type, targetKey, null);
@@ -89,11 +107,14 @@ public class ActionService {
             }
             return actionMapper.selectById(existing.getId());
         }
-        CtAction action = create(request);
+        CtAction action = create(request, idempotencyKey);
         try {
             execute(action, read(action.getParamsJson()));
         } catch (Exception ex) {
-            action.setStatus("FAILED");
+            action.setStatus(ex instanceof com.ir.integration.client.IntegrationException
+                    && ((com.ir.integration.client.IntegrationException) ex)
+                            .isOutcomeUnknown()
+                    ? "UNKNOWN" : "FAILED");
             action.setResult(ex.getMessage());
             action.setExecutedAt(LocalDateTime.now());
             actionMapper.updateById(action);
@@ -143,6 +164,11 @@ public class ActionService {
     }
 
     private CtAction create(Map<String, Object> request) {
+        return create(request, null);
+    }
+
+    private CtAction create(
+            Map<String, Object> request, String idempotencyKey) {
         String type = String.valueOf(request.get("type"));
         String targetKey = String.valueOf(request.get("targetKey"));
         Map<String, Object> params = request.get("params") instanceof Map
@@ -153,6 +179,8 @@ public class ActionService {
 
         CtAction action = new CtAction();
         action.setActionNo(codes.next("ACT"));
+        params.put(IDEMPOTENCY_KEY, idempotencyKey == null
+                ? action.getActionNo() : idempotencyKey);
         action.setType(type);
         action.setTargetKey(targetKey);
         action.setTargetSystem(systemFor(type));
@@ -168,6 +196,8 @@ public class ActionService {
     }
 
     private void execute(CtAction action, Map<String, Object> params) {
+        InventorySnapshot reserved = null;
+        boolean dispatched = false;
         try {
             CtSystem system = systemMapper.selectOne(
                     new LambdaQueryWrapper<CtSystem>()
@@ -176,6 +206,9 @@ public class ActionService {
             command.setType(action.getType());
             command.setTargetKey(action.getTargetKey());
             command.setParams(params);
+            command.setIdempotencyKey(String.valueOf(params.get(IDEMPOTENCY_KEY)));
+            validate(action, params);
+            reserved = reserveTransferSource(action, params);
             if ("OMS".equals(action.getTargetSystem())) {
                 clients.oms(system).execute(command);
             } else if ("WMS".equals(action.getTargetSystem())) {
@@ -195,13 +228,32 @@ public class ActionService {
             } else {
                 clients.ecosystem(system).execute(command);
             }
-            mutateSnapshot(action, params);
+            dispatched = true;
+            try {
+                mutateSnapshot(action, params);
+            } catch (RuntimeException ex) {
+                action.setResult("指令执行成功;本地快照更新失败,待对账: " + ex.getMessage());
+            }
             action.setParams(write(params));
             action.setStatus("SUCCESS");
-            action.setResult("指令执行成功");
+            if (action.getResult() == null) {
+                action.setResult("指令执行成功");
+            }
         } catch (Exception ex) {
-            action.setStatus("FAILED");
-            action.setResult(ex.getMessage());
+            boolean unknown = !dispatched && ex instanceof IntegrationException
+                    && ((IntegrationException) ex).isOutcomeUnknown()
+                    ;
+            if (unknown) {
+                action.setStatus("UNKNOWN");
+                action.setResult("远端结果未知,已保留预占,待对账(幂等键 "
+                        + params.get(IDEMPOTENCY_KEY) + "): " + ex.getMessage());
+            } else {
+                if (reserved != null && !dispatched) {
+                    adjustInventory(reserved.getId(), decimal(params.get("qty")));
+                }
+                action.setStatus("FAILED");
+                action.setResult(ex.getMessage());
+            }
         }
         action.setExecutedAt(LocalDateTime.now());
         actionMapper.updateById(action);
@@ -212,13 +264,25 @@ public class ActionService {
         if (original == null) {
             return null;
         }
+        int claimed = actionMapper.update(null, new LambdaUpdateWrapper<CtAction>()
+                .eq(CtAction::getId, id)
+                .eq(CtAction::getStatus, "FAILED")
+                .set(CtAction::getStatus, "RETRIED"));
+        if (claimed == 0) {
+            throw new com.ir.common.BizException("仅 FAILED 状态的动作可重试,且每个动作只能重试一次(当前 "
+                    + original.getStatus() + ")");
+        }
+        Map<String, Object> params = read(original.getParamsJson());
+        Object key = params.get(IDEMPOTENCY_KEY);
+        params.put(RETRY_OF, original.getActionNo());
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("type", original.getType());
         request.put("targetKey", original.getTargetKey());
-        request.put("params", read(original.getParamsJson()));
+        request.put("params", params);
         request.put("alertId", original.getAlertId());
         request.put("expectedSaving", original.getExpectedSaving());
-        return createAndExecute(request);
+        return createAndExecute(request, key == null
+                ? original.getActionNo() : String.valueOf(key));
     }
 
     public Page<CtAction> page(
@@ -330,6 +394,25 @@ public class ActionService {
             if (order != null) {
                 order.setStatus("ALLOCATED");
                 wmsMapper.updateById(order);
+            }
+        } else if ("WMS_REPLENISH".equals(action.getType())
+                && params.get("fromWarehouseCode") != null) {
+            InventorySnapshot destination = inventoryMapper.selectOne(
+                    new LambdaQueryWrapper<InventorySnapshot>()
+                            .eq(InventorySnapshot::getSourceSystem, "WMS")
+                            .eq(InventorySnapshot::getWarehouseCode,
+                                    String.valueOf(params.get("warehouseCode")))
+                            .eq(InventorySnapshot::getSku,
+                                    String.valueOf(params.get("sku")))
+                            .last("LIMIT 1"));
+            if (destination != null) {
+                BigDecimal qty = decimal(params.get("qty"));
+                inventoryMapper.update(null, new LambdaUpdateWrapper<InventorySnapshot>()
+                        .eq(InventorySnapshot::getId, destination.getId())
+                        .setSql("qty_available = qty_available + "
+                                + qty.toPlainString())
+                        .setSql("qty_on_hand = qty_on_hand + "
+                                + qty.toPlainString()));
             }
         } else if ("TMS_SWITCH_CARRIER".equals(action.getType())) {
             ShipmentSnapshot shipment = shipmentMapper.selectOne(
@@ -446,6 +529,60 @@ public class ActionService {
         action.setResult(result);
         action.setExecutedAt(LocalDateTime.now());
         actionMapper.updateById(action);
+    }
+
+    private void validate(CtAction action, Map<String, Object> params) {
+        if ("WMS_REPLENISH".equals(action.getType())
+                && params.get("fromWarehouseCode") != null
+                && decimal(params.get("qty")).signum() <= 0) {
+            throw new IllegalStateException("调拨缺少有效数量 qty");
+        }
+        if ("SRM_PURCHASE_SUGGEST".equals(action.getType())
+                && decimal(params.get("qty")).signum() <= 0) {
+            throw new IllegalStateException("采购建议缺少有效数量 qty");
+        }
+    }
+
+    private InventorySnapshot reserveTransferSource(
+            CtAction action, Map<String, Object> params) {
+        if (!"WMS_REPLENISH".equals(action.getType())
+                || params.get("fromWarehouseCode") == null) {
+            return null;
+        }
+        LambdaQueryWrapper<InventorySnapshot> sourceQuery = new LambdaQueryWrapper<InventorySnapshot>()
+                        .eq(InventorySnapshot::getSourceSystem, "WMS")
+                        .eq(InventorySnapshot::getWarehouseCode,
+                                String.valueOf(params.get("fromWarehouseCode")))
+                        .eq(InventorySnapshot::getSku,
+                                String.valueOf(params.get("sku")))
+                        .orderByDesc(InventorySnapshot::getQtyAvailable)
+                        .last("LIMIT 1");
+        InventorySnapshot source = inventoryMapper.selectOne(sourceQuery);
+        BigDecimal qty = decimal(params.get("qty"));
+        int updated = source == null ? 0 : inventoryMapper.update(null,
+                new LambdaUpdateWrapper<InventorySnapshot>()
+                        .eq(InventorySnapshot::getId, source.getId())
+                        .ge(InventorySnapshot::getQtyAvailable, qty)
+                        .setSql("qty_available = qty_available - "
+                                + qty.toPlainString())
+                        .setSql("qty_on_hand = qty_on_hand - "
+                                + qty.toPlainString()));
+        if (updated != 1) {
+            throw new IllegalStateException("来源仓 "
+                + params.get("fromWarehouseCode")
+                    + " 可用库存不足,无法调拨 " + qty + " 件 "
+                    + params.get("sku"));
+        }
+        return source;
+    }
+
+    private void adjustInventory(Long id, BigDecimal delta) {
+        inventoryMapper.update(null, new LambdaUpdateWrapper<InventorySnapshot>()
+                .eq(InventorySnapshot::getId, id)
+                .setSql("qty_available = qty_available + "
+                        + delta.toPlainString())
+                .setSql("qty_on_hand = qty_on_hand + "
+                        + delta.toPlainString()));
     }
 
     private String carrierOf(CtAction action) {

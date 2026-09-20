@@ -4,19 +4,30 @@ import com.ir.integration.entity.CtSystem;
 import com.ir.integration.http.HttpBmsClient;
 import com.ir.integration.http.HttpEcosystemClient;
 import com.ir.integration.http.HttpOmsClient;
+import com.ir.integration.http.HttpSapClient;
 import com.ir.integration.http.HttpSrmClient;
 import com.ir.integration.http.HttpTmsClient;
 import com.ir.integration.http.HttpWmsClient;
 import com.ir.integration.mock.MockBmsClient;
 import com.ir.integration.mock.MockEcosystemClient;
 import com.ir.integration.mock.MockOmsClient;
+import com.ir.integration.mock.MockSapClient;
 import com.ir.integration.mock.MockSrmClient;
 import com.ir.integration.mock.MockTmsClient;
 import com.ir.integration.mock.MockWmsClient;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.client.ClientHttpRequestExecution;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -27,9 +38,50 @@ public class ClientFactory {
     private final MockTmsClient tms;
     private final MockBmsClient bms;
     private final MockSrmClient srm;
+    private final MockSapClient sap;
     private final MockEcosystemClient ecosystem;
+    private final BaseUrlValidator validator;
     private final RestTemplate http;
     private final String httpSystems;
+
+    @Autowired
+    public ClientFactory(
+            MockOmsClient oms,
+            MockWmsClient wms,
+            MockTmsClient tms,
+            MockBmsClient bms,
+            MockSrmClient srm,
+            MockSapClient sap,
+            MockEcosystemClient ecosystem,
+            BaseUrlValidator validator,
+            @Value("${ir.http.systems:}") String httpSystems) {
+        this(oms, wms, tms, bms, srm, sap, ecosystem, validator, null, httpSystems);
+    }
+
+    public ClientFactory(
+            MockOmsClient oms,
+            MockWmsClient wms,
+            MockTmsClient tms,
+            MockBmsClient bms,
+            MockSrmClient srm,
+            MockSapClient sap,
+            BaseUrlValidator validator) {
+        this(oms, wms, tms, bms, srm, sap, null, validator, null, "");
+    }
+
+    public ClientFactory(
+            MockOmsClient oms,
+            MockWmsClient wms,
+            MockTmsClient tms,
+            MockBmsClient bms,
+            MockSrmClient srm,
+            MockSapClient sap,
+            MockEcosystemClient ecosystem,
+            RestTemplate http,
+            String httpSystems) {
+        this(oms, wms, tms, bms, srm, sap, ecosystem,
+                new BaseUrlValidator(true), http, httpSystems);
+    }
 
     public ClientFactory(
             MockOmsClient oms,
@@ -39,21 +91,63 @@ public class ClientFactory {
             MockSrmClient srm,
             MockEcosystemClient ecosystem,
             RestTemplate http,
-            @Value("${ir.http.systems:}") String httpSystems) {
+            String httpSystems) {
+        this(oms, wms, tms, bms, srm, null, ecosystem,
+                new BaseUrlValidator(true), http, httpSystems);
+    }
+
+    ClientFactory(
+            MockOmsClient oms,
+            MockWmsClient wms,
+            MockTmsClient tms,
+            MockBmsClient bms,
+            MockSrmClient srm,
+            MockSapClient sap,
+            MockEcosystemClient ecosystem,
+            BaseUrlValidator validator,
+            RestTemplate http,
+            String httpSystems) {
         this.oms = oms;
         this.wms = wms;
         this.tms = tms;
         this.bms = bms;
         this.srm = srm;
+        this.sap = sap;
         this.ecosystem = ecosystem;
-        this.http = http;
+        this.validator = validator;
         this.httpSystems = httpSystems;
+        this.http = http == null ? createHttp() : http;
+        this.http.getInterceptors().add(this::validateRequest);
+    }
+
+    private RestTemplate createHttp() {
+        RequestConfig config = RequestConfig.custom()
+                .setConnectTimeout(3000)
+                .setSocketTimeout(10000)
+                .build();
+        CloseableHttpClient client = HttpClients.custom()
+                .setDefaultRequestConfig(config)
+                .setDnsResolver(new ValidatingDnsResolver(validator))
+                .disableRedirectHandling()
+                .build();
+        return new RestTemplate(new HttpComponentsClientHttpRequestFactory(client));
+    }
+
+    private ClientHttpResponse validateRequest(
+            HttpRequest request,
+            byte[] body,
+            ClientHttpRequestExecution execution) throws IOException {
+        try {
+            validator.validateStructure(request.getURI());
+        } catch (IllegalArgumentException ex) {
+            throw new IntegrationException("集成地址校验失败", ex);
+        }
+        return execution.execute(request, body);
     }
 
     public OmsClient oms(CtSystem system) {
         if (httpMode(system)) {
-            return new HttpOmsClient(
-                    http, system.getBaseUrl(), system.getUsername(),
+            return new HttpOmsClient(http, system.getBaseUrl(), system.getUsername(),
                     system.getPassword(), system.getApiKey());
         }
         return oms;
@@ -61,8 +155,7 @@ public class ClientFactory {
 
     public WmsClient wms(CtSystem system) {
         if (httpMode(system)) {
-            return new HttpWmsClient(
-                    http, system.getBaseUrl(), system.getUsername(),
+            return new HttpWmsClient(http, system.getBaseUrl(), system.getUsername(),
                     system.getPassword(), system.getApiKey());
         }
         return wms;
@@ -84,9 +177,18 @@ public class ClientFactory {
 
     public SrmClient srm(CtSystem system) {
         if (httpMode(system)) {
-            return new HttpSrmClient(http, system.getBaseUrl(), system.getApiKey());
+            return new HttpSrmClient(http, system.getBaseUrl(),
+                    system.getUsername(), system.getPassword());
         }
         return srm;
+    }
+
+    public SapClient sap(CtSystem system) {
+        if (httpMode(system)) {
+            return new HttpSapClient(http, system.getBaseUrl(),
+                    system.getUsername(), system.getPassword());
+        }
+        return sap;
     }
 
     public EcosystemClient ecosystem(CtSystem system) {
@@ -138,9 +240,7 @@ public class ClientFactory {
         if (system == null) {
             return false;
         }
-        if ("HTTP".equalsIgnoreCase(system.getMode())) {
-            return true;
-        }
-        return forcedHttp(httpSystems, system.getCode());
+        return "HTTP".equalsIgnoreCase(system.getMode())
+                || forcedHttp(httpSystems, system.getCode());
     }
 }

@@ -12,6 +12,8 @@ import com.ir.forecast.engine.ForecastEngine;
 import com.ir.forecast.entity.CtForecast;
 import com.ir.forecast.mapper.CtForecastMapper;
 import com.ir.snapshot.entity.ExtSnapshot;
+import com.ir.snapshot.PurchaseSnapshot;
+import com.ir.snapshot.PurchaseSnapshotMapper;
 import com.ir.snapshot.entity.InventorySnapshot;
 import com.ir.snapshot.entity.SalesDaily;
 import com.ir.snapshot.mapper.ExtSnapshotMapper;
@@ -40,6 +42,7 @@ public class ForecastService {
     private final SalesDailyMapper salesMapper;
     private final InventorySnapshotMapper inventoryMapper;
     private final ExtSnapshotMapper extMapper;
+    private final PurchaseSnapshotMapper purchaseMapper;
     private final CtForecastMapper forecastMapper;
     private final ForecastEngine engine;
     private final ActionService actions;
@@ -50,6 +53,7 @@ public class ForecastService {
             SalesDailyMapper salesMapper,
             InventorySnapshotMapper inventoryMapper,
             ExtSnapshotMapper extMapper,
+            PurchaseSnapshotMapper purchaseMapper,
             CtForecastMapper forecastMapper,
             ForecastEngine engine,
             ActionService actions,
@@ -58,6 +62,7 @@ public class ForecastService {
         this.salesMapper = salesMapper;
         this.inventoryMapper = inventoryMapper;
         this.extMapper = extMapper;
+        this.purchaseMapper = purchaseMapper;
         this.forecastMapper = forecastMapper;
         this.engine = engine;
         this.actions = actions;
@@ -252,6 +257,28 @@ public class ForecastService {
         List<ExtSnapshot> rows = extMapper.selectList(new LambdaQueryWrapper<ExtSnapshot>()
                 .in(ExtSnapshot::getDataType, "PO", "ASN")
                 .in(ExtSnapshot::getSourceSystem, "SRM", "SAP"));
+        Map<String, BigDecimal> rootPo = new HashMap<>();
+        Map<String, BigDecimal> rootAsn = new HashMap<>();
+        for (PurchaseSnapshot row : purchaseMapper.selectList(
+                new LambdaQueryWrapper<PurchaseSnapshot>()
+                        .in(PurchaseSnapshot::getDocType, "PO", "ASN"))) {
+            if (row.getSku() == null || row.getSku().trim().isEmpty()
+                    || closedInbound(row.getStatus())) {
+                continue;
+            }
+            BigDecimal qty = row.getQty() == null ? BigDecimal.ZERO : row.getQty();
+            BigDecimal received = row.getReceivedQty() == null
+                    ? BigDecimal.ZERO : row.getReceivedQty();
+            String key = WarehouseCodes.stockKey(row.getSku(),
+                    WarehouseCodes.ofInbound(row.getPlantCode(), null));
+            if ("ASN".equals(row.getDocType())) {
+                rootAsn.merge(key, qty.subtract(received).max(BigDecimal.ZERO),
+                        BigDecimal::add);
+            } else {
+                rootPo.merge(key, qty.subtract(received).max(BigDecimal.ZERO),
+                        BigDecimal::add);
+            }
+        }
         for (ExtSnapshot row : rows) {
             if (row.getSku() == null || row.getSku().trim().isEmpty() || closedInbound(row.getStatus())) {
                 continue;
@@ -262,6 +289,14 @@ public class ForecastService {
                 asn.merge(key, qty, BigDecimal::add);
             } else {
                 po.merge(key, qty, BigDecimal::add);
+            }
+        }
+        if (po.isEmpty() && asn.isEmpty()) {
+            for (Map.Entry<String, BigDecimal> entry : rootPo.entrySet()) {
+                po.put(entry.getKey(), entry.getValue());
+            }
+            for (Map.Entry<String, BigDecimal> entry : rootAsn.entrySet()) {
+                asn.put(entry.getKey(), entry.getValue());
             }
         }
         Map<String, BigDecimal> inbound = new HashMap<>(po);

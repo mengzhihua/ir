@@ -8,6 +8,7 @@ import com.ir.action.mapper.CtActionMapper;
 import com.ir.cost.entity.CtCostTarget;
 import com.ir.cost.mapper.CtCostTargetMapper;
 import com.ir.snapshot.entity.CostRecord;
+import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.mapper.CostRecordMapper;
 import com.ir.snapshot.mapper.OrderSnapshotMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -61,6 +62,12 @@ public class CostService {
             add(trend, row.getBizDate().toString(), row.getAmount());
         }
         Map<String, Object> result = new LinkedHashMap<>();
+        long orderCount = orderMapper.selectCount(
+                new LambdaQueryWrapper<OrderSnapshot>()
+                        .ge(OrderSnapshot::getOrderTime,
+                                from.atStartOfDay())
+                        .lt(OrderSnapshot::getOrderTime,
+                                LocalDate.now().plusDays(1).atStartOfDay()));
         result.put("total", total);
         result.put("byType", byType);
         result.put("byWarehouse", byWarehouse);
@@ -68,9 +75,9 @@ public class CostService {
         result.put("freightSource", freightSource(rows));
         result.put("freightBms", freightAmount(raw, "BMS"));
         result.put("freightTms", freightAmount(raw, "TMS"));
-        result.put("costPerOrder", orderMapper.selectCount(null) == 0
+        result.put("costPerOrder", orderCount == 0
                 ? BigDecimal.ZERO
-                : total.divide(BigDecimal.valueOf(orderMapper.selectCount(null)),
+                : total.divide(BigDecimal.valueOf(orderCount),
                 2, RoundingMode.HALF_UP));
         result.put("trend", trend);
         result.put("targetVsActual", targetVsActual(total));

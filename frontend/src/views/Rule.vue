@@ -30,7 +30,7 @@
               :disabled="!canWrite()"
               @change="save(row)" /></template
         ></el-table-column>
-        <el-table-column label="参数" min-width="220" show-overflow-tooltip
+        <el-table-column class-name="rule-params" label="参数" min-width="220" show-overflow-tooltip
           ><template #default="{ row }">{{ stringifyJson(row.params) }}</template></el-table-column
         >
         <el-table-column label="操作" width="100"

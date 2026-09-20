@@ -24,8 +24,8 @@ json -X POST "$BASE/api/alert/$DELAY_ID/execute-suggested" | jq -e '.code==0 and
 LOW_ID="$(json "$BASE/api/alert/page?status=OPEN&type=LOW_STOCK&size=5" | jq -r '.data.records[0].id')"
 test -n "$LOW_ID" && test "$LOW_ID" != "null"
 json -X POST "$BASE/api/alert/$LOW_ID/execute-suggested" | jq -e '.code==0 and .data.status=="SUCCESS" and .data.type=="SRM_PURCHASE_SUGGEST"' >/dev/null
-json "$BASE/api/forecast/replenish?warehouseCode=WH-SH&sku=SKU002&horizon=14&serviceDays=3" | jq -e '.code==0 and (.data[0].inTransit|tonumber)==12' >/dev/null
-json "$BASE/api/forecast/replenish?warehouseCode=WH-BJ&sku=SKU002&horizon=14&serviceDays=3" | jq -e '.code==0 and (.data[0].inTransit|tonumber)==0' >/dev/null
+json "$BASE/api/forecast/replenish?warehouseCode=WH-SH&sku=SKU002&horizon=14&serviceDays=3" | jq -e '.code==0 and (.data.records[0].inTransit|tonumber)==12' >/dev/null
+json "$BASE/api/forecast/replenish?warehouseCode=WH-BJ&sku=SKU002&horizon=14&serviceDays=3" | jq -e '.code==0 and (.data.records[0].inTransit|tonumber)==0' >/dev/null
 json -X POST "$BASE/api/action" -H 'Content-Type: application/json' -d '{"type":"SRM_PURCHASE_SUGGEST","targetKey":"SKU-SMOKE","params":{"sku":"SKU-SMOKE","qty":9,"warehouseCode":"WH-GZ"}}' | jq -e '.code==0 and .data.status=="SUCCESS"' >/dev/null
 json "$BASE/api/integration/snapshot/page?systemCode=SRM&dataType=PO&size=50" | jq -e '.code==0 and ([.data.records[].bizKey]|index("IR-PO-SRM-SKU-SMOKE-WH-GZ"))!=null' >/dev/null
 json "$BASE/api/action/types" | jq -e '.code==0 and (.data|length)>=12' >/dev/null
@@ -55,6 +55,15 @@ json "$BASE/api/integration/system" | jq -e '.code==0 and (.data|length)>=5' >/d
 json -X POST "$BASE/api/integration/system/OMS/health" | jq -e '.code==0 and .data.ok==true' >/dev/null
 json -X POST "$BASE/api/integration/sync" -H 'Content-Type: application/json' -d '{}' | jq -e '.code==0' >/dev/null
 json "$BASE/api/integration/sync-log/page" | jq -e '.code==0 and .data.total>0' >/dev/null
+json -X POST "$BASE/api/integration/sync/SRM" | jq -e '.code==0 and .data.purchaseOrders>0' >/dev/null
+json -X POST "$BASE/api/integration/sync/SAP" | jq -e '.code==0 and .data.stock>0' >/dev/null
+json "$BASE/api/objective" | jq -e '.code==0 and (.data|length)>=5' >/dev/null
+json "$BASE/api/objective/scoreboard" | jq -e '.code==0 and (.data.score|numbers) and (.data.metrics.npsEstimate|numbers)' >/dev/null
+json "$BASE/api/balance/overview" | jq -e '.code==0 and (.data.strategies|length)>=6' >/dev/null
+json -X POST "$BASE/api/balance/run" | jq -e '.code==0 and .data.run.status=="DONE"' >/dev/null
+json "$BASE/api/balance/decision/page" | jq -e '.code==0 and (.data.records|type=="array")' >/dev/null
+json "$BASE/api/supply/overview" | jq -e '.code==0 and (.data.suppliers|length)>0' >/dev/null
+json "$BASE/api/supply/purchase/page?docType=ASN" | jq -e '.code==0 and .data.total>0' >/dev/null
 json "$BASE/api/system/user" | jq -e '.code==0 and (.data.records|length)>=3 and .data.total>=3' >/dev/null
 json "$BASE/api/system/op-log/page" | jq -e '.code==0 and (.data.records|type=="array")' >/dev/null
 echo "smoke ok: baseline=$BASELINE scenario=$SCENARIO"

@@ -115,7 +115,9 @@
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="优先级">
-            <el-tag v-if="Number(detail.oms?.priority) >= 10" type="danger">高优 {{ detail.oms.priority }}</el-tag>
+            <el-tag v-if="Number(detail.oms?.priority) >= 10" type="danger"
+              >高优 {{ detail.oms.priority }}</el-tag
+            >
             <span v-else>{{ detail.oms?.priority ?? 0 }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="订单金额">{{

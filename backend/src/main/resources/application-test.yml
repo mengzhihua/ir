@@ -13,3 +13,5 @@ ir:
     auto-enabled: false
     auto-apply: false
     auto-queue: false
+  balance:
+    schedule-enabled: false
