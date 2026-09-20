@@ -47,8 +47,7 @@ public class HttpTmsClient implements TmsClient {
             shipment.setPlannedArriveTime(HttpSupport.dateTime(row, "plannedArriveTime", "planArriveTime"));
             shipment.setActualArriveTime(HttpSupport.dateTime(row, "actualArriveTime", "arriveTime"));
             shipment.setFreightAmount(decimal(row, "freightAmount", "amount"));
-            String flag = HttpSupport.string(row, "exceptionFlag");
-            shipment.setExceptionFlag(flag != null && Boolean.parseBoolean(flag));
+            shipment.setExceptionFlag(HttpSupport.truthy(row, "exceptionFlag"));
             result.add(shipment);
         }
         return result;
@@ -88,8 +87,11 @@ public class HttpTmsClient implements TmsClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("type", command.getType());
         body.put("targetKey", command.getTargetKey());
+        body.put("waybillCode", command.getTargetKey());
         body.put("params", command.getParams());
+        HttpSupport.putIdempotency(body, command);
         HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, authHeaders());
+        cachedSnapshot = null;
     }
 
     @Override

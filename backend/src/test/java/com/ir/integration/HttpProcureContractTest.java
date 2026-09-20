@@ -163,6 +163,51 @@ class HttpProcureContractTest {
         server.verify();
     }
 
+    @Test
+    void omsWmsTmsExecuteForwardIdempotencyKey() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://oms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "oms-open-key"))
+                .andExpect(jsonPath("$.type").value("OMS_HOLD"))
+                .andExpect(jsonPath("$.idempotencyKey").value("ACT-OMS"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"HOLD\"}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://wms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "wms-open-key"))
+                .andExpect(jsonPath("$.type").value("WMS_ALLOCATE"))
+                .andExpect(jsonPath("$.idempotencyKey").value("ACT-WMS"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"ALLOCATED\"}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://tms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "tms-open-key"))
+                .andExpect(jsonPath("$.type").value("TMS_DISPATCH"))
+                .andExpect(jsonPath("$.waybillCode").value("WB-IR-CREATED"))
+                .andExpect(jsonPath("$.idempotencyKey").value("ACT-TMS"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"DISPATCHED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "OMS,WMS,TMS");
+        ActionCommand oms = new ActionCommand();
+        oms.setType("OMS_HOLD");
+        oms.setTargetKey("IR-SO-STUCK");
+        oms.setIdempotencyKey("ACT-OMS");
+        factory.oms(system("OMS", "http://oms.local", "oms-open-key")).execute(oms);
+        ActionCommand wms = new ActionCommand();
+        wms.setType("WMS_ALLOCATE");
+        wms.setTargetKey("SO-IR-STUCK");
+        wms.setIdempotencyKey("ACT-WMS");
+        factory.wms(system("WMS", "http://wms.local", "wms-open-key")).execute(wms);
+        ActionCommand tms = new ActionCommand();
+        tms.setType("TMS_DISPATCH");
+        tms.setTargetKey("WB-IR-CREATED");
+        tms.setIdempotencyKey("ACT-TMS");
+        factory.tms(system("TMS", "http://tms.local", "tms-open-key")).execute(tms);
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),

@@ -96,6 +96,9 @@ VALUES ('DMS_PART_SHORTAGE', '经销商备件缺货', 'EXT_STATUS', '{"system":"
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
 VALUES ('OA_WF_PENDING', 'OA 审批待办积压', 'EXT_STATUS', '{"system":"OA","dataType":"WF_TASK","status":"PENDING"}', 'MEDIUM', TRUE, 'OA_APPROVE_TASK');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
+VALUES ('SAP_MO_OPEN', 'ERP 生产订单待释放', 'EXT_STATUS', '{"system":"SAP","dataType":"MO","status":"CREATED"}', 'MEDIUM', TRUE, 'SAP_RELEASE_MO');
 
 MERGE INTO ct_cost_target ("month", cost_type, target_amount)
 KEY ("month", cost_type)

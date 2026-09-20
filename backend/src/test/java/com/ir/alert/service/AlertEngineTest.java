@@ -91,6 +91,8 @@ class AlertEngineTest {
         assertTrue(rules.contains("INV_INPUT_UNVERIFIED"));
         assertTrue(rules.contains("BOM_ECN_DRAFT"));
         assertTrue(rules.contains("SAP_PR_OPEN"));
+        assertTrue(rules.contains("SAP_MO_OPEN"));
+        assertTrue(rules.contains("CRM_STALE_OPP"));
         assertTrue(rules.contains("SUPPLIER_RISK"));
         CtAlert oa = alertMapper.selectList(null).stream()
                 .filter(a -> "OA_WF_PENDING".equals(a.getRuleCode()))
