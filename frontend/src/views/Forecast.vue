@@ -37,10 +37,12 @@
       </div>
       <Chart :option="forecastOption" />
       <el-table :data="backtestRows" size="small"
-        ><el-table-column prop="method" label="方法" /><el-table-column
-          prop="mape"
-          label="MAPE"
-          align="right" /><template #empty><el-empty description="暂无回测明细" /></template
+        ><el-table-column label="方法"
+          ><template #default="{ row }">{{
+            labelOf(row.method, forecastMethodLabels)
+          }}</template></el-table-column
+        ><el-table-column prop="mape" label="MAPE" align="right" /><template #empty
+          ><el-empty description="暂无回测明细" /></template
       ></el-table>
     </div>
     <div class="panel">
@@ -78,7 +80,7 @@ import { computed, reactive, ref } from 'vue'
 import { forecastApi } from '../api'
 import Chart from '../components/Chart.vue'
 import { formatDate, formatNumber, pageResult, parseJson } from '../utils/format'
-import { labelOf } from '../utils/labels'
+import { forecastMethodLabels, labelOf } from '../utils/labels'
 const form = reactive({ sku: 'SKU001', warehouseCode: 'WH-SH', method: 'AUTO', horizon: 14 })
 const result = ref(null)
 const history = ref([])
@@ -131,7 +133,7 @@ const forecastOption = computed(() => {
 const backtestRows = computed(() => {
   const value = result.value?.backtest
   if (Array.isArray(value) && value.length === 2 && typeof value[0] === 'string') {
-    return [{ method: labelOf(value[0], { AUTO: '自动选择' }), mape: value[1] }]
+    return [{ method: labelOf(value[0], forecastMethodLabels), mape: value[1] }]
   }
   return Array.isArray(value) ? value : []
 })

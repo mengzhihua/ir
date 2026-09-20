@@ -49,6 +49,7 @@ public class TowerService {
     private final CtSystemMapper systems;
     private final SandboxService sandbox;
     private final BalancePolicy policy;
+    private final CostService costService;
 
     public TowerService(
             OrderSnapshotMapper orders,
@@ -61,7 +62,8 @@ public class TowerService {
             CtActionMapper actions,
             CtSystemMapper systems,
             SandboxService sandbox,
-            BalancePolicy policy) {
+            BalancePolicy policy,
+            CostService costService) {
         this.orders = orders;
         this.wmsOrders = wmsOrders;
         this.shipments = shipments;
@@ -73,6 +75,7 @@ public class TowerService {
         this.systems = systems;
         this.sandbox = sandbox;
         this.policy = policy;
+        this.costService = costService;
     }
 
     public Map<String, Object> overview() {
@@ -135,11 +138,8 @@ public class TowerService {
                 lowStock++;
             }
         }
-        for (CostRecord cost : CostService.preferSettlement(costs.selectList(
-                new LambdaQueryWrapper<CostRecord>()
-                        .ge(CostRecord::getBizDate, from)))) {
-            totalCost = totalCost.add(cost.getAmount());
-        }
+        Map<String, Object> costSummary = costService.summary(30);
+        totalCost = (BigDecimal) costSummary.getOrDefault("total", BigDecimal.ZERO);
 
         Map<String, Object> result = new LinkedHashMap<>();
         Map<String, Object> kpi = new LinkedHashMap<>();
@@ -151,9 +151,8 @@ public class TowerService {
         kpi.put("openAlerts", alerts.selectCount(new LambdaQueryWrapper<CtAlert>()
                 .eq(CtAlert::getStatus, "OPEN")));
         kpi.put("totalCost30d", totalCost);
-        kpi.put("costPerOrder30d", orderRows.isEmpty() ? BigDecimal.ZERO
-                : totalCost.divide(BigDecimal.valueOf(orderRows.size()), 2,
-                RoundingMode.HALF_UP));
+        kpi.put("costPerOrder30d", costSummary.getOrDefault(
+                "costPerOrder", BigDecimal.ZERO));
         kpi.put("otif30d", deliveredTotal == 0 ? BigDecimal.ZERO
                 : BigDecimal.valueOf(deliveredOnTime)
                 .divide(BigDecimal.valueOf(deliveredTotal), 4,

@@ -54,6 +54,7 @@ HTTP 集成的 `baseUrl` 只接受 HTTP/HTTPS URL，并实现了 loopback、链�
 
 生产环境请设置 `IR_ALLOW_PRIVATE_HOSTS=false`，避免集成地址指向内网或云元数据服务，
 并立即修改默认管理员密码 `admin/admin123`。
+链路本地地址以及 `169.254.*` 地址始终拒绝，即使允许其他私有地址。
 
 ## 业务目标与自动平衡
 

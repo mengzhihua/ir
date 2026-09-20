@@ -1,6 +1,7 @@
 package com.ir.balance;
 
 import com.ir.snapshot.entity.InventorySnapshot;
+import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.PurchaseSnapshot;
 import com.ir.snapshot.entity.ShipmentSnapshot;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,40 @@ class StrategyCatalogTest {
         assertEquals("SRM_PURCHASE_SUGGEST", d.getActionType());
         assertEquals("HIGH", d.getRiskLevel());
         assertTrue(d.isApprovalRequired());
+    }
+
+    @Test
+    void missingLocalInventoryStillFindsWarehouseReroute() {
+        BalanceContext ctx = context();
+        OrderSnapshot order = new OrderSnapshot();
+        order.setOrderNo("O-X");
+        order.setStatus("CREATED");
+        order.setWarehouseCode("WH-X");
+        order.setSku("SKU1");
+        order.setQty(BigDecimal.TEN);
+        ctx.setOrders(Collections.singletonList(order));
+        ctx.setInventory(Collections.singletonList(stock("WH-Y", "SKU1", 30, 5)));
+
+        List<Decision> decisions = catalog.warehouseReroute(ctx);
+
+        assertEquals(1, decisions.size());
+        assertEquals("WH-Y", decisions.get(0).getParams().get("warehouseCode"));
+    }
+
+    @Test
+    void stockRebalanceTargetIncludesWarehouseAndSku() {
+        BalanceContext ctx = context();
+        ctx.setInventory(Arrays.asList(
+                stock("WH-A", "SKU1", 10, 40),
+                stock("WH-A", "SKU2", 8, 40),
+                stock("WH-B", "SKU1", 300, 40),
+                stock("WH-B", "SKU2", 300, 40)));
+
+        List<Decision> decisions = catalog.stockRebalance(ctx);
+
+        assertEquals(2, decisions.size());
+        assertEquals("WH-A/SKU1", decisions.get(0).getTargetKey());
+        assertEquals("WH-A/SKU2", decisions.get(1).getTargetKey());
     }
 
     @Test

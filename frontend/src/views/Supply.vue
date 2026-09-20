@@ -127,7 +127,9 @@
         <el-table-column prop="refCode" label="关联单" width="130" />
         <el-table-column prop="supplierCode" label="供应商" width="90" />
         <el-table-column prop="sku" label="SKU" width="90" />
-        <el-table-column prop="status" label="状态" width="110" />
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">{{ labelOf(row.status, supplyStatusLabels) }}</template>
+        </el-table-column>
         <el-table-column prop="qty" label="数量" align="right" width="80" />
         <el-table-column prop="receivedQty" label="已收" align="right" width="80" />
         <el-table-column label="金额" align="right" width="110">
@@ -161,6 +163,7 @@ import { actionApi, integrationApi, supplyApi } from '../api'
 import { canWrite } from '../auth'
 import Chart from '../components/Chart.vue'
 import { formatDate, formatMoney, formatNumber, pageResult, percent } from '../utils/format'
+import { labelOf, supplyStatusLabels } from '../utils/labels'
 
 const overview = reactive({})
 const sap = reactive({})

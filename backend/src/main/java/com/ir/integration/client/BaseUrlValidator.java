@@ -27,6 +27,22 @@ public class BaseUrlValidator {
             throw new IllegalArgumentException("baseUrl格式不正确", ex);
         }
         validateStructure(uri);
+        String host = uri.getHost();
+        String literalHost = host != null && host.startsWith("[")
+                ? host.substring(1, host.length() - 1) : host;
+        if (isIpLiteral(literalHost)) {
+            try {
+                InetAddress address = InetAddress.getByName(literalHost);
+                if (address.isLinkLocalAddress() || isMetadata(address.getAddress())) {
+                    throw new IllegalArgumentException(
+                            "baseUrl不允许指向链路本地或云元数据地址");
+                }
+            } catch (IllegalArgumentException ex) {
+                throw ex;
+            } catch (Exception ex) {
+                throw new IllegalArgumentException("baseUrl主机无法解析", ex);
+            }
+        }
         if (allowPrivateHosts) {
             return;
         }
@@ -73,6 +89,11 @@ public class BaseUrlValidator {
         return bytes.length == 4
                 && (bytes[0] & 0xff) == 169
                 && (bytes[1] & 0xff) == 254;
+    }
+
+    private boolean isIpLiteral(String host) {
+        return host != null
+                && (host.matches("(\\d{1,3}\\.){3}\\d{1,3}") || host.contains(":"));
     }
 
     private boolean isPrivateIpv4(byte[] bytes) {

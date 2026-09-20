@@ -82,7 +82,7 @@ public class StrategyCatalog {
                 d.setExpectedNpsDelta(BigDecimal.valueOf(1.5));
                 if (donor != null) {
                     d.setActionType("WMS_REPLENISH");
-                    d.setTargetKey(low.getWarehouseCode());
+                    d.setTargetKey(low.getWarehouseCode() + "/" + low.getSku());
                     d.param("warehouseCode", low.getWarehouseCode())
                             .param("fromWarehouseCode", donor.getWarehouseCode())
                             .param("sku", low.getSku())
@@ -273,7 +273,7 @@ public class StrategyCatalog {
                 continue;
             }
             InventorySnapshot here = stock.get(o.getWarehouseCode() + "|" + o.getSku());
-            if (here == null || here.getQtyAvailable().compareTo(o.getQty()) >= 0) {
+            if (here != null && here.getQtyAvailable().compareTo(o.getQty()) >= 0) {
                 continue;
             }
             InventorySnapshot best = null;
@@ -298,7 +298,8 @@ public class StrategyCatalog {
             d.setExpectedNpsDelta(BigDecimal.ONE);
             d.setPriority(ctx.priority("OTIF", "NPS"));
             d.setReason(String.format("订单 %s 在 %s 缺货(可用 %s < 需求 %s),改派 %s 发货",
-                    o.getOrderNo(), o.getWarehouseCode(), here.getQtyAvailable().stripTrailingZeros().toPlainString(),
+                    o.getOrderNo(), o.getWarehouseCode(),
+                    here == null ? "0" : here.getQtyAvailable().stripTrailingZeros().toPlainString(),
                     o.getQty().stripTrailingZeros().toPlainString(), best.getWarehouseCode()));
             result.add(d);
         }

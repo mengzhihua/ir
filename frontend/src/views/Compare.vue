@@ -24,13 +24,13 @@
           :key="scenario.id"
           :label="scenario.name"
           align="right"
-          ><template #default="{ row }">{{
-            formatMetric(row.metric, row.values?.[scenario.id])
-          }}</template></el-table-column
-        ><el-table-column label="差值"
-          ><template #default="{ row }">{{ row.delta ?? '-' }}</template></el-table-column
-        ><el-table-column label="节省率"
-          ><template #default="{ row }">{{ percent(row.savingPct) }}</template></el-table-column
+          ><template #default="{ row }">
+            <div>{{ formatMetric(row.metric, row.values?.[scenario.id]) }}</div>
+            <div class="muted">
+              Δ vs 基线: {{ formatMetric(row.metric, row.deltas?.[scenario.id]) }}
+            </div>
+            <div class="muted">节省率: {{ percent(row.savings?.[scenario.id]) }}</div>
+          </template></el-table-column
         ></el-table
       ><Chart :option="chartOption" />
     </div>
@@ -61,8 +61,13 @@ const metrics = computed(() => {
   return definitions.map(([metric, key]) => ({
     metric,
     values: Object.fromEntries(rows.map((row) => [row.id, row[key] ?? 0])),
-    delta: rows.length ? (rows[rows.length - 1].delta?.[key] ?? '-') : '-',
-    savingPct: rows.length ? rows[rows.length - 1].savingPct : 0
+    deltas: Object.fromEntries(
+      rows.map((row, index) => [
+        row.id,
+        row.delta?.[key] ?? (row.baseline || index === 0 ? 0 : '-')
+      ])
+    ),
+    savings: Object.fromEntries(rows.map((row) => [row.id, row.savingPct ?? 0]))
   }))
 })
 function formatMetric(metric, value) {

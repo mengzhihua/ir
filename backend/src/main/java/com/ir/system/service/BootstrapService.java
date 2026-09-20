@@ -5,6 +5,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import com.ir.alert.service.AlertEngine;
 import com.ir.integration.sync.SyncService;
+import com.ir.integration.sync.WarehouseCodeMigration;
 import com.ir.snapshot.PurchaseSnapshotMapper;
 import com.ir.sandbox.service.AutoSandboxService;
 import com.ir.sandbox.service.SandboxService;
@@ -13,6 +14,7 @@ import com.ir.system.entity.User;
 @Component
 public class BootstrapService implements CommandLineRunner {
     private final SyncService syncService;
+    private final WarehouseCodeMigration warehouseCodeMigration;
     private final AlertEngine alertEngine;
     private final SandboxService sandboxService;
     private final AutoSandboxService autoSandboxService;
@@ -24,12 +26,14 @@ public class BootstrapService implements CommandLineRunner {
 
     public BootstrapService(
             SyncService syncService,
+            WarehouseCodeMigration warehouseCodeMigration,
             AlertEngine alertEngine,
             SandboxService sandboxService,
             AutoSandboxService autoSandboxService,
             PurchaseSnapshotMapper purchaseMapper,
             UserStore users) {
         this.syncService = syncService;
+        this.warehouseCodeMigration = warehouseCodeMigration;
         this.alertEngine = alertEngine;
         this.sandboxService = sandboxService;
         this.autoSandboxService = autoSandboxService;
@@ -39,6 +43,7 @@ public class BootstrapService implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        warehouseCodeMigration.migrate();
         if (syncService.emptySnapshots()) {
             syncService.syncAll();
         } else if (purchaseMapper.selectCount(null) == 0) {

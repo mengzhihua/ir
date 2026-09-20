@@ -140,7 +140,7 @@
                 <div class="timeline-head">
                   <el-tag size="small">{{ node.system }}</el-tag>
                   <strong>{{ node.node }}</strong>
-                  <span class="muted">{{ labelOf(node.status, orderStatusLabels) }}</span>
+                  <span class="muted">{{ labelOf(node.status, traceStatusLabels) }}</span>
                 </div>
                 <div class="muted">{{ node.detail || '暂无说明' }}</div>
               </el-card>
@@ -248,6 +248,7 @@ import {
   alertStatusLabels,
   labelOf,
   orderStatusLabels,
+  traceStatusLabels,
   severityLabels
 } from '../utils/labels'
 

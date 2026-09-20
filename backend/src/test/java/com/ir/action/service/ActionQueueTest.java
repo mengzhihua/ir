@@ -89,6 +89,36 @@ class ActionQueueTest {
     }
 
     @Test
+    void reusingPendingPreservesExistingIdempotencyKey() throws Exception {
+        Map<String, Object> first = pending("OMS_HOLD", "SO-IDEMPOTENT-1", null);
+        CtAction created = actions.createPending(first);
+        Map<String, Object> persisted = objectMapper.readValue(
+                created.getParamsJson(), new TypeReference<Map<String, Object>>() {
+                });
+        persisted.put("idempotencyKey", "K");
+        created.setParams(objectMapper.writeValueAsString(persisted));
+        actionMapper.updateById(created);
+
+        CtAction reused = actions.createAndExecute(
+                pending("OMS_HOLD", "SO-IDEMPOTENT-1", null));
+
+        assertEquals(created.getId(), reused.getId());
+        assertEquals("K", paramText(reused, "idempotencyKey"));
+    }
+
+    @Test
+    void reusingPendingFallsBackToActionNumberForIdempotency() {
+        CtAction created = actions.createPending(
+                pending("OMS_HOLD", "SO-IDEMPOTENT-2", null));
+
+        CtAction reused = actions.createAndExecute(
+                pending("OMS_HOLD", "SO-IDEMPOTENT-2", null));
+
+        assertEquals(created.getId(), reused.getId());
+        assertEquals(created.getActionNo(), paramText(reused, "idempotencyKey"));
+    }
+
+    @Test
     void sameOrderHoldReplacesPrioritizePending() {
         CtAction rush = actions.createPending(pending("OMS_PRIORITIZE", "SO-QUEUE-2", null));
         CtAction hold = actions.createPending(pending("OMS_HOLD", "SO-QUEUE-2", null));

@@ -14,4 +14,5 @@ public class OpLog extends BaseEntity {
     private String action;
     private String target;
     private String detail;
+    private Boolean success;
 }
