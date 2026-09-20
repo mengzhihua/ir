@@ -3,7 +3,9 @@ package com.ir.forecast.service;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import com.ir.action.entity.CtAction;
 import java.math.BigDecimal;
 import java.util.Collections;
@@ -16,6 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 @ActiveProfiles("test")
+@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:forecastsvc;MODE=MySQL;DB_CLOSE_DELAY=-1")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ForecastServiceTest {
     @Autowired
     private ForecastService forecasts;
@@ -35,15 +39,31 @@ class ForecastServiceTest {
         assertEquals(0, new BigDecimal("12").compareTo((BigDecimal) first.get("inTransit")));
         assertEquals(first.get("suggestQty"), first.get("suggestedQty"));
         assertEquals(3, first.get("replenishLeadDays"));
+        assertEquals(6, first.get("coverDays"));
+        assertTrue(first.get("onHandDays") instanceof BigDecimal);
+        assertEquals(first.get("belowRop"), ((BigDecimal) first.get("suggestQty")).signum() > 0);
         assertTrue(first.get("orderByDate") != null);
+        BigDecimal demand = (BigDecimal) first.get("forecastDemand");
+        BigDecimal suggest = (BigDecimal) first.get("suggestQty");
+        assertTrue(suggest.compareTo(demand) <= 0);
 
         List<Map<String, Object>> shortLead = forecasts.replenish("WH-SH", "SKU002", 14, 3, 1);
         List<Map<String, Object>> longLead = forecasts.replenish("WH-SH", "SKU002", 14, 3, 5);
         assertEquals(1, shortLead.get(0).get("replenishLeadDays"));
+        assertEquals(4, shortLead.get(0).get("coverDays"));
         assertEquals(5, longLead.get(0).get("replenishLeadDays"));
+        assertEquals(8, longLead.get(0).get("coverDays"));
         java.time.LocalDate shortDue = (java.time.LocalDate) shortLead.get(0).get("orderByDate");
         java.time.LocalDate longDue = (java.time.LocalDate) longLead.get(0).get("orderByDate");
         assertFalse(longDue.isAfter(shortDue));
+        BigDecimal leanQty = (BigDecimal) shortLead.get(0).get("suggestQty");
+        BigDecimal fatQty = (BigDecimal) longLead.get(0).get("suggestQty");
+        assertTrue(leanQty.compareTo(fatQty) <= 0);
+
+        List<Map<String, Object>> winner = forecasts.replenish("WH-SH", "SKU002", 14, 1, 1);
+        assertEquals(2, winner.get(0).get("coverDays"));
+        assertTrue(((BigDecimal) winner.get(0).get("suggestQty"))
+                .compareTo((BigDecimal) first.get("suggestQty")) <= 0);
 
         List<Map<String, Object>> bj = forecasts.replenish("WH-BJ", "SKU002", 14, 3);
         assertFalse(bj.isEmpty());

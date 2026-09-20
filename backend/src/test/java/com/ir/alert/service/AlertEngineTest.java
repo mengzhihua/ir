@@ -61,6 +61,9 @@ class AlertEngineTest {
         int second = alertEngine.evaluate().size();
         assertTrue(first > 0);
         assertEquals(first, second);
+        assertTrue(alertEngine.openCount() > 0);
+        assertTrue(alertEngine.openCount() <= first);
+        assertTrue(alertEngine.openCount("FORECAST_STOCKOUT") <= alertEngine.openCount());
         Set<String> rules = new HashSet<>();
         alertMapper.selectList(null).forEach(alert ->
                 rules.add(alert.getRuleCode()));

@@ -156,7 +156,9 @@ public class ForecastService {
                     ? BigDecimal.ZERO
                     : item.getQtyAvailable();
             BigDecimal cover = available.add(inTransit);
-            BigDecimal suggest = demand.add(safety).subtract(cover).max(BigDecimal.ZERO);
+            int coverDays = Math.max(1, lead + serviceDays);
+            BigDecimal target = daily.multiply(BigDecimal.valueOf(coverDays));
+            BigDecimal suggest = target.subtract(cover).max(BigDecimal.ZERO);
             Map<String, Object> row = new LinkedHashMap<>(forecast);
             row.put("forecastDemand", demand);
             row.put("onHand", item.getQtyOnHand());
@@ -165,13 +167,41 @@ public class ForecastService {
             row.put("safety", safety);
             row.put("serviceDays", serviceDays);
             row.put("replenishLeadDays", lead);
+            row.put("coverDays", coverDays);
+            row.put("targetQty", target);
             row.put("suggestQty", suggest);
             row.put("suggestedQty", suggest);
+            BigDecimal onHandDays = daily.signum() <= 0
+                    ? BigDecimal.ZERO
+                    : cover.divide(daily, 2, RoundingMode.HALF_UP);
+            row.put("onHandDays", onHandDays);
+            row.put("belowRop", suggest.signum() > 0);
             LocalDate stockout = stockoutDate(cover, daily);
             row.put("stockoutDate", stockout);
             row.put("orderByDate", orderByDate(stockout, lead));
             result.add(row);
         }
+        result.sort((left, right) -> {
+            int byGap = Boolean.compare(
+                    Boolean.TRUE.equals(right.get("belowRop")),
+                    Boolean.TRUE.equals(left.get("belowRop")));
+            if (byGap != 0) {
+                return byGap;
+            }
+            LocalDate leftDue = (LocalDate) left.get("orderByDate");
+            LocalDate rightDue = (LocalDate) right.get("orderByDate");
+            if (leftDue != null && rightDue != null) {
+                int byDue = leftDue.compareTo(rightDue);
+                if (byDue != 0) {
+                    return byDue;
+                }
+            } else if (leftDue != null) {
+                return -1;
+            } else if (rightDue != null) {
+                return 1;
+            }
+            return String.valueOf(left.get("sku")).compareTo(String.valueOf(right.get("sku")));
+        });
         return result;
     }
 

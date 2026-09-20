@@ -8,6 +8,7 @@ import com.ir.action.entity.CtAction;
 import com.ir.action.service.ActionService;
 import com.ir.common.CarrierCodes;
 import com.ir.common.CodeGenerator;
+import com.ir.common.WarehouseCodes;
 import com.ir.sandbox.engine.BalanceScorer;
 import com.ir.sandbox.engine.BaselineData;
 import com.ir.sandbox.engine.SandboxEngine;
@@ -15,6 +16,7 @@ import com.ir.sandbox.engine.ScenarioParams;
 import com.ir.sandbox.engine.ServiceFirstPicker;
 import com.ir.sandbox.entity.CtScenario;
 import com.ir.sandbox.mapper.CtScenarioMapper;
+import com.ir.forecast.service.ForecastService;
 import com.ir.snapshot.entity.OrderSnapshot;
 import com.ir.snapshot.entity.SalesDaily;
 import com.ir.snapshot.entity.ShipmentSnapshot;
@@ -27,9 +29,11 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class SandboxService {
@@ -43,6 +47,7 @@ public class SandboxService {
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
     private final BalancePolicy policy;
+    private final ForecastService forecasts;
 
     public SandboxService(
             CtScenarioMapper scenarioMapper,
@@ -54,7 +59,8 @@ public class SandboxService {
             ActionService actions,
             CodeGenerator codes,
             ObjectMapper objectMapper,
-            BalancePolicy policy) {
+            BalancePolicy policy,
+            ForecastService forecasts) {
         this.scenarioMapper = scenarioMapper;
         this.inventoryMapper = inventoryMapper;
         this.salesMapper = salesMapper;
@@ -65,6 +71,7 @@ public class SandboxService {
         this.codes = codes;
         this.objectMapper = objectMapper;
         this.policy = policy;
+        this.forecasts = forecasts;
     }
 
     public synchronized CtScenario baseline() {
@@ -210,27 +217,60 @@ public class SandboxService {
 
         Map<String, Object> scenarioResult = result(scenario);
         Object summaries = scenarioResult.get("perSkuSummary");
-        int purchases = 0;
+        Set<String> stockoutSku = new HashSet<>();
         if (summaries instanceof List) {
             for (Object row : (List<?>) summaries) {
-                if (purchases >= 8) {
-                    break;
-                }
                 if (!(row instanceof Map)) {
                     continue;
                 }
                 Map<?, ?> summary = (Map<?, ?>) row;
-                BigDecimal stockout = decimal(summary.get("stockout"));
-                if (stockout.signum() <= 0) {
-                    continue;
+                if (decimal(summary.get("stockout")).signum() > 0) {
+                    stockoutSku.add(String.valueOf(summary.get("sku")));
                 }
-                String sku = String.valueOf(summary.get("sku"));
-                jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
-                        map("sku", sku, "qty", stockout, "suggestQty", stockout,
-                                "replenishLeadDays", params.getReplenishLeadDays()),
-                        null));
-                purchases++;
             }
+        }
+        List<Map<String, Object>> gaps = forecasts.replenish(
+                null, null, 14, params.getSafetyDays(), params.getReplenishLeadDays());
+        gaps.sort((left, right) -> {
+            boolean leftHot = stockoutSku.contains(String.valueOf(left.get("sku")));
+            boolean rightHot = stockoutSku.contains(String.valueOf(right.get("sku")));
+            if (leftHot != rightHot) {
+                return leftHot ? -1 : 1;
+            }
+            int byQty = decimal(right.get("suggestQty")).compareTo(decimal(left.get("suggestQty")));
+            if (byQty != 0) {
+                return byQty;
+            }
+            return String.valueOf(left.get("sku")).compareTo(String.valueOf(right.get("sku")));
+        });
+        int purchases = 0;
+        Set<String> queuedKeys = new HashSet<>();
+        for (Map<String, Object> row : gaps) {
+            if (purchases >= 8) {
+                break;
+            }
+            BigDecimal qty = decimal(row.get("suggestQty"));
+            if (qty.signum() <= 0) {
+                continue;
+            }
+            String sku = String.valueOf(row.get("sku"));
+            String warehouse = row.get("warehouseCode") == null
+                    ? "" : String.valueOf(row.get("warehouseCode"));
+            String key = WarehouseCodes.stockKey(sku, warehouse);
+            if (queuedKeys.contains(key)) {
+                continue;
+            }
+            queuedKeys.add(key);
+            jobs.add(job("SRM_PURCHASE_SUGGEST", sku,
+                    map("sku", sku,
+                            "qty", qty,
+                            "suggestQty", qty,
+                            "warehouseCode", warehouse,
+                            "replenishLeadDays", params.getReplenishLeadDays(),
+                            "coverDays", row.get("coverDays"),
+                            "targetQty", row.get("targetQty")),
+                    null));
+            purchases++;
         }
         BigDecimal leftover = expected;
         int unassigned = 0;

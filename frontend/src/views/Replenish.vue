@@ -4,7 +4,7 @@
       <div>
         <h2>补货建议</h2>
         <p class="subtitle">
-          将预测缺口转换为采购或仓内补货指令 · 当前保障
+          按再订货点（提前期 + 保障天数）补货，不按 14 天预测全量下单 · 当前保障
           {{ policy.safetyDays }} 天 / 提前期 {{ policy.replenishLeadDays }} 天（跟随沙盘推荐）
         </p>
       </div>
@@ -18,7 +18,13 @@
         ><el-option label="WH-SH" value="WH-SH" /><el-option
           label="WH-BJ"
           value="WH-BJ" /><el-option label="WH-GZ" value="WH-GZ" /></el-select
-      ><el-button type="primary" @click="search">查询</el-button
+      ><el-switch
+        v-model="belowRopOnly"
+        inline-prompt
+        active-text="只看缺口"
+        inactive-text="全部"
+        @change="search"
+      /><el-button type="primary" @click="search">查询</el-button
       ><el-button v-if="canWrite() && selected.length" type="primary" @click="batchAction"
         >批量转指令</el-button
       >
@@ -36,6 +42,12 @@
           align="right" /><el-table-column
           prop="suggestQty"
           label="建议数量"
+          align="right" /><el-table-column
+          prop="onHandDays"
+          label="可覆盖天数"
+          align="right" /><el-table-column
+          prop="coverDays"
+          label="再订货点天数"
           align="right" /><el-table-column
           prop="stockoutDate"
           label="预计缺货日期" /><el-table-column
@@ -84,6 +96,7 @@ import { ElMessage } from 'element-plus'
 import { forecastApi, sandboxApi } from '../api'
 import { canWrite } from '../auth'
 const filters = reactive({ sku: '', warehouseCode: '' })
+const belowRopOnly = ref(true)
 const policy = reactive({ safetyDays: 3, replenishLeadDays: 3 })
 const pager = reactive({ current: 1, size: 20, total: 0 })
 const rows = ref([])
@@ -95,7 +108,10 @@ const currentRows = ref([])
 async function load() {
   loading.value = true
   try {
-    const data = await forecastApi.replenish({ ...filters })
+    const data = await forecastApi.replenish({
+      ...filters,
+      belowRop: belowRopOnly.value ? true : undefined
+    })
     const all = Array.isArray(data) ? data : data?.records || []
     pager.total = all.length
     const start = (pager.current - 1) * pager.size

@@ -29,6 +29,14 @@
         </div>
       </div>
       <div class="stat">
+        <div class="label">未关闭预警</div>
+        <div class="value">{{ latest.openAlerts ?? latest.alerts ?? '-' }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">再订货点缺口</div>
+        <div class="value">{{ latest.forecastStockoutAlerts ?? '-' }}</div>
+      </div>
+      <div class="stat">
         <div class="label">综合分</div>
         <div class="value">{{ formatNumber(recommended.balanceScore, 4) }}</div>
       </div>

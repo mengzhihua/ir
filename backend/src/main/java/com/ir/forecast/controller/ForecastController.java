@@ -56,10 +56,22 @@ public class ForecastController {
             @RequestParam(required = false) String sku,
             @RequestParam(defaultValue = "14") int horizon,
             @RequestParam(required = false) Integer serviceDays,
-            @RequestParam(required = false) Integer leadDays) {
+            @RequestParam(required = false) Integer leadDays,
+            @RequestParam(required = false) Boolean belowRop) {
         int days = serviceDays == null ? policy.safetyDays() : serviceDays;
         int lead = leadDays == null ? policy.replenishLeadDays() : leadDays;
-        return R.ok(service.replenish(warehouseCode, sku, horizon, days, lead));
+        List<Map<String, Object>> rows = service.replenish(
+                warehouseCode, sku, horizon, days, lead);
+        if (Boolean.TRUE.equals(belowRop)) {
+            List<Map<String, Object>> gaps = new java.util.ArrayList<>();
+            for (Map<String, Object> row : rows) {
+                if (Boolean.TRUE.equals(row.get("belowRop"))) {
+                    gaps.add(row);
+                }
+            }
+            return R.ok(gaps);
+        }
+        return R.ok(rows);
     }
 
     @PostMapping("/replenish/to-action")

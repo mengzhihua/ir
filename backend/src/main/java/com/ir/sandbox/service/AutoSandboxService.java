@@ -72,7 +72,9 @@ public class AutoSandboxService {
             actions.supersedeOpposing(policy.stance());
             queued.addAll(sandbox.apply(recommended.getId(), autoApply));
         }
-        int alertCount = alerts.evaluate().size();
+        alerts.evaluate();
+        int openAlerts = alerts.openCount();
+        int forecastAlerts = alerts.openCount("FORECAST_STOCKOUT");
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("runNo", runNo);
@@ -80,7 +82,9 @@ public class AutoSandboxService {
         result.put("recommended", recommended);
         result.put("scenarios", rows);
         result.put("actions", queued);
-        result.put("alerts", alertCount);
+        result.put("alerts", openAlerts);
+        result.put("openAlerts", openAlerts);
+        result.put("forecastStockoutAlerts", forecastAlerts);
         result.put("autoQueue", autoQueue);
         result.put("autoApply", autoApply);
         return result;
@@ -106,6 +110,9 @@ public class AutoSandboxService {
         }
         result.put("recommended", recommended);
         result.put("scenarios", rows);
+        result.put("alerts", alerts.openCount());
+        result.put("openAlerts", alerts.openCount());
+        result.put("forecastStockoutAlerts", alerts.openCount("FORECAST_STOCKOUT"));
         return result;
     }
 
