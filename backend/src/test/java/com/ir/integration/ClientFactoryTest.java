@@ -56,7 +56,10 @@ class ClientFactoryTest {
                     mock(MockBmsClient.class),
                     mock(MockSrmClient.class),
                     mock(MockSapClient.class),
-                    new BaseUrlValidator(true));
+                    null,
+                    new BaseUrlValidator(true),
+                    null,
+                    "");
             CtSystem system = new CtSystem();
             system.setMode("HTTP");
             system.setBaseUrl("http://localhost:" + port);
@@ -75,11 +78,14 @@ class ClientFactoryTest {
         ClientFactory factory = new ClientFactory(
                 mock(MockOmsClient.class),
                 mock(MockWmsClient.class),
-                mock(MockTmsClient.class),
-                mock(MockBmsClient.class),
-                mock(MockSrmClient.class),
-                mock(MockSapClient.class),
-                new BaseUrlValidator(false));
+                    mock(MockTmsClient.class),
+                    mock(MockBmsClient.class),
+                    mock(MockSrmClient.class),
+                    mock(MockSapClient.class),
+                    null,
+                    new BaseUrlValidator(false),
+                    null,
+                    "");
         CtSystem system = new CtSystem();
         system.setMode("HTTP");
         system.setBaseUrl("file:///tmp/ir");

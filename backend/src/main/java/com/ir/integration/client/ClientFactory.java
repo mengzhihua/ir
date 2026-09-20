@@ -65,44 +65,6 @@ public class ClientFactory {
             MockBmsClient bms,
             MockSrmClient srm,
             MockSapClient sap,
-            BaseUrlValidator validator) {
-        this(oms, wms, tms, bms, srm, sap, null, validator, null, "");
-    }
-
-    public ClientFactory(
-            MockOmsClient oms,
-            MockWmsClient wms,
-            MockTmsClient tms,
-            MockBmsClient bms,
-            MockSrmClient srm,
-            MockSapClient sap,
-            MockEcosystemClient ecosystem,
-            RestTemplate http,
-            String httpSystems) {
-        this(oms, wms, tms, bms, srm, sap, ecosystem,
-                new BaseUrlValidator(true), http, httpSystems);
-    }
-
-    public ClientFactory(
-            MockOmsClient oms,
-            MockWmsClient wms,
-            MockTmsClient tms,
-            MockBmsClient bms,
-            MockSrmClient srm,
-            MockEcosystemClient ecosystem,
-            RestTemplate http,
-            String httpSystems) {
-        this(oms, wms, tms, bms, srm, null, ecosystem,
-                new BaseUrlValidator(true), http, httpSystems);
-    }
-
-    ClientFactory(
-            MockOmsClient oms,
-            MockWmsClient wms,
-            MockTmsClient tms,
-            MockBmsClient bms,
-            MockSrmClient srm,
-            MockSapClient sap,
             MockEcosystemClient ecosystem,
             BaseUrlValidator validator,
             RestTemplate http,
