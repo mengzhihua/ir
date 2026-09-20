@@ -27,9 +27,9 @@ cp -R "$ROOT/frontend/dist/." "$STATIC/"
 
 cd "$ROOT/backend"
 if [[ "${SKIP_TESTS:-0}" == "1" ]]; then
-  mvn -q -DskipTests package
+  mvn -q -DskipTests clean package
 else
-  mvn -q package
+  mvn -q clean package
 fi
 
 JAR="$ROOT/backend/target/${ARTIFACT}-${VERSION}.jar"
