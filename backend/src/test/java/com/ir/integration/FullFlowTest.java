@@ -217,6 +217,27 @@ class FullFlowTest {
         assertEquals(auto.path("openAlerts").asInt(), auto.path("alerts").asInt());
         assertTrue(auto.path("forecastStockoutAlerts").isNumber());
         assertTrue(auto.path("alerts").asInt() >= 0);
+        JsonNode replenishAll = get(token, "/api/forecast/replenish?horizon=14");
+        java.util.Set<String> belowRop = new java.util.HashSet<>();
+        java.util.Set<String> demanded = new java.util.HashSet<>();
+        for (JsonNode row : replenishAll) {
+            String key = row.path("sku").asText() + "/" + row.path("warehouseCode").asText();
+            if (row.path("forecastDemand").decimalValue().signum() <= 0) {
+                continue;
+            }
+            demanded.add(key);
+            if (row.path("suggestQty").decimalValue().signum() > 0) {
+                belowRop.add(key);
+            }
+        }
+        JsonNode openLow = get(token, "/api/alert/page?status=OPEN&type=LOW_STOCK&size=100");
+        for (JsonNode alert : openLow.path("records")) {
+            String key = alert.path("targetKey").asText();
+            if (demanded.contains(key)) {
+                assertTrue(belowRop.contains(key),
+                        "AUTO 后有需求的 LOW_STOCK 必须仍低于再订货点: " + key);
+            }
+        }
 
         JsonNode capital = post(token, "/api/sandbox/capital",
                 "{\"workingCapital\":100000000}");

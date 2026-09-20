@@ -54,6 +54,8 @@ class AlertEngineTest {
     private InventorySnapshotMapper inventoryMapper;
     @Autowired
     private ShipmentSnapshotMapper shipmentMapper;
+    @Autowired
+    private com.ir.sandbox.service.BalancePolicy policy;
 
     @Test
     void stuckOrderRuleFiresAndIsIdempotent() {
@@ -468,6 +470,46 @@ class AlertEngineTest {
                         && "OPEN".equals(a.getStatus()))
                 .count();
         assertEquals(1, shOpen);
+    }
+
+    @Test
+    void lowStockExecuteUsesRopQtyNotSnapshotSafety() throws Exception {
+        alertEngine.evaluate();
+        CtAlert low = null;
+        BigDecimal suggest = null;
+        BigDecimal demand = null;
+        for (CtAlert alert : alertMapper.selectList(null)) {
+            if (!"LOW_STOCK".equals(alert.getRuleCode())
+                    || !"OPEN".equals(alert.getStatus())
+                    || alert.getTargetKey() == null
+                    || !alert.getTargetKey().contains("/")) {
+                continue;
+            }
+            String[] parts = alert.getTargetKey().split("/", 2);
+            java.util.List<java.util.Map<String, Object>> rows = forecasts.replenish(
+                    parts[1], parts[0], 14, policy.safetyDays(), policy.replenishLeadDays());
+            if (rows.isEmpty()) {
+                continue;
+            }
+            BigDecimal d = (BigDecimal) rows.get(0).get("forecastDemand");
+            BigDecimal s = (BigDecimal) rows.get(0).get("suggestQty");
+            if (d.signum() > 0 && s.signum() > 0) {
+                low = alert;
+                demand = d;
+                suggest = s;
+                break;
+            }
+        }
+        assertNotNull(low);
+        CtAction primary = alertEngine.executeSuggested(low.getId());
+        assertNotNull(primary);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> params = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue(primary.getParamsJson(), java.util.Map.class);
+        BigDecimal qty = new BigDecimal(String.valueOf(params.get("qty")));
+        assertTrue(qty.compareTo(demand) <= 0);
+        assertTrue(qty.compareTo(suggest.multiply(new BigDecimal("1.5"))
+                .setScale(0, java.math.RoundingMode.UP)) <= 0);
     }
 
     @Test
