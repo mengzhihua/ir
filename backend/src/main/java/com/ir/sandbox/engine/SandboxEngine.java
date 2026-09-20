@@ -89,7 +89,10 @@ public class SandboxEngine {
         for (int day = 0; day < days; day++) {
             receive(arrivals, day, stock, outstanding);
             for (SkuPlan plan : plans) {
-                BigDecimal demand = plan.demandByDay[day];
+                BigDecimal demand = plan.forecast.get(day)
+                        .multiply(plan.channelFactor)
+                        .multiply(cache.demandMultiplier)
+                        .max(BigDecimal.ZERO);
                 BigDecimal fulfilled = BigDecimal.ZERO;
                 BigDecimal stockout = BigDecimal.ZERO;
                 BigDecimal dayFreight = BigDecimal.ZERO;
@@ -117,12 +120,11 @@ public class SandboxEngine {
 
                     if (regionalFulfilled.signum() > 0) {
                         BigDecimal distance = distance(warehouse, region.getKey());
-                        dayFreight = dayFreight.add(carrierFreight(
-                                cache, regionalFulfilled, distance, result));
+                        BigDecimal freight = carrierFreight(
+                                cache, regionalFulfilled, distance, result);
+                        dayFreight = dayFreight.add(freight);
                         add(result.getCostByWarehouse(), warehouse,
-                                freightValue(cache, regionalFulfilled, distance)
-                                        .add(cache.handling)
-                                        .add(cache.packaging));
+                                freight.add(cache.handling).add(cache.packaging));
                         dayHandling = dayHandling.add(cache.handling);
                         dayPackaging = dayPackaging.add(cache.packaging);
                         dayLead = dayLead.add(distance.multiply(cache.leadTimes12));
@@ -212,15 +214,10 @@ public class SandboxEngine {
             plan.regionShare = baseline.getRegionShare()
                     .getOrDefault(plan.sku, defaultRegion);
             plan.channelFactor = channelFactor(params, plan.channelShare);
-            plan.avgDemand = average(plan.forecast).multiply(cache.demandMultiplier)
-                    .max(BigDecimal.ZERO);
-            plan.demandByDay = new BigDecimal[days];
-            for (int day = 0; day < days; day++) {
-                plan.demandByDay[day] = plan.forecast.get(day)
-                        .multiply(plan.channelFactor)
-                        .multiply(cache.demandMultiplier)
-                        .max(BigDecimal.ZERO);
-            }
+            BigDecimal baseAvg = constant(plan.forecast)
+                    ? plan.forecast.get(0)
+                    : average(plan.forecast);
+            plan.avgDemand = baseAvg.multiply(cache.demandMultiplier).max(BigDecimal.ZERO);
             List<String> warehouses = skuWarehouses.get(plan.sku);
             if (warehouses == null || warehouses.isEmpty()) {
                 String home = baseline.getSkuWarehouse() == null
@@ -250,13 +247,12 @@ public class SandboxEngine {
     }
 
     private boolean constant(List<BigDecimal> history) {
-        BigDecimal first = history.get(0);
-        for (int i = 1; i < history.size(); i++) {
-            if (first.compareTo(history.get(i)) != 0) {
-                return false;
-            }
+        if (history.size() <= 1) {
+            return true;
         }
-        return true;
+        BigDecimal first = history.get(0);
+        return first.compareTo(history.get(history.size() - 1)) == 0
+                && first.compareTo(history.get(history.size() / 2)) == 0;
     }
 
     private BigDecimal channelFactor(
@@ -337,7 +333,6 @@ public class SandboxEngine {
         private Map<String, BigDecimal> channelShare;
         private Map<String, BigDecimal> regionShare;
         private List<String> warehouses;
-        private BigDecimal[] demandByDay;
         private BigDecimal channelFactor = BigDecimal.ONE;
         private BigDecimal avgDemand = BigDecimal.ZERO;
         private BigDecimal demand = BigDecimal.ZERO;
@@ -434,13 +429,6 @@ public class SandboxEngine {
     private static final class CarrierPart {
         private String code;
         private BigDecimal weight;
-    }
-
-    private BigDecimal channelDemand(
-            ScenarioParams params,
-            Map<String, BigDecimal> shares,
-            BigDecimal base) {
-        return base.multiply(channelFactor(params, shares));
     }
 
     private void scheduleReplenishment(
@@ -670,20 +658,6 @@ public class SandboxEngine {
             BigDecimal amount = quantity.multiply(distance).multiply(part.weight);
             add(result.getCostByCarrier(), part.code, amount);
             total = total.add(amount);
-        }
-        return total;
-    }
-
-    private BigDecimal freightValue(
-            RunCache cache,
-            BigDecimal quantity,
-            BigDecimal distance) {
-        if (quantity.signum() <= 0 || cache.carriers.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        BigDecimal total = BigDecimal.ZERO;
-        for (CarrierPart part : cache.carriers) {
-            total = total.add(quantity.multiply(distance).multiply(part.weight));
         }
         return total;
     }

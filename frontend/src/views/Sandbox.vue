@@ -258,6 +258,10 @@
         <p v-if="capitalResult.recommended" class="subtitle">
           推荐策略：{{ capitalResult.recommended.name }}（安全 {{ capitalResult.recommended.safetyDays }} 天 / 补货 {{ capitalResult.recommended.replenishLeadDays }} 天）
         </p>
+        <p class="muted" v-if="capitalResult.elapsedMs != null">
+          {{ capitalResult.elapsedMs }}ms · {{ capitalResult.engineRuns || '-' }} 次引擎
+          <el-tag v-if="capitalResult.stressProjected" size="small" type="info">2x/5x 投影</el-tag>
+        </p>
         <div class="stats">
           <div class="stat">
             <div class="label">结论</div>
@@ -466,10 +470,12 @@ const rules = { name: [{ required: true, message: '请输入场景名称', trigg
 const channelRows = computed(() => channels.map((key) => ({ key })))
 const capitalRows = computed(() => {
   if (!capitalResult.value) return []
+  const days = capitalResult.value.horizonDays || 30
+  const stressTag = capitalResult.value.stressProjected ? '（投影）' : ''
   return [
-    { name: '常态 30 天', ...(capitalResult.value.baseline || {}) },
-    { name: '2 倍需求', ...(capitalResult.value.demand2x || {}) },
-    { name: '5 倍需求', ...(capitalResult.value.demand5x || {}) }
+    { name: `常态 ${days} 天`, ...(capitalResult.value.baseline || {}) },
+    { name: `2 倍需求${stressTag}`, ...(capitalResult.value.demand2x || {}) },
+    { name: `5 倍需求${stressTag}`, ...(capitalResult.value.demand5x || {}) }
   ]
 })
 const scaleWarning = computed(() => {
@@ -481,7 +487,7 @@ const scaleWarning = computed(() => {
     if (capital > 0 && value > capital) {
       return `按单价 50 估算库存约 ${value.toLocaleString()}，已超过资金盘。过万 SKU 只补已有库存的仓库，并对资金充足档位复用一次全量推演。`
     }
-    return 'SKU 过万时只补已有库存的仓库，并对资金充足的档位复用无约束推演，避免每个档位全量重算。'
+    return 'SKU 过万时只补已有库存的仓库，2x/5x 在余量足够时投影，并对资金充足的档位复用无约束推演。'
   }
   if (skus > 0 && qty > 0 && capital > 0 && value > capital) {
     return `按单价 50 估算库存约 ${value.toLocaleString()}，已超过当前资金盘，该档位可能不足。`

@@ -43,7 +43,7 @@ npm run dev
 
 ## 算法和沙盘
 
-预测支持 7 日移动平均、指数平滑、Holt、4 周同星期 Seasonal Naive，AUTO 按最近 14 天回测 MAPE 选最优。沙盘支持 NEAREST、LOWEST_COST、BALANCED、SINGLE_WAREHOUSE，输出成本、服务水平、缺货、日序列和 SKU 汇总。人工沙盘资金盘档位为 10 万 / 百万 / 千万 / 亿 / 十亿，也可自定义金额；可指定最多 10 万 SKU、单 SKU 库存最多 1000 万，并用 `/api/sandbox/capital/sweep` 自动扫完各档验证全流程。
+预测支持 7 日移动平均、指数平滑、Holt、4 周同星期 Seasonal Naive，AUTO 按最近 14 天回测 MAPE 选最优。沙盘支持 NEAREST、LOWEST_COST、BALANCED、SINGLE_WAREHOUSE，输出成本、服务水平、缺货、日序列和 SKU 汇总。人工沙盘资金盘档位为 10 万 / 百万 / 千万 / 亿 / 十亿，也可自定义金额；可指定最多 10 万 SKU、单 SKU 库存最多 1000 万，并用 `/api/sandbox/capital/sweep` 自动扫完各档验证全流程。过万 SKU 时 2x/5x 在余量足够时投影，策略册复用就近默认。
 
 ## 冒烟和构建
 
