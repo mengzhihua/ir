@@ -445,7 +445,11 @@ public class SandboxService {
                 row.put("inventoryValue", analysis.get("inventoryValue"));
                 row.put("recommendedName", nested(analysis, "recommended", "name"));
                 row.put("recommendedLead", nested(analysis, "recommended", "replenishLeadDays"));
-                row.put("elapsedMs", System.currentTimeMillis() - started);
+                long rowMs = System.currentTimeMillis() - started;
+                if (amount.compareTo(ceiling) == 0) {
+                    rowMs = Math.max(rowMs, intVal(analysis.get("elapsedMs"), 0));
+                }
+                row.put("elapsedMs", rowMs);
                 List<String> local = validateTier(analysis, amount);
                 row.put("issues", local);
                 if (!local.isEmpty()) {
