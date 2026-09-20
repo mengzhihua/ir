@@ -60,4 +60,36 @@ class CapitalScaleTest {
         assertNotNull(result.getCapitalVerdict());
         assertTrue(result.getCashUsed().signum() >= 0);
     }
+
+    @Test
+    void tenMillionQtyPerSkuStaysSane() {
+        BaselineData data = ScaleCatalog.build(8, CapitalTiers.MAX_QTY);
+        ScenarioParams params = new ScenarioParams();
+        params.setHorizonDays(3);
+        params.setWorkingCapital(new BigDecimal("1000000000"));
+        SandboxEngine.Result result = new SandboxEngine().run(params, data);
+        assertEquals(8, result.getSkuCount());
+        assertEquals(0, new BigDecimal("80000000").compareTo(result.getInventoryUnits()));
+        assertEquals(3, result.getDailySeries().size());
+        assertTrue(result.getCashUsed().signum() >= 0);
+        assertTrue(result.getServiceLevel().compareTo(BigDecimal.ONE) <= 0);
+    }
+
+    @Test
+    void oneHundredThousandSkusStayWithinCaps() {
+        BaselineData data = ScaleCatalog.build(100_000, new BigDecimal("12"));
+        ScenarioParams params = new ScenarioParams();
+        params.setHorizonDays(1);
+        params.setWorkingCapital(new BigDecimal("1000000000"));
+        long started = System.currentTimeMillis();
+        SandboxEngine.Result result = new SandboxEngine().run(params, data);
+        assertEquals(1, result.getDailySeries().size());
+        assertEquals(100_000, result.getSkuCount());
+        assertEquals(0, new BigDecimal("1200000").compareTo(result.getInventoryUnits()));
+        assertTrue(result.getCashUsed().signum() >= 0);
+        assertTrue(result.getServiceLevel().signum() >= 0);
+        assertTrue(result.getServiceLevel().compareTo(BigDecimal.ONE) <= 0);
+        assertTrue(result.getPerSkuSummary().size() <= CapitalTiers.MAX_SKU_SUMMARY);
+        assertTrue(System.currentTimeMillis() - started < 60_000);
+    }
 }
