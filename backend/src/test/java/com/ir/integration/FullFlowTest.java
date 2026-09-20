@@ -269,6 +269,9 @@ class FullFlowTest {
                 .compareTo(new BigDecimal("0.995")) >= 0);
         assertEquals(0, capital.path("recommended").path("stockoutUnits").decimalValue().signum());
         assertTrue(capital.path("playbook").size() >= 5);
+        assertTrue(capital.path("engineRuns").asInt() >= 3);
+        assertTrue(capital.path("engineRuns").asInt() <= 12);
+        assertFalse(capital.path("stressProjected").asBoolean());
 
         JsonNode tiers = get(token, "/api/sandbox/capital/tiers");
         assertEquals(5, tiers.path("presets").size());
@@ -288,6 +291,9 @@ class FullFlowTest {
         assertEquals(0, new BigDecimal("500000").compareTo(
                 sweep.path("rows").get(1).path("workingCapital").decimalValue()));
         assertEquals(40, sweep.path("skuCount").asInt());
+        assertTrue(sweep.path("engineRuns").asInt() >= 1);
+        assertTrue(sweep.path("engineRuns").asInt() <= 12);
+        assertTrue(sweep.path("elapsedMs").asLong() >= 0);
         boolean sawReliable = false;
         for (JsonNode row : sweep.path("rows")) {
             assertTrue(row.path("issues").isArray());

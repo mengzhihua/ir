@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,41 +56,31 @@ public class SandboxEngine {
         private BigDecimal inventoryUnits = BigDecimal.ZERO;
         private BigDecimal inventoryValue = BigDecimal.ZERO;
         private boolean skuSummaryTruncated;
+        private long elapsedMs;
         private Map<String, String> skuWarehouse = new LinkedHashMap<>();
         private Map<String, BigDecimal> stockoutByWarehouseSku =
                 new LinkedHashMap<>();
     }
 
     public Result run(ScenarioParams params, BaselineData baseline) {
+        long started = System.currentTimeMillis();
         params = params == null ? new ScenarioParams() : params.normalized();
         Result result = new Result();
         int days = Math.max(1, params.getHorizonDays());
-        Map<String, BigDecimal> stock = initialStock(params, baseline);
-        Map<Integer, Map<String, BigDecimal>> arrivals = new LinkedHashMap<>();
+        Map<String, BigDecimal> stock = new HashMap<>();
+        Map<String, List<String>> skuWarehouses = new HashMap<>();
+        BigDecimal inventoryUnits = loadStock(params, baseline, stock, skuWarehouses);
+        Map<Integer, Map<String, BigDecimal>> arrivals = new HashMap<>();
+        Map<String, BigDecimal> outstanding = new HashMap<>();
         Cash cash = new Cash(params.getWorkingCapital());
+        RunCache cache = RunCache.of(params);
         BigDecimal totalDemand = BigDecimal.ZERO;
         BigDecimal totalFulfilled = BigDecimal.ZERO;
         BigDecimal totalStockout = BigDecimal.ZERO;
         BigDecimal totalLead = BigDecimal.ZERO;
         int leadCount = 0;
 
-        List<SkuPlan> plans = new ArrayList<>();
-        if (baseline != null && baseline.getDemandBySku() != null) {
-            for (Map.Entry<String, List<BigDecimal>> entry
-                    : baseline.getDemandBySku().entrySet()) {
-                SkuPlan plan = new SkuPlan();
-                plan.sku = entry.getKey();
-                plan.forecast = forecast.seasonalNaive(entry.getValue(), days);
-                plan.channelShare = baseline.getChannelShare()
-                        .getOrDefault(plan.sku, Collections.singletonMap("ALL",
-                                BigDecimal.ONE));
-                plan.regionShare = baseline.getRegionShare()
-                        .getOrDefault(plan.sku, baseline.getRegionShare().getOrDefault(
-                                "*", Collections.singletonMap("华东",
-                                        BigDecimal.ONE)));
-                plans.add(plan);
-            }
-        }
+        List<SkuPlan> plans = buildPlans(params, baseline, skuWarehouses, days, cache);
 
         BigDecimal[] dayDemand = new BigDecimal[days];
         BigDecimal[] dayFulfilled = new BigDecimal[days];
@@ -99,14 +90,11 @@ public class SandboxEngine {
         Arrays.fill(dayCost, BigDecimal.ZERO);
 
         for (int day = 0; day < days; day++) {
-            receive(arrivals, day, stock);
+            receive(arrivals, day, stock, outstanding);
             for (SkuPlan plan : plans) {
-                BigDecimal averageDemand = average(plan.forecast)
-                        .multiply(params.getDemandMultiplier())
-                        .max(BigDecimal.ZERO);
-                BigDecimal demand = channelDemand(params, plan.channelShare,
-                        plan.forecast.get(day))
-                        .multiply(params.getDemandMultiplier())
+                BigDecimal demand = plan.forecast.get(day)
+                        .multiply(plan.channelFactor)
+                        .multiply(cache.demandMultiplier)
                         .max(BigDecimal.ZERO);
                 BigDecimal fulfilled = BigDecimal.ZERO;
                 BigDecimal stockout = BigDecimal.ZERO;
@@ -115,55 +103,48 @@ public class SandboxEngine {
                 BigDecimal dayPackaging = BigDecimal.ZERO;
                 BigDecimal dayLead = BigDecimal.ZERO;
                 int dayLeadCount = 0;
-                Map<String, BigDecimal> dayWarehouse =
-                        new LinkedHashMap<>();
 
                 for (Map.Entry<String, BigDecimal> region
                         : plan.regionShare.entrySet()) {
                     BigDecimal regionalDemand = demand.multiply(region.getValue());
-                    String warehouse = chooseWarehouse(params, plan.sku,
-                            region.getKey(), regionalDemand, stock);
-                    BigDecimal available = stock.getOrDefault(
-                            key(warehouse, plan.sku), BigDecimal.ZERO);
+                    String warehouse = chooseWarehouse(params, plan, region.getKey(),
+                            regionalDemand, stock, cache);
+                    String stockKey = key(warehouse, plan.sku);
+                    BigDecimal available = stock.getOrDefault(stockKey, BigDecimal.ZERO);
                     BigDecimal regionalFulfilled = available.min(
                             regionalDemand).max(BigDecimal.ZERO);
                     BigDecimal regionalStockout = regionalDemand.subtract(
                             regionalFulfilled).max(BigDecimal.ZERO);
-                    stock.put(key(warehouse, plan.sku),
-                            available.subtract(regionalFulfilled));
+                    if (regionalFulfilled.signum() != 0) {
+                        stock.put(stockKey, available.subtract(regionalFulfilled));
+                    }
                     fulfilled = fulfilled.add(regionalFulfilled);
                     stockout = stockout.add(regionalStockout);
                     add(plan.fulfilledByWarehouse, warehouse, regionalFulfilled);
-                    add(result.getStockoutByWarehouseSku(),
-                            key(warehouse, plan.sku), regionalStockout);
+                    if (regionalStockout.signum() > 0) {
+                        add(result.getStockoutByWarehouseSku(), stockKey, regionalStockout);
+                    }
 
-                    BigDecimal distance = distance(warehouse, region.getKey());
-                    dayFreight = dayFreight.add(carrierFreight(
-                            params, regionalFulfilled, distance, result));
-                    add(dayWarehouse, warehouse,
-                            carrierFreightValue(params, regionalFulfilled,
-                                    distance));
                     if (regionalFulfilled.signum() > 0) {
-                        dayHandling = dayHandling.add(
-                                params.getHandlingCostPerOrder());
-                        dayPackaging = dayPackaging.add(
-                                params.getPackagingCostPerOrder());
-                        add(dayWarehouse, warehouse,
-                                params.getHandlingCostPerOrder().add(
-                                        params.getPackagingCostPerOrder()));
-                        dayLead = dayLead.add(distance.multiply(
-                                BigDecimal.valueOf(1.2)).multiply(
-                                carrierLeadFactor(params)));
+                        BigDecimal distance = distance(warehouse, region.getKey());
+                        BigDecimal freight = carrierFreight(
+                                cache, regionalFulfilled, distance, result);
+                        dayFreight = dayFreight.add(freight);
+                        add(result.getCostByWarehouse(), warehouse,
+                                freight.add(cache.handling).add(cache.packaging));
+                        dayHandling = dayHandling.add(cache.handling);
+                        dayPackaging = dayPackaging.add(cache.packaging);
+                        dayLead = dayLead.add(distance.multiply(cache.leadTimes12));
                         dayLeadCount++;
                     }
                 }
 
                 spendOps(cash, dayFreight.add(dayHandling).add(dayPackaging));
-                scheduleReplenishment(params, plan.sku, averageDemand, day,
-                        stock, arrivals, cash);
-                BigDecimal penalty = stockout.multiply(
-                        params.getStockoutPenaltyPerUnit());
-                BigDecimal storage = storageCost(params, plan.sku, stock);
+                scheduleReplenishment(params, plan, day, stock, arrivals, outstanding, cash, cache);
+                BigDecimal penalty = stockout.signum() == 0
+                        ? BigDecimal.ZERO
+                        : stockout.multiply(params.getStockoutPenaltyPerUnit());
+                BigDecimal storage = storageCost(cache, plan, stock);
                 BigDecimal dailyCost = dayFreight.add(dayHandling)
                         .add(dayPackaging).add(storage).add(penalty);
                 add(result.getCostByType(), "FREIGHT", dayFreight);
@@ -171,11 +152,6 @@ public class SandboxEngine {
                 add(result.getCostByType(), "PACKAGING", dayPackaging);
                 add(result.getCostByType(), "STORAGE", storage);
                 add(result.getCostByType(), "STOCKOUT_PENALTY", penalty);
-                for (Map.Entry<String, BigDecimal> row
-                        : dayWarehouse.entrySet()) {
-                    add(result.getCostByWarehouse(), row.getKey(),
-                            row.getValue());
-                }
                 dayDemand[day] = dayDemand[day].add(demand);
                 dayFulfilled[day] = dayFulfilled[day].add(fulfilled);
                 dayCost[day] = dayCost[day].add(dailyCost);
@@ -202,10 +178,8 @@ public class SandboxEngine {
         fillSkuSummary(result, plans);
 
         result.setSkuCount(plans.size());
-        result.setInventoryUnits(round(sum(stockAfterInit(params, baseline)), 2));
-        BigDecimal unit = params.getPurchaseCostPerUnit() == null
-                ? BigDecimal.valueOf(50) : params.getPurchaseCostPerUnit();
-        result.setInventoryValue(round(result.getInventoryUnits().multiply(unit), 2));
+        result.setInventoryUnits(round(inventoryUnits, 2));
+        result.setInventoryValue(round(inventoryUnits.multiply(cache.purchaseUnit), 2));
         result.setStockoutUnits(round(totalStockout, 2));
         result.setTotalCost(round(sum(result.getCostByType()), 2));
         result.setServiceLevel(totalDemand.signum() == 0
@@ -221,12 +195,128 @@ public class SandboxEngine {
         roundMap(result.getCostByCarrier(), 2);
         finishCapital(result, params, cash);
         roundMap(result.getStockoutByWarehouseSku(), 2);
+        result.setElapsedMs(System.currentTimeMillis() - started);
         return result;
     }
 
-    private Map<String, BigDecimal> stockAfterInit(
-            ScenarioParams params, BaselineData baseline) {
-        return initialStock(params, baseline);
+    private List<SkuPlan> buildPlans(
+            ScenarioParams params,
+            BaselineData baseline,
+            Map<String, List<String>> skuWarehouses,
+            int days,
+            RunCache cache) {
+        List<SkuPlan> plans = new ArrayList<>();
+        if (baseline == null || baseline.getDemandBySku() == null) {
+            return plans;
+        }
+        Map<String, BigDecimal> defaultRegion = baseline.getRegionShare().getOrDefault(
+                "*", Collections.singletonMap("华东", BigDecimal.ONE));
+        for (Map.Entry<String, List<BigDecimal>> entry
+                : baseline.getDemandBySku().entrySet()) {
+            SkuPlan plan = new SkuPlan();
+            plan.sku = entry.getKey();
+            plan.forecast = forecastOf(entry.getValue(), days);
+            plan.channelShare = baseline.getChannelShare()
+                    .getOrDefault(plan.sku, Collections.singletonMap("ALL",
+                            BigDecimal.ONE));
+            plan.regionShare = baseline.getRegionShare()
+                    .getOrDefault(plan.sku, defaultRegion);
+            plan.channelFactor = channelFactor(params, plan.channelShare);
+            BigDecimal baseAvg = constant(plan.forecast)
+                    ? plan.forecast.get(0)
+                    : average(plan.forecast);
+            plan.avgDemand = baseAvg.multiply(cache.demandMultiplier).max(BigDecimal.ZERO);
+            List<String> warehouses = skuWarehouses.get(plan.sku);
+            if (warehouses == null || warehouses.isEmpty()) {
+                String home = baseline.getSkuWarehouse() == null
+                        ? null : com.ir.common.WarehouseCodes.toOms(
+                                baseline.getSkuWarehouse().get(plan.sku));
+                plan.warehouses = Collections.singletonList(
+                        home == null ? "WH-SH" : home);
+            } else {
+                plan.warehouses = warehouses;
+            }
+            plans.add(plan);
+        }
+        return plans;
+    }
+
+    private List<BigDecimal> forecastOf(List<BigDecimal> history, int days) {
+        if (history == null || history.isEmpty()) {
+            return forecast.seasonalNaive(Collections.<BigDecimal>emptyList(), days);
+        }
+        if (constant(history)) {
+            if (history.size() >= days) {
+                return history;
+            }
+            return Collections.nCopies(days, history.get(0));
+        }
+        return forecast.seasonalNaive(history, days);
+    }
+
+    private boolean constant(List<BigDecimal> history) {
+        if (history.size() <= 1) {
+            return true;
+        }
+        BigDecimal first = history.get(0);
+        return first.compareTo(history.get(history.size() - 1)) == 0
+                && first.compareTo(history.get(history.size() / 2)) == 0;
+    }
+
+    private BigDecimal channelFactor(
+            ScenarioParams params,
+            Map<String, BigDecimal> shares) {
+        BigDecimal result = BigDecimal.ZERO;
+        for (Map.Entry<String, BigDecimal> entry : shares.entrySet()) {
+            BigDecimal multiplier = params.getChannelDemandMultiplier()
+                    .getOrDefault(entry.getKey(), BigDecimal.ONE);
+            result = result.add(entry.getValue().multiply(multiplier));
+        }
+        return result;
+    }
+
+    private BigDecimal loadStock(
+            ScenarioParams params,
+            BaselineData baseline,
+            Map<String, BigDecimal> stock,
+            Map<String, List<String>> skuWarehouses) {
+        BigDecimal units = BigDecimal.ZERO;
+        if (baseline == null || baseline.getInventory() == null) {
+            return units;
+        }
+        for (InventorySnapshot item : baseline.getInventory()) {
+            String warehouse = com.ir.common.WarehouseCodes.toOms(item.getWarehouseCode());
+            String sku = item.getSku();
+            String stockKey = key(warehouse, sku);
+            BigDecimal qty = item.getQtyAvailable() == null
+                    ? BigDecimal.ZERO
+                    : item.getQtyAvailable().multiply(params.getInitialInventoryMultiplier());
+            stock.put(stockKey, stock.getOrDefault(stockKey, BigDecimal.ZERO).add(qty));
+            units = units.add(qty);
+            List<String> warehouses = skuWarehouses.get(sku);
+            if (warehouses == null) {
+                warehouses = new ArrayList<String>(2);
+                skuWarehouses.put(sku, warehouses);
+            }
+            if (!warehouses.contains(warehouse)) {
+                warehouses.add(warehouse);
+            }
+        }
+        if (baseline.getSkuWarehouse() != null) {
+            for (Map.Entry<String, String> entry : baseline.getSkuWarehouse().entrySet()) {
+                String home = com.ir.common.WarehouseCodes.toOms(entry.getValue());
+                if (home == null) {
+                    continue;
+                }
+                List<String> warehouses = skuWarehouses.get(entry.getKey());
+                if (warehouses == null) {
+                    skuWarehouses.put(entry.getKey(), Collections.singletonList(home));
+                } else if (!warehouses.contains(home)) {
+                    warehouses.add(home);
+                }
+            }
+        }
+        return units;
     }
 
     private void fillSkuSummary(Result result, List<SkuPlan> plans) {
@@ -254,64 +344,143 @@ public class SandboxEngine {
         private List<BigDecimal> forecast;
         private Map<String, BigDecimal> channelShare;
         private Map<String, BigDecimal> regionShare;
+        private List<String> warehouses;
+        private BigDecimal channelFactor = BigDecimal.ONE;
+        private BigDecimal avgDemand = BigDecimal.ZERO;
         private BigDecimal demand = BigDecimal.ZERO;
         private BigDecimal fulfilled = BigDecimal.ZERO;
         private BigDecimal stockout = BigDecimal.ZERO;
         private Map<String, BigDecimal> fulfilledByWarehouse = new LinkedHashMap<>();
     }
 
-    private BigDecimal channelDemand(
-            ScenarioParams params,
-            Map<String, BigDecimal> shares,
-            BigDecimal base) {
-        BigDecimal result = BigDecimal.ZERO;
-        for (Map.Entry<String, BigDecimal> entry : shares.entrySet()) {
-            BigDecimal multiplier = params.getChannelDemandMultiplier()
-                    .getOrDefault(entry.getKey(), BigDecimal.ONE);
-            result = result.add(base.multiply(entry.getValue())
-                    .multiply(multiplier));
+    private static final class RunCache {
+        private BigDecimal leadFactor;
+        private BigDecimal leadTimes12;
+        private BigDecimal effectiveRate;
+        private BigDecimal handling;
+        private BigDecimal packaging;
+        private BigDecimal storageRate;
+        private BigDecimal purchaseUnit;
+        private BigDecimal demandMultiplier;
+        private List<CarrierPart> carriers = new ArrayList<>();
+        private String strategy;
+        private String singleWarehouse;
+        private int safetyDays;
+        private int leadDays;
+
+        private static RunCache of(ScenarioParams params) {
+            RunCache cache = new RunCache();
+            cache.leadFactor = leadFactor(params);
+            cache.leadTimes12 = BigDecimal.valueOf(1.2).multiply(cache.leadFactor);
+            cache.effectiveRate = rate(params);
+            cache.handling = params.getHandlingCostPerOrder();
+            cache.packaging = params.getPackagingCostPerOrder();
+            cache.storageRate = params.getStorageCostPerUnitDay();
+            cache.purchaseUnit = params.getPurchaseCostPerUnit() == null
+                    ? BigDecimal.valueOf(50) : params.getPurchaseCostPerUnit();
+            cache.demandMultiplier = params.getDemandMultiplier() == null
+                    ? BigDecimal.ONE : params.getDemandMultiplier();
+            cache.strategy = params.getAllocationStrategy();
+            cache.singleWarehouse = params.getSingleWarehouse() == null
+                    ? "WH-SH" : params.getSingleWarehouse();
+            cache.safetyDays = params.getSafetyDays();
+            cache.leadDays = Math.max(0, params.getReplenishLeadDays());
+            BigDecimal weightTotal = BigDecimal.ZERO;
+            for (BigDecimal weight : params.getCarrierMix().values()) {
+                weightTotal = weightTotal.add(weight);
+            }
+            if (weightTotal.signum() > 0) {
+                for (Map.Entry<String, BigDecimal> carrier
+                        : params.getCarrierMix().entrySet()) {
+                    CarrierPart part = new CarrierPart();
+                    part.code = carrier.getKey();
+                    BigDecimal portion = carrier.getValue().divide(weightTotal, 8,
+                            RoundingMode.HALF_UP);
+                    BigDecimal rate = params.getCarrierRate().getOrDefault(
+                            carrier.getKey(), BigDecimal.ONE);
+                    part.weight = portion.multiply(rate).multiply(BigDecimal.valueOf(1.5));
+                    cache.carriers.add(part);
+                }
+            }
+            return cache;
         }
-        return result;
+
+        private static BigDecimal leadFactor(ScenarioParams params) {
+            BigDecimal result = BigDecimal.ZERO;
+            BigDecimal total = BigDecimal.ZERO;
+            Map<String, BigDecimal> leads = params.getCarrierLead();
+            for (Map.Entry<String, BigDecimal> entry
+                    : params.getCarrierMix().entrySet()) {
+                BigDecimal weight = entry.getValue() == null
+                        ? BigDecimal.ZERO : entry.getValue();
+                BigDecimal lead = leads == null
+                        ? com.ir.common.CarrierCodes.lead(entry.getKey())
+                        : leads.getOrDefault(entry.getKey(),
+                        com.ir.common.CarrierCodes.lead(entry.getKey()));
+                result = result.add(weight.multiply(lead));
+                total = total.add(weight);
+            }
+            return total.signum() == 0 ? BigDecimal.ONE
+                    : result.divide(total, 6, RoundingMode.HALF_UP);
+        }
+
+        private static BigDecimal rate(ScenarioParams params) {
+            BigDecimal result = BigDecimal.ZERO;
+            BigDecimal total = BigDecimal.ZERO;
+            for (Map.Entry<String, BigDecimal> entry
+                    : params.getCarrierMix().entrySet()) {
+                BigDecimal weight = entry.getValue();
+                result = result.add(weight.multiply(params.getCarrierRate()
+                        .getOrDefault(entry.getKey(), BigDecimal.ONE)));
+                total = total.add(weight);
+            }
+            return total.signum() == 0 ? BigDecimal.ONE
+                    : result.divide(total, 6, RoundingMode.HALF_UP);
+        }
+    }
+
+    private static final class CarrierPart {
+        private String code;
+        private BigDecimal weight;
     }
 
     private void scheduleReplenishment(
             ScenarioParams params,
-            String sku,
-            BigDecimal averageDemand,
+            SkuPlan plan,
             int day,
             Map<String, BigDecimal> stock,
             Map<Integer, Map<String, BigDecimal>> arrivals,
-            Cash cash) {
-        if (averageDemand.signum() <= 0) {
+            Map<String, BigDecimal> outstanding,
+            Cash cash,
+            RunCache cache) {
+        if (plan.avgDemand.signum() <= 0) {
             return;
         }
-        for (String warehouse : WAREHOUSES) {
-            BigDecimal available = stock.getOrDefault(key(warehouse, sku),
-                    BigDecimal.ZERO);
-            BigDecimal outstanding = outstanding(arrivals, day,
-                    key(warehouse, sku));
-            BigDecimal coverage = available.divide(averageDemand, 6,
+        BigDecimal safety = BigDecimal.valueOf(cache.safetyDays);
+        BigDecimal target = plan.avgDemand.multiply(safety);
+        for (String warehouse : plan.warehouses) {
+            String stockKey = key(warehouse, plan.sku);
+            BigDecimal available = stock.getOrDefault(stockKey, BigDecimal.ZERO);
+            BigDecimal inbound = outstanding.getOrDefault(stockKey, BigDecimal.ZERO);
+            BigDecimal coverage = available.divide(plan.avgDemand, 6,
                     RoundingMode.HALF_UP);
-            if (coverage.compareTo(BigDecimal.valueOf(
-                    params.getSafetyDays())) < 0) {
-                BigDecimal target = averageDemand.multiply(
-                        BigDecimal.valueOf(params.getSafetyDays()));
+            if (coverage.compareTo(safety) < 0) {
                 BigDecimal quantity = target.subtract(available)
-                        .subtract(outstanding).max(BigDecimal.ZERO);
+                        .subtract(inbound).max(BigDecimal.ZERO);
                 quantity = affordPurchase(params, cash, quantity);
                 if (quantity.signum() > 0) {
-                    if (params.getReplenishLeadDays() == 0) {
-                        stock.put(key(warehouse, sku),
-                                available.add(quantity));
+                    if (cache.leadDays == 0) {
+                        stock.put(stockKey, available.add(quantity));
                         continue;
                     }
-                    int arrivalDay = day + params.getReplenishLeadDays();
-                    arrivals.computeIfAbsent(arrivalDay,
-                            ignored -> new LinkedHashMap<>());
+                    int arrivalDay = day + cache.leadDays;
                     Map<String, BigDecimal> due = arrivals.get(arrivalDay);
-                    due.put(key(warehouse, sku),
-                            due.getOrDefault(key(warehouse, sku),
-                                    BigDecimal.ZERO).add(quantity));
+                    if (due == null) {
+                        due = new HashMap<>();
+                        arrivals.put(arrivalDay, due);
+                    }
+                    due.put(stockKey, due.getOrDefault(stockKey, BigDecimal.ZERO).add(quantity));
+                    outstanding.put(stockKey, inbound.add(quantity));
                 }
             }
         }
@@ -400,25 +569,11 @@ public class SandboxEngine {
         }
     }
 
-    private BigDecimal outstanding(
-            Map<Integer, Map<String, BigDecimal>> arrivals,
-            int day,
-            String key) {
-        BigDecimal value = BigDecimal.ZERO;
-        for (Map.Entry<Integer, Map<String, BigDecimal>> entry
-                : arrivals.entrySet()) {
-            if (entry.getKey() > day) {
-                value = value.add(entry.getValue().getOrDefault(key,
-                        BigDecimal.ZERO));
-            }
-        }
-        return value;
-    }
-
     private void receive(
             Map<Integer, Map<String, BigDecimal>> arrivals,
             int day,
-            Map<String, BigDecimal> stock) {
+            Map<String, BigDecimal> stock,
+            Map<String, BigDecimal> outstanding) {
         Map<String, BigDecimal> due = arrivals.remove(day);
         if (due == null) {
             return;
@@ -426,52 +581,65 @@ public class SandboxEngine {
         for (Map.Entry<String, BigDecimal> entry : due.entrySet()) {
             stock.put(entry.getKey(), stock.getOrDefault(entry.getKey(),
                     BigDecimal.ZERO).add(entry.getValue()));
+            BigDecimal left = outstanding.get(entry.getKey());
+            if (left != null) {
+                left = left.subtract(entry.getValue());
+                if (left.signum() <= 0) {
+                    outstanding.remove(entry.getKey());
+                } else {
+                    outstanding.put(entry.getKey(), left);
+                }
+            }
         }
     }
 
     private BigDecimal storageCost(
-            ScenarioParams params,
-            String sku,
+            RunCache cache,
+            SkuPlan plan,
             Map<String, BigDecimal> stock) {
+        if (cache.storageRate.signum() == 0) {
+            return BigDecimal.ZERO;
+        }
         BigDecimal result = BigDecimal.ZERO;
-        for (String warehouse : WAREHOUSES) {
-            result = result.add(stock.getOrDefault(key(warehouse, sku),
-                    BigDecimal.ZERO).multiply(
-                    params.getStorageCostPerUnitDay()));
+        for (String warehouse : plan.warehouses) {
+            result = result.add(stock.getOrDefault(key(warehouse, plan.sku),
+                    BigDecimal.ZERO).multiply(cache.storageRate));
         }
         return result;
     }
 
     private String chooseWarehouse(
             ScenarioParams params,
-            String sku,
+            SkuPlan plan,
             String region,
             BigDecimal demand,
-            Map<String, BigDecimal> stock) {
-        if ("SINGLE_WAREHOUSE".equals(params.getAllocationStrategy())) {
-            return params.getSingleWarehouse() == null
-                    ? "WH-SH" : params.getSingleWarehouse();
+            Map<String, BigDecimal> stock,
+            RunCache cache) {
+        if ("SINGLE_WAREHOUSE".equals(cache.strategy)) {
+            return cache.singleWarehouse;
         }
-        String best = "WH-SH";
+        if (!"BALANCED".equals(cache.strategy)
+                && plan.warehouses.size() == 1) {
+            return plan.warehouses.get(0);
+        }
+        String best = plan.warehouses.get(0);
         BigDecimal bestValue = null;
         for (String warehouse : WAREHOUSES) {
-            BigDecimal available = stock.getOrDefault(key(warehouse, sku),
+            BigDecimal available = stock.getOrDefault(key(warehouse, plan.sku),
                     BigDecimal.ZERO);
             if (available.signum() <= 0
-                    && !"BALANCED".equals(params.getAllocationStrategy())) {
+                    && !"BALANCED".equals(cache.strategy)) {
                 continue;
             }
             BigDecimal value;
-            if ("LOWEST_COST".equals(params.getAllocationStrategy())) {
-                value = effectiveRate(params).multiply(
-                        distance(warehouse, region)).add(
-                        params.getHandlingCostPerOrder());
-            } else if ("BALANCED".equals(params.getAllocationStrategy())) {
-                BigDecimal costPart = effectiveRate(params).multiply(
-                        distance(warehouse, region)).add(
-                        params.getHandlingCostPerOrder());
+            if ("LOWEST_COST".equals(cache.strategy)) {
+                value = cache.effectiveRate.multiply(
+                        distance(warehouse, region)).add(cache.handling);
+            } else if ("BALANCED".equals(cache.strategy)) {
+                BigDecimal costPart = cache.effectiveRate.multiply(
+                        distance(warehouse, region)).add(cache.handling);
                 BigDecimal leadPart = distance(warehouse, region)
-                        .multiply(carrierLeadFactor(params));
+                        .multiply(cache.leadFactor);
                 BigDecimal costW = params.getCostWeight() == null
                         ? BigDecimal.valueOf(0.5) : params.getCostWeight();
                 BigDecimal effW = params.getEfficiencyWeight() == null
@@ -495,103 +663,20 @@ public class SandboxEngine {
     }
 
     private BigDecimal carrierFreight(
-            ScenarioParams params,
+            RunCache cache,
             BigDecimal quantity,
             BigDecimal distance,
             Result result) {
-        BigDecimal total = BigDecimal.ZERO;
-        BigDecimal weightTotal = BigDecimal.ZERO;
-        for (BigDecimal weight : params.getCarrierMix().values()) {
-            weightTotal = weightTotal.add(weight);
-        }
-        if (weightTotal.signum() == 0) {
+        if (quantity.signum() <= 0 || cache.carriers.isEmpty()) {
             return BigDecimal.ZERO;
         }
-        for (Map.Entry<String, BigDecimal> carrier
-                : params.getCarrierMix().entrySet()) {
-            BigDecimal portion = carrier.getValue().divide(weightTotal, 8,
-                    RoundingMode.HALF_UP);
-            BigDecimal amount = quantity.multiply(BigDecimal.valueOf(1.5))
-                    .multiply(distance)
-                    .multiply(params.getCarrierRate().getOrDefault(
-                            carrier.getKey(), BigDecimal.ONE))
-                    .multiply(portion);
-            add(result.getCostByCarrier(), carrier.getKey(), amount);
+        BigDecimal total = BigDecimal.ZERO;
+        for (CarrierPart part : cache.carriers) {
+            BigDecimal amount = quantity.multiply(distance).multiply(part.weight);
+            add(result.getCostByCarrier(), part.code, amount);
             total = total.add(amount);
         }
         return total;
-    }
-
-    private BigDecimal carrierFreightValue(
-            ScenarioParams params,
-            BigDecimal quantity,
-            BigDecimal distance) {
-        BigDecimal total = BigDecimal.ZERO;
-        BigDecimal weightTotal = BigDecimal.ZERO;
-        for (BigDecimal weight : params.getCarrierMix().values()) {
-            weightTotal = weightTotal.add(weight);
-        }
-        if (weightTotal.signum() == 0) {
-            return BigDecimal.ZERO;
-        }
-        for (Map.Entry<String, BigDecimal> carrier
-                : params.getCarrierMix().entrySet()) {
-            total = total.add(quantity.multiply(BigDecimal.valueOf(1.5))
-                    .multiply(distance)
-                    .multiply(params.getCarrierRate().getOrDefault(
-                            carrier.getKey(), BigDecimal.ONE))
-                    .multiply(carrier.getValue().divide(weightTotal, 8,
-                            RoundingMode.HALF_UP)));
-        }
-        return total;
-    }
-
-    private BigDecimal carrierLeadFactor(ScenarioParams params) {
-        BigDecimal result = BigDecimal.ZERO;
-        BigDecimal total = BigDecimal.ZERO;
-        Map<String, BigDecimal> leads = params.getCarrierLead();
-        for (Map.Entry<String, BigDecimal> entry
-                : params.getCarrierMix().entrySet()) {
-            BigDecimal weight = entry.getValue() == null
-                    ? BigDecimal.ZERO : entry.getValue();
-            BigDecimal lead = leads == null
-                    ? com.ir.common.CarrierCodes.lead(entry.getKey())
-                    : leads.getOrDefault(entry.getKey(),
-                    com.ir.common.CarrierCodes.lead(entry.getKey()));
-            result = result.add(weight.multiply(lead));
-            total = total.add(weight);
-        }
-        return total.signum() == 0 ? BigDecimal.ONE
-                : result.divide(total, 6, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal effectiveRate(ScenarioParams params) {
-        BigDecimal result = BigDecimal.ZERO;
-        BigDecimal total = BigDecimal.ZERO;
-        for (Map.Entry<String, BigDecimal> entry
-                : params.getCarrierMix().entrySet()) {
-            BigDecimal weight = entry.getValue();
-            result = result.add(weight.multiply(params.getCarrierRate()
-                    .getOrDefault(entry.getKey(), BigDecimal.ONE)));
-            total = total.add(weight);
-        }
-        return total.signum() == 0 ? BigDecimal.ONE
-                : result.divide(total, 6, RoundingMode.HALF_UP);
-    }
-
-    private Map<String, BigDecimal> initialStock(
-            ScenarioParams params,
-            BaselineData baseline) {
-        Map<String, BigDecimal> stock = new LinkedHashMap<>();
-        for (InventorySnapshot item : baseline.getInventory()) {
-            String warehouse = com.ir.common.WarehouseCodes.toOms(item.getWarehouseCode());
-            String stockKey = key(warehouse, item.getSku());
-            BigDecimal qty = item.getQtyAvailable() == null
-                    ? BigDecimal.ZERO
-                    : item.getQtyAvailable().multiply(params.getInitialInventoryMultiplier());
-            stock.put(stockKey, stock.getOrDefault(stockKey, BigDecimal.ZERO).add(qty));
-        }
-        return stock;
     }
 
     private BigDecimal distance(String warehouse, String region) {
