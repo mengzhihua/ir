@@ -12,10 +12,10 @@ KEY (code)
 VALUES ('BMS', '计费系统', 'http://localhost:8084', 'API_KEY', NULL, NULL, 'bms-open-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('SRM', '供应商管理系统', 'http://localhost:8087', 'API_KEY', NULL, NULL, 'srm-wms-key', 'MOCK', TRUE);
+VALUES ('SRM', '供应商管理系统', 'http://localhost:8087', 'API_KEY', 'admin', 'admin123', 'srm-wms-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('SAP', 'ERP 系统', 'http://localhost:8085', 'API_KEY', NULL, NULL, 'sap-open-key', 'MOCK', TRUE);
+VALUES ('SAP', 'ERP 系统', 'http://localhost:8085', 'API_KEY', 'admin', 'admin123', 'sap-open-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
 VALUES ('OA', '协同办公', 'http://localhost:8086', 'API_KEY', NULL, NULL, 'oa-open-key', 'MOCK', TRUE);

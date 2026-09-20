@@ -88,6 +88,40 @@ class HttpProcureContractTest {
         server.verify();
     }
 
+    @Test
+    void srmSnapshotsThenExpeditePoByOpenIr() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://srm.local/api/open/ir/snapshots"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Api-Key", "srm-wms-key"))
+                .andRespond(withSuccess(
+                        "{\"code\":0,\"data\":{\"system\":\"SRM\",\"snapshots\":[{"
+                                + "\"dataType\":\"ASN\",\"bizKey\":\"ASN-IR-DELAY\","
+                                + "\"status\":\"DELAYED\",\"sku\":\"SKU001\",\"qty\":100,"
+                                + "\"poCode\":\"PO-IR-EXPEDITE\",\"refCode\":\"PO-IR-EXPEDITE\","
+                                + "\"plantCode\":\"P001\",\"title\":\"发货通知 ASN-IR-DELAY\"}]}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://srm.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "srm-wms-key"))
+                .andExpect(jsonPath("$.type").value("SRM_EXPEDITE_PO"))
+                .andExpect(jsonPath("$.targetKey").value("PO-IR-EXPEDITE"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"code\":\"PO-IR-EXPEDITE\",\"status\":\"CONFIRMED\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        ClientFactory factory = factory(http, "SAP,OA,SRM");
+        CtSystem srm = system("SRM", "http://srm.local", "srm-wms-key");
+        List<?> asns = factory.srm(srm).fetchAsns();
+        org.junit.jupiter.api.Assertions.assertEquals(1, asns.size());
+
+        ActionCommand command = new ActionCommand();
+        command.setType("SRM_EXPEDITE_PO");
+        command.setTargetKey("PO-IR-EXPEDITE");
+        factory.srm(srm).execute(command);
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),

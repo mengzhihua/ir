@@ -86,6 +86,7 @@ class AlertEngineTest {
         assertTrue(rules.contains("DMS_PART_SHORTAGE"));
         assertTrue(rules.contains("CRM_OPEN_CASE"));
         assertTrue(rules.contains("OA_WF_PENDING"));
+        assertTrue(rules.contains("ASN_DELAY"));
         CtAlert oa = alertMapper.selectList(null).stream()
                 .filter(a -> "OA_WF_PENDING".equals(a.getRuleCode()))
                 .findFirst().orElse(null);

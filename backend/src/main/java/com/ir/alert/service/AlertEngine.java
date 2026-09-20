@@ -18,6 +18,8 @@ import com.ir.cost.service.CostService;
 import com.ir.forecast.service.ForecastService;
 import com.ir.sandbox.service.BalanceAdvisor;
 import com.ir.sandbox.service.BalancePolicy;
+import com.ir.snapshot.PurchaseSnapshot;
+import com.ir.snapshot.PurchaseSnapshotMapper;
 import com.ir.snapshot.entity.CostRecord;
 import com.ir.snapshot.entity.ExtSnapshot;
 import com.ir.snapshot.entity.InventorySnapshot;
@@ -51,6 +53,7 @@ public class AlertEngine {
     private final ShipmentSnapshotMapper shipmentMapper;
     private final InventorySnapshotMapper inventoryMapper;
     private final ExtSnapshotMapper extMapper;
+    private final PurchaseSnapshotMapper purchaseMapper;
     private final ActionService actions;
     private final CodeGenerator codes;
     private final ObjectMapper objectMapper;
@@ -67,6 +70,7 @@ public class AlertEngine {
             ShipmentSnapshotMapper shipmentMapper,
             InventorySnapshotMapper inventoryMapper,
             ExtSnapshotMapper extMapper,
+            PurchaseSnapshotMapper purchaseMapper,
             ActionService actions,
             CodeGenerator codes,
             ObjectMapper objectMapper,
@@ -81,6 +85,7 @@ public class AlertEngine {
         this.shipmentMapper = shipmentMapper;
         this.inventoryMapper = inventoryMapper;
         this.extMapper = extMapper;
+        this.purchaseMapper = purchaseMapper;
         this.actions = actions;
         this.codes = codes;
         this.objectMapper = objectMapper;
@@ -114,6 +119,8 @@ public class AlertEngine {
                 evaluateForecast(rule, params, active);
             } else if ("EXT_STATUS".equals(rule.getType())) {
                 evaluateExt(rule, params, active);
+            } else if ("ASN_DELAY".equals(rule.getType())) {
+                evaluateAsnDelay(rule, params, active);
             }
         }
         resolveCleared(active, evaluatedRules);
@@ -481,6 +488,58 @@ public class AlertEngine {
                         rule.getSuggestedAction(), active);
             }
         }
+    }
+
+    private void evaluateAsnDelay(CtRule rule, Map<String, Object> params, Set<String> active) {
+        long days = number(params.get("days"), 0L);
+        LocalDate limit = LocalDate.now().minusDays(days);
+        for (PurchaseSnapshot doc : purchaseMapper.selectList(new LambdaQueryWrapper<PurchaseSnapshot>()
+                .eq(PurchaseSnapshot::getDocType, "ASN"))) {
+            if (Arrays.asList("RECEIVED", "POSTED", "CANCELLED").contains(doc.getStatus())) {
+                continue;
+            }
+            boolean late = "DELAYED".equals(doc.getStatus())
+                    || (doc.getExpectedDate() != null && !doc.getExpectedDate().isAfter(limit));
+            if (!late) {
+                continue;
+            }
+            String target = doc.getRefCode() == null || doc.getRefCode().trim().isEmpty()
+                    ? doc.getCode() : doc.getRefCode();
+            add(rule, "ASN", target, doc.getPlantCode(),
+                    "供应商到货延误",
+                    (doc.getCode() == null ? target : doc.getCode())
+                            + " 预计 " + doc.getExpectedDate() + " 到货已延误",
+                    rule.getSuggestedAction(), active);
+        }
+        for (ExtSnapshot row : extMapper.selectList(new LambdaQueryWrapper<ExtSnapshot>()
+                .eq(ExtSnapshot::getSourceSystem, "SRM")
+                .eq(ExtSnapshot::getDataType, "ASN"))) {
+            if (!"DELAYED".equals(row.getStatus())) {
+                continue;
+            }
+            Map<String, Object> extra = params(row.getExtraJson());
+            String target = firstNonBlank(
+                    string(extra.get("poCode")),
+                    string(extra.get("refCode")),
+                    row.getBizKey());
+            add(rule, "ASN", target, row.getPlantCode(),
+                    "供应商到货延误",
+                    (row.getTitle() == null ? row.getBizKey() : row.getTitle()) + " 状态 DELAYED",
+                    rule.getSuggestedAction(), active);
+        }
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty() && !"null".equals(value)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static String string(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private void add(

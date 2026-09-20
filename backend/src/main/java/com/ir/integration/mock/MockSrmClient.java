@@ -144,6 +144,18 @@ public class MockSrmClient implements SrmClient {
             }
             throw new IntegrationException("SRM 采购订单不存在: " + command.getTargetKey());
         }
+        if ("SRM_SUBMIT_PR".equals(command.getType()) || "SRM_APPROVE_PR".equals(command.getType())) {
+            String sku = String.valueOf(command.getParams() == null
+                    ? command.getTargetKey() : command.getParams().getOrDefault("sku", command.getTargetKey()));
+            Map<String, Object> pr = new LinkedHashMap<>();
+            pr.put("code", command.getTargetKey());
+            pr.put("sku", sku);
+            pr.put("status", "SRM_SUBMIT_PR".equals(command.getType()) ? "SUBMITTED" : "APPROVED");
+            requisitions.add(pr);
+            result.put("prCode", pr.get("code"));
+            result.put("status", pr.get("status"));
+            return result;
+        }
         throw new IntegrationException("SRM 不支持的动作: " + command.getType());
     }
 

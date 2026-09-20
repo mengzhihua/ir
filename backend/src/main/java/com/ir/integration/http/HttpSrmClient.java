@@ -27,17 +27,28 @@ public class HttpSrmClient implements SrmClient {
     private final String baseUrl;
     private final String username;
     private final String password;
+    private final String apiKey;
     private volatile String token;
+    private Map<String, Object> cachedSnapshot;
 
     public HttpSrmClient(RestTemplate http, String baseUrl, String username, String password) {
+        this(http, baseUrl, username, password, null);
+    }
+
+    public HttpSrmClient(RestTemplate http, String baseUrl, String username, String password, String apiKey) {
         this.http = http;
         this.baseUrl = baseUrl == null ? "" : baseUrl.replaceAll("/$", "");
         this.username = username;
         this.password = password;
+        this.apiKey = apiKey;
     }
 
     @Override
     public List<PurchaseSnapshot> fetchPurchaseOrders() {
+        List<PurchaseSnapshot> fromOpen = openSnapshots("PO");
+        if (fromOpen != null) {
+            return fromOpen;
+        }
         List<PurchaseSnapshot> result = new ArrayList<>();
         for (Map<String, Object> row : pages("/api/purchase/order/page")) {
             PurchaseSnapshot po = new PurchaseSnapshot();
@@ -57,6 +68,10 @@ public class HttpSrmClient implements SrmClient {
 
     @Override
     public List<PurchaseSnapshot> fetchAsns() {
+        List<PurchaseSnapshot> fromOpen = openSnapshots("ASN");
+        if (fromOpen != null) {
+            return fromOpen;
+        }
         List<PurchaseSnapshot> result = new ArrayList<>();
         for (Map<String, Object> row : pages("/api/delivery/asn/page")) {
             PurchaseSnapshot asn = new PurchaseSnapshot();
@@ -106,6 +121,27 @@ public class HttpSrmClient implements SrmClient {
         Map<String, Object> params = command.getParams() == null
                 ? Collections.emptyMap() : command.getParams();
         Map<String, Object> result = new LinkedHashMap<>();
+        if (hasApiKey()) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("type", command.getType());
+            body.put("targetKey", command.getTargetKey());
+            body.put("sku", params.getOrDefault("sku", command.getTargetKey()));
+            body.put("qty", params.get("qty"));
+            body.put("plantCode", params.get("plantCode"));
+            body.put("remark", params.getOrDefault("reason", params.get("remark")));
+            body.put("params", params);
+            Map<String, Object> response = HttpSupport.postMap(
+                    http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            Object data = response.get("data");
+            if (data instanceof Map) {
+                result.putAll((Map<String, Object>) data);
+            } else if (data != null) {
+                result.put("result", data);
+            }
+            result.put("type", command.getType());
+            result.put("targetKey", command.getTargetKey());
+            return result;
+        }
         if ("SRM_PURCHASE_SUGGEST".equals(command.getType())) {
             BigDecimal qty = params.get("qty") == null ? BigDecimal.ZERO
                     : new BigDecimal(String.valueOf(params.get("qty")));
@@ -147,17 +183,89 @@ public class HttpSrmClient implements SrmClient {
             result.put("poCode", command.getTargetKey());
             return result;
         }
+        if ("SRM_SUBMIT_PR".equals(command.getType()) || "SRM_APPROVE_PR".equals(command.getType())) {
+            Map<String, Object> pr = findPurchaseRequisition(command.getTargetKey());
+            String action = "SRM_SUBMIT_PR".equals(command.getType()) ? "submit" : "approve";
+            Map<String, Object> response = HttpSupport.postMap(
+                    http, baseUrl + "/api/sourcing/pr/" + HttpSupport.longValue(pr, "id") + "/" + action,
+                    Collections.emptyMap(), headers());
+            Object data = response.get("data");
+            if (data instanceof Map) {
+                result.putAll((Map<String, Object>) data);
+            }
+            result.put("prCode", command.getTargetKey());
+            return result;
+        }
         throw new IntegrationException("SRM 不支持的动作: " + command.getType());
     }
 
     @Override
     public boolean health() {
         try {
-            dashboard();
+            if (hasApiKey()) {
+                snapshot();
+            } else {
+                dashboard();
+            }
             return true;
         } catch (IntegrationException ex) {
             return false;
         }
+    }
+
+    private List<PurchaseSnapshot> openSnapshots(String dataType) {
+        if (!hasApiKey()) {
+            return null;
+        }
+        try {
+            List<PurchaseSnapshot> result = new ArrayList<>();
+            for (Map<String, Object> raw : HttpEcosystemClient.snapshots(snapshot())) {
+                if (!dataType.equals(HttpSupport.string(raw, "dataType"))) {
+                    continue;
+                }
+                PurchaseSnapshot doc = new PurchaseSnapshot();
+                doc.setDocType(dataType);
+                doc.setCode(HttpSupport.string(raw, "bizKey", "code"));
+                doc.setRefCode(HttpSupport.string(raw, "refCode", "poCode"));
+                doc.setSupplierCode(HttpSupport.string(raw, "supplierCode"));
+                doc.setPlantCode(HttpSupport.string(raw, "plantCode"));
+                doc.setStatus(HttpSupport.string(raw, "status"));
+                doc.setSku(HttpSupport.string(raw, "sku", "skuCode"));
+                doc.setQty(decimal(raw, "qty"));
+                doc.setAmount(decimal(raw, "amount"));
+                String expected = HttpSupport.string(raw, "expectedDate");
+                if (expected != null && expected.length() >= 10) {
+                    doc.setExpectedDate(LocalDate.parse(expected.substring(0, 10)));
+                }
+                fillLines(doc, raw);
+                result.add(doc);
+            }
+            return result;
+        } catch (IntegrationException ex) {
+            return null;
+        }
+    }
+
+    private Map<String, Object> snapshot() {
+        if (cachedSnapshot == null) {
+            cachedSnapshot = HttpSupport.getMap(
+                    http, baseUrl + "/api/open/ir/snapshots", HttpSupport.apiKey(apiKey));
+        }
+        return cachedSnapshot;
+    }
+
+    private boolean hasApiKey() {
+        return apiKey != null && !apiKey.trim().isEmpty();
+    }
+
+    private Map<String, Object> findPurchaseRequisition(String code) {
+        String url = baseUrl + "/api/sourcing/pr/page?current=1&size=20&keyword=" + encode(code);
+        for (Map<String, Object> row : HttpSupport.rows(HttpSupport.getMap(http, url, headers()))) {
+            if (code.equals(HttpSupport.string(row, "code"))) {
+                return row;
+            }
+        }
+        throw new IntegrationException("SRM 采购申请不存在: " + code);
     }
 
     private Map<String, Object> findPurchaseOrder(String code) {

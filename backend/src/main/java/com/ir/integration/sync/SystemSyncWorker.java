@@ -344,6 +344,7 @@ public class SystemSyncWorker {
             row.setAmount(decimal(raw.get("amount")));
             row.setPlantCode(string(raw.get("plantCode")));
             row.setTitle(string(raw.get("title")));
+            row.setExtraJson(extraJson(raw));
             row.setSyncedAt(LocalDateTime.now());
             ExtSnapshot existing = extMapper.selectOne(new LambdaQueryWrapper<ExtSnapshot>()
                     .eq(ExtSnapshot::getSourceSystem, systemCode)
@@ -359,6 +360,32 @@ public class SystemSyncWorker {
         }
         saveLog(systemCode, "SNAPSHOT", "SUCCESS", count, "生态快照同步完成");
         return count;
+    }
+
+    private static String extraJson(Map<String, Object> raw) {
+        Object given = raw.get("extraJson");
+        if (given instanceof String && !((String) given).trim().isEmpty()) {
+            return (String) given;
+        }
+        java.util.LinkedHashMap<String, Object> extra = new java.util.LinkedHashMap<String, Object>();
+        if (given instanceof Map) {
+            extra.putAll((Map<String, Object>) given);
+        }
+        for (String key : java.util.Arrays.asList(
+                "poCode", "refCode", "expectedDate", "originalStatus", "supplierCode")) {
+            String value = string(raw.get(key));
+            if (value != null) {
+                extra.put(key, value);
+            }
+        }
+        if (extra.isEmpty()) {
+            return null;
+        }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(extra);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private static String string(Object value) {
