@@ -124,7 +124,33 @@ class AlertEngineTest {
         assertTrue(types.contains("SRM_PURCHASE_SUGGEST"));
         assertTrue(types.contains("OA_START_WORKFLOW"));
         assertTrue(types.contains("WMS_REPLENISH"));
+        CtAction replenish = actionMapper.selectList(null).stream()
+                .filter(row -> sap.getId().equals(row.getAlertId())
+                        && "WMS_REPLENISH".equals(row.getType()))
+                .findFirst().orElse(null);
+        assertNotNull(replenish);
+        assertTrue(replenish.getParamsJson() != null
+                && replenish.getParamsJson().contains("MAT-1000"));
+        assertTrue(replenish.getParamsJson().contains("qty"));
+        assertTrue(replenish.getParamsJson().contains("warehouseCode"));
         assertResolved(sap);
+    }
+
+    @Test
+    void oaPendingSuggestedFillsTaskIdAndExecutes() {
+        alertEngine.evaluate();
+        CtAlert oa = alertMapper.selectList(null).stream()
+                .filter(a -> "OA_WF_PENDING".equals(a.getRuleCode()) && "OPEN".equals(a.getStatus()))
+                .findFirst().orElse(null);
+        assertNotNull(oa);
+        CtAction action = alertEngine.executeSuggested(oa.getId());
+        assertNotNull(action);
+        assertEquals("OA_APPROVE_TASK", action.getType());
+        assertEquals("SUCCESS", action.getStatus());
+        assertEquals("8801", action.getTargetKey());
+        assertTrue(action.getParamsJson() != null && action.getParamsJson().contains("taskId"));
+        assertTrue(action.getParamsJson().contains("8801"));
+        assertResolved(oa);
     }
 
     @Test
@@ -182,9 +208,20 @@ class AlertEngineTest {
 
     @Test
     void stuckOrderSuggestsPrioritizeWhenBalanced() {
+        OrderSnapshot seeded = new OrderSnapshot();
+        seeded.setOrderNo("SO-ALERT-PRIO");
+        seeded.setWarehouseCode("WH-SH");
+        seeded.setStatus("AUDITED");
+        seeded.setPriority(1);
+        seeded.setOrderTime(LocalDateTime.now().minusHours(8));
+        seeded.setPayAmount(new BigDecimal("99"));
+        seeded.setQty(BigDecimal.ONE);
+        orderMapper.insert(seeded);
         alertEngine.evaluate();
         CtAlert stuck = alertMapper.selectList(null).stream()
-                .filter(a -> "OMS_STUCK".equals(a.getRuleCode()))
+                .filter(a -> "OMS_STUCK".equals(a.getRuleCode())
+                        && "SO-ALERT-PRIO".equals(a.getTargetKey())
+                        && "OPEN".equals(a.getStatus()))
                 .findFirst().orElse(null);
         org.junit.jupiter.api.Assertions.assertNotNull(stuck);
         assertEquals("OMS_PRIORITIZE", stuck.getSuggestedAction());
