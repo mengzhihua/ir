@@ -179,4 +179,36 @@ final class HttpSupport {
         }
         return headers;
     }
+
+    static void putIdempotency(Map<String, Object> body, com.ir.integration.client.ActionCommand command) {
+        if (body == null || command == null) {
+            return;
+        }
+        String key = command.getIdempotencyKey();
+        if (key != null && !key.trim().isEmpty()) {
+            body.put("idempotencyKey", key);
+        }
+    }
+
+    static boolean truthy(Map<String, Object> row, String... names) {
+        if (row == null) {
+            return false;
+        }
+        for (String name : names) {
+            Object value = row.get(name);
+            if (value instanceof Boolean) {
+                return (Boolean) value;
+            }
+            if (value instanceof Number) {
+                return ((Number) value).intValue() != 0;
+            }
+            if (value != null) {
+                String text = String.valueOf(value).trim();
+                if ("true".equalsIgnoreCase(text) || "1".equals(text) || "Y".equalsIgnoreCase(text)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 }

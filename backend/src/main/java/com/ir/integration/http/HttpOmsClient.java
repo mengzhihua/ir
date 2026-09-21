@@ -133,7 +133,9 @@ public class HttpOmsClient implements OmsClient {
             body.put("type", command.getType());
             body.put("targetKey", command.getTargetKey());
             body.put("params", command.getParams());
+            HttpSupport.putIdempotency(body, command);
             HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            cachedSnapshot = null;
             return;
         }
         String orderNo = command.getTargetKey();

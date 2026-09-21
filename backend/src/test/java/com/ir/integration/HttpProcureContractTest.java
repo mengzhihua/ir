@@ -88,6 +88,126 @@ class HttpProcureContractTest {
         server.verify();
     }
 
+    @Test
+    void srmSnapshotsThenExpeditePoByOpenIr() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://srm.local/api/open/ir/snapshots"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Api-Key", "srm-wms-key"))
+                .andRespond(withSuccess(
+                        "{\"code\":0,\"data\":{\"system\":\"SRM\",\"snapshots\":[{"
+                                + "\"dataType\":\"ASN\",\"bizKey\":\"ASN-IR-DELAY\","
+                                + "\"status\":\"DELAYED\",\"sku\":\"SKU001\",\"qty\":100,"
+                                + "\"poCode\":\"PO-IR-EXPEDITE\",\"refCode\":\"PO-IR-EXPEDITE\","
+                                + "\"plantCode\":\"P001\",\"title\":\"发货通知 ASN-IR-DELAY\"}]}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://srm.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "srm-wms-key"))
+                .andExpect(jsonPath("$.type").value("SRM_EXPEDITE_PO"))
+                .andExpect(jsonPath("$.targetKey").value("PO-IR-EXPEDITE"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"code\":\"PO-IR-EXPEDITE\",\"status\":\"CONFIRMED\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        ClientFactory factory = factory(http, "SAP,OA,SRM");
+        CtSystem srm = system("SRM", "http://srm.local", "srm-wms-key");
+        List<?> asns = factory.srm(srm).fetchAsns();
+        org.junit.jupiter.api.Assertions.assertEquals(1, asns.size());
+
+        ActionCommand command = new ActionCommand();
+        command.setType("SRM_EXPEDITE_PO");
+        command.setTargetKey("PO-IR-EXPEDITE");
+        factory.srm(srm).execute(command);
+        server.verify();
+    }
+
+    @Test
+    void sapStockUsesOpenIrWhenApiKeySet() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://sap.local/api/open/ir/snapshots"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Api-Key", "sap-open-key"))
+                .andRespond(withSuccess(
+                        "{\"code\":0,\"data\":{\"system\":\"SAP\",\"snapshots\":[{"
+                                + "\"dataType\":\"STOCK\",\"bizKey\":\"M1099/1000/0001\","
+                                + "\"status\":\"LOW\",\"sku\":\"MAT-1000\",\"qty\":3,"
+                                + "\"plantCode\":\"1000\"}]}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP");
+        CtSystem sap = system("SAP", "http://sap.local", "sap-open-key");
+        List<?> stock = factory.sap(sap).fetchStock();
+        assertEquals(1, stock.size());
+        server.verify();
+    }
+
+    @Test
+    void ecosystemExecuteForwardsIdempotencyKey() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://inv.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "inv-open-key"))
+                .andExpect(jsonPath("$.type").value("INV_VERIFY_INPUT"))
+                .andExpect(jsonPath("$.idempotencyKey").value("ACT-1"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"verifyStatus\":\"VERIFIED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "INV");
+        CtSystem inv = system("INV", "http://inv.local", "inv-open-key");
+        ActionCommand command = new ActionCommand();
+        command.setType("INV_VERIFY_INPUT");
+        command.setTargetKey("10001001");
+        command.setIdempotencyKey("ACT-1");
+        factory.ecosystem(inv).execute(command);
+        server.verify();
+    }
+
+    @Test
+    void omsWmsTmsExecuteForwardIdempotencyKey() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://oms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "oms-open-key"))
+                .andExpect(jsonPath("$.type").value("OMS_HOLD"))
+                .andExpect(jsonPath("$.idempotencyKey").value("ACT-OMS"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"HOLD\"}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://wms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "wms-open-key"))
+                .andExpect(jsonPath("$.type").value("WMS_ALLOCATE"))
+                .andExpect(jsonPath("$.idempotencyKey").value("ACT-WMS"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"ALLOCATED\"}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://tms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "tms-open-key"))
+                .andExpect(jsonPath("$.type").value("TMS_DISPATCH"))
+                .andExpect(jsonPath("$.waybillCode").value("WB-IR-CREATED"))
+                .andExpect(jsonPath("$.idempotencyKey").value("ACT-TMS"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"DISPATCHED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "OMS,WMS,TMS");
+        ActionCommand oms = new ActionCommand();
+        oms.setType("OMS_HOLD");
+        oms.setTargetKey("IR-SO-STUCK");
+        oms.setIdempotencyKey("ACT-OMS");
+        factory.oms(system("OMS", "http://oms.local", "oms-open-key")).execute(oms);
+        ActionCommand wms = new ActionCommand();
+        wms.setType("WMS_ALLOCATE");
+        wms.setTargetKey("SO-IR-STUCK");
+        wms.setIdempotencyKey("ACT-WMS");
+        factory.wms(system("WMS", "http://wms.local", "wms-open-key")).execute(wms);
+        ActionCommand tms = new ActionCommand();
+        tms.setType("TMS_DISPATCH");
+        tms.setTargetKey("WB-IR-CREATED");
+        tms.setIdempotencyKey("ACT-TMS");
+        factory.tms(system("TMS", "http://tms.local", "tms-open-key")).execute(tms);
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),

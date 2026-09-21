@@ -140,7 +140,7 @@ public class ClientFactory {
     public SrmClient srm(CtSystem system) {
         if (httpMode(system)) {
             return new HttpSrmClient(http, system.getBaseUrl(),
-                    system.getUsername(), system.getPassword());
+                    system.getUsername(), system.getPassword(), system.getApiKey());
         }
         return srm;
     }
@@ -148,7 +148,7 @@ public class ClientFactory {
     public SapClient sap(CtSystem system) {
         if (httpMode(system)) {
             return new HttpSapClient(http, system.getBaseUrl(),
-                    system.getUsername(), system.getPassword());
+                    system.getUsername(), system.getPassword(), system.getApiKey());
         }
         return sap;
     }

@@ -12,10 +12,10 @@ KEY (code)
 VALUES ('BMS', '计费系统', 'http://localhost:8084', 'API_KEY', NULL, NULL, 'bms-open-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('SRM', '供应商管理系统', 'http://localhost:8087', 'API_KEY', NULL, NULL, 'srm-wms-key', 'MOCK', TRUE);
+VALUES ('SRM', '供应商管理系统', 'http://localhost:8087', 'API_KEY', 'admin', 'admin123', 'srm-wms-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
-VALUES ('SAP', 'ERP 系统', 'http://localhost:8085', 'API_KEY', NULL, NULL, 'sap-open-key', 'MOCK', TRUE);
+VALUES ('SAP', 'ERP 系统', 'http://localhost:8085', 'API_KEY', 'admin', 'admin123', 'sap-open-key', 'MOCK', TRUE);
 MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
 KEY (code)
 VALUES ('OA', '协同办公', 'http://localhost:8086', 'API_KEY', NULL, NULL, 'oa-open-key', 'MOCK', TRUE);
@@ -80,6 +80,12 @@ KEY (code)
 VALUES ('INV_REQUEST_DRAFT', '开票申请待提交', 'EXT_STATUS', '{"system":"INV","dataType":"INVOICE_REQUEST","status":"DRAFT"}', 'LOW', TRUE, 'INV_SUBMIT_REQUEST');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
+VALUES ('INV_INPUT_UNVERIFIED', '进项发票待查验', 'EXT_STATUS', '{"system":"INV","dataType":"INPUT_INVOICE","status":"UNVERIFIED"}', 'MEDIUM', TRUE, 'INV_VERIFY_INPUT');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
+VALUES ('BOM_ECN_DRAFT', '工程变更待提交', 'EXT_STATUS', '{"system":"BOM","dataType":"ECN","status":"DRAFT"}', 'MEDIUM', TRUE, 'BOM_SUBMIT_ECN');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
 VALUES ('CRM_STALE_OPP', '商机停留在资格评估', 'EXT_STATUS', '{"system":"CRM","dataType":"OPPORTUNITY","status":"QUALIFICATION"}', 'MEDIUM', TRUE, 'CRM_ADVANCE_STAGE');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
@@ -90,6 +96,9 @@ VALUES ('DMS_PART_SHORTAGE', '经销商备件缺货', 'EXT_STATUS', '{"system":"
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
 VALUES ('OA_WF_PENDING', 'OA 审批待办积压', 'EXT_STATUS', '{"system":"OA","dataType":"WF_TASK","status":"PENDING"}', 'MEDIUM', TRUE, 'OA_APPROVE_TASK');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
+VALUES ('SAP_MO_OPEN', 'ERP 生产订单待释放', 'EXT_STATUS', '{"system":"SAP","dataType":"MO","status":"CREATED"}', 'MEDIUM', TRUE, 'SAP_RELEASE_MO');
 
 MERGE INTO ct_cost_target ("month", cost_type, target_amount)
 KEY ("month", cost_type)
@@ -100,7 +109,7 @@ KEY (code)
 VALUES ('ASN_DELAY', '供应商到货延误', 'ASN_DELAY', '{"days":0}', 'HIGH', TRUE, 'SRM_EXPEDITE_PO');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
-VALUES ('SUPPLIER_RISK', '供应商绩效风险', 'SUPPLIER_RISK', '{"minScore":85}', 'MEDIUM', TRUE, NULL);
+VALUES ('SUPPLIER_RISK', '供应商绩效风险', 'SUPPLIER_RISK', '{"minScore":85}', 'MEDIUM', TRUE, 'SRM_EXPEDITE_PO');
 
 MERGE INTO ct_objective (code, name, category, metric, direction, target_value, weight, unit, enabled)
 KEY (code)

@@ -56,8 +56,15 @@ public class MockEcosystemClient implements EcosystemClient {
                     bd("12"), null, "P001", "采购申请 PR-IR-002"));
             rows.add(row("PO", "PO-88001", "SENT", "SKU002",
                     bd("12"), bd("9600"), "P001", "采购订单 PO-88001"));
-            rows.add(row("ASN", "ASN-77001", "SYNCED", "SKU002",
+            rows.add(row("ASN", "ASN-77001", "DELAYED", "SKU002",
                     bd("12"), null, "P001", "发货通知 ASN-77001"));
+            rows.get(rows.size() - 1).put("poCode", "PO-88001");
+            rows.get(rows.size() - 1).put("refCode", "PO-88001");
+            rows.add(row("SUPPLIER", "SUP03", "RISK", null,
+                    bd("72"), bd("72"), null, "苏州包装"));
+            rows.get(rows.size() - 1).put("supplierCode", "SUP03");
+            rows.get(rows.size() - 1).put("grade", "C");
+            rows.get(rows.size() - 1).put("avgScore", bd("72"));
         } else if ("BOM".equals(code)) {
             rows.add(row("BOM", "EBOM-A1", "RELEASED", "VEH-A1",
                     bd("1"), null, "P001", "车型 A1 工程 BOM"));
@@ -68,6 +75,8 @@ public class MockEcosystemClient implements EcosystemClient {
                     bd("1"), bd("12800"), "OMS", "开票申请 IR-INV-001"));
             rows.add(row("INVOICE_REQUEST", "IR-INV-002", "SUBMITTED", "SO000020",
                     bd("1"), bd("8600"), "OMS", "开票申请 IR-INV-002"));
+            rows.add(row("INPUT_INVOICE", "10001001", "UNVERIFIED", "032002300001",
+                    bd("1"), bd("22600"), "PO-IR-EXPEDITE", "恒信电子进项"));
         } else if ("CRM".equals(code)) {
             rows.add(row("OPPORTUNITY", "1", "QUALIFICATION", "华东经销商扩网",
                     bd("1"), bd("2400000"), null, "华东经销商扩网"));
