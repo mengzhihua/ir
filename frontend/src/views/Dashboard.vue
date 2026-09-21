@@ -90,7 +90,8 @@
         </div>
       </div>
       <p v-if="behindSummary" class="muted">{{ behindSummary }}</p>
-      <el-table :data="overview.command?.nextActions || []" stripe>
+      <div class="table-scroll">
+      <el-table :data="overview.command?.nextActions || []" stripe :fit="false" style="min-width: 860px">
         <el-table-column label="来源" width="110"
           ><template #default="{ row }">{{
             labelOf(row.kind, commandKindLabels)
@@ -110,7 +111,7 @@
             }}</el-tag></template
           ></el-table-column
         >
-        <el-table-column v-if="canWrite()" label="操作" width="110" fixed="right">
+        <el-table-column v-if="canWrite()" label="操作" width="110">
           <template #default="{ row }">
             <el-button
               link
@@ -124,6 +125,7 @@
         </el-table-column>
         <template #empty><el-empty description="暂无待处理动作" /></template>
       </el-table>
+      </div>
     </div>
     <div class="stats">
       <div

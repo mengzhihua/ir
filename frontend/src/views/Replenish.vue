@@ -81,7 +81,7 @@
           width="80"
           align="right"
           ><template #default="{ row }">{{ formatNumber(row.replenishLeadDays, 0) }}</template></el-table-column
-        ><el-table-column label="操作" width="90" fixed="right"
+        ><el-table-column label="操作" width="90"
           ><template #default="{ row }"
             ><el-button v-if="canWrite()" link type="primary" @click="toAction(row)"
               >转指令</el-button

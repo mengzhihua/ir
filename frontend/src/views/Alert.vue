@@ -73,33 +73,32 @@
             }}</el-tag></template
           ></el-table-column
         >
-        <el-table-column prop="createdAt" label="创建时间" width="165"
+        <el-table-column prop="createdAt" label="创建时间" width="170" show-overflow-tooltip
           ><template #default="{ row }">{{ formatDate(row.createdAt) }}</template></el-table-column
         >
-        <el-table-column label="操作" width="340" fixed="right">
+        <el-table-column label="操作" width="148">
           <template #default="{ row }">
-            <el-button v-if="canWrite() && row.status === 'OPEN'" link @click="operate(row, 'ack')"
-              >确认</el-button
-            >
-            <el-button
-              v-if="canWrite() && row.status !== 'RESOLVED'"
-              link
-              @click="operate(row, 'resolve')"
-              >解决</el-button
-            >
-            <el-button
-              v-if="canWrite() && row.status === 'OPEN'"
-              link
-              @click="operate(row, 'ignore')"
-              >忽略</el-button
-            >
             <el-button
               v-if="canWrite() && row.status === 'OPEN' && row.suggestedAction"
               link
               type="primary"
               @click="suggest(row)"
-              >执行建议</el-button
+              >执行</el-button
             >
+            <el-dropdown
+              v-if="canWrite() && row.status !== 'RESOLVED'"
+              trigger="click"
+              @command="(cmd) => operate(row, cmd)"
+            >
+              <el-button link>更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="row.status === 'OPEN'" command="ack">确认</el-dropdown-item>
+                  <el-dropdown-item command="resolve">解决</el-dropdown-item>
+                  <el-dropdown-item v-if="row.status === 'OPEN'" command="ignore">忽略</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
         <template #empty><el-empty description="暂无预警" /></template>
