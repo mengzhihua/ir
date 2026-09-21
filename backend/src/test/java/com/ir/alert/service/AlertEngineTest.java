@@ -94,6 +94,7 @@ class AlertEngineTest {
         assertTrue(rules.contains("SAP_MO_OPEN"));
         assertTrue(rules.contains("CRM_STALE_OPP"));
         assertTrue(rules.contains("SUPPLIER_RISK"));
+        assertTrue(rules.contains("TMS_OPEN_DISPATCH"));
         CtAlert oa = alertMapper.selectList(null).stream()
                 .filter(a -> "OA_WF_PENDING".equals(a.getRuleCode()))
                 .findFirst().orElse(null);
@@ -577,6 +578,24 @@ class AlertEngineTest {
                         && "OPEN".equals(a.getStatus()))
                 .count();
         assertEquals(0, open);
+    }
+
+    @Test
+    void executeSuggestedRejectsReplay() {
+        alertEngine.evaluate();
+        CtAlert open = alertMapper.selectList(null).stream()
+                .filter(a -> "OPEN".equals(a.getStatus())
+                        && "OMS_STUCK".equals(a.getRuleCode())
+                        && a.getSuggestedAction() != null
+                        && !a.getSuggestedAction().trim().isEmpty())
+                .findFirst()
+                .orElse(null);
+        assertNotNull(open);
+        assertNotNull(alertEngine.executeSuggested(open.getId()));
+        assertEquals("RESOLVED", alertMapper.selectById(open.getId()).getStatus());
+        org.junit.jupiter.api.Assertions.assertThrows(com.ir.common.BizException.class,
+                () -> alertEngine.executeSuggested(open.getId()));
+        assertEquals("RESOLVED", alertMapper.selectById(open.getId()).getStatus());
     }
 
     private InventorySnapshot stock(String sku, String warehouse, String available) {

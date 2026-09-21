@@ -14,6 +14,8 @@ import com.ir.balance.CtBalanceDecisionMapper;
 import com.ir.common.BizException;
 import com.ir.sandbox.entity.CtScenario;
 import com.ir.sandbox.service.SandboxService;
+import com.ir.system.auth.CurrentUser;
+import com.ir.system.entity.User;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -73,8 +75,7 @@ public class TowerCommandService {
         }
         for (CtAlert alert : alerts.selectList(new LambdaQueryWrapper<CtAlert>()
                 .eq(CtAlert::getStatus, "OPEN")
-                .orderByDesc(CtAlert::getCreatedAt)
-                .last("LIMIT 40"))) {
+                .last(severityThenTime("severity", "created_at", 40)))) {
             if (alert.getSuggestedAction() == null || alert.getSuggestedAction().trim().isEmpty()) {
                 continue;
             }
@@ -89,8 +90,7 @@ public class TowerCommandService {
         for (CtBalanceDecision decision : decisions.selectList(
                 new LambdaQueryWrapper<CtBalanceDecision>()
                         .eq(CtBalanceDecision::getStatus, "PENDING")
-                        .orderByDesc(CtBalanceDecision::getId)
-                        .last("LIMIT 20"))) {
+                        .last(severityThenTime("risk_level", "id", 20)))) {
             items.add(decisionItem(decision));
         }
         items.sort(Comparator
@@ -129,10 +129,19 @@ public class TowerCommandService {
                 severity = "HIGH";
             }
             for (Map<String, Object> row : nextActions(null)) {
-                if (severity.equalsIgnoreCase(String.valueOf(row.get("severity")))) {
+                if (severity.equalsIgnoreCase(String.valueOf(row.get("severity")))
+                        && executable(row)) {
                     items.add(row);
                 }
             }
+        } else {
+            List<Map<String, Object>> filtered = new ArrayList<>();
+            for (Map<String, Object> row : items) {
+                if (executable(row)) {
+                    filtered.add(row);
+                }
+            }
+            items = filtered;
         }
         if (items.size() > BATCH_LIMIT) {
             items = new ArrayList<>(items.subList(0, BATCH_LIMIT));
@@ -278,6 +287,13 @@ public class TowerCommandService {
                 null,
                 decision.getCreatedAt());
         row.put("rank", rank("DECISION", severity));
+        if (!canApprove(severity)) {
+            row.put("executable", false);
+            String reason = decision.getReason() == null ? "" : decision.getReason();
+            row.put("reason", reason.isEmpty()
+                    ? "高风险决策仅管理员可审批"
+                    : reason + "；高风险决策仅管理员可审批");
+        }
         return row;
     }
 
@@ -359,6 +375,18 @@ public class TowerCommandService {
         return "SUCCESS".equals(status) || "EXECUTED".equals(status) || "APPLIED".equals(status);
     }
 
+    private static boolean executable(Map<String, Object> row) {
+        return row == null || !Boolean.FALSE.equals(row.get("executable"));
+    }
+
+    static boolean canApprove(String severity) {
+        if (!"HIGH".equals(severity)) {
+            return true;
+        }
+        User user = CurrentUser.get();
+        return user == null || User.ADMIN.equals(user.getRole());
+    }
+
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> itemsOf(Map<String, Object> request) {
         List<Map<String, Object>> items = new ArrayList<>();
@@ -377,21 +405,31 @@ public class TowerCommandService {
         return value == null ? "" : String.valueOf(value).trim();
     }
 
+    private static String severityThenTime(String severityColumn, String timeColumn, int limit) {
+        return "ORDER BY CASE " + severityColumn
+                + " WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 ELSE 1 END DESC, "
+                + timeColumn + " DESC LIMIT " + limit;
+    }
+
     private static Long idOf(Object value) {
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        }
         if (value == null) {
             return null;
+        }
+        if (value instanceof Long || value instanceof Integer
+                || value instanceof Short || value instanceof Byte) {
+            return ((Number) value).longValue();
         }
         String text = String.valueOf(value).trim();
         if (text.isEmpty()) {
             return null;
         }
         try {
-            return Long.parseLong(text);
-        } catch (NumberFormatException ex) {
-            throw new BizException("id 必须为数字");
+            java.math.BigDecimal decimal = value instanceof java.math.BigDecimal
+                    ? (java.math.BigDecimal) value
+                    : new java.math.BigDecimal(text);
+            return decimal.toBigIntegerExact().longValueExact();
+        } catch (NumberFormatException | ArithmeticException ex) {
+            throw new BizException("id 必须为整数");
         }
     }
 }

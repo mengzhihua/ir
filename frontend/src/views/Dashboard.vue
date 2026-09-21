@@ -115,9 +115,10 @@
             <el-button
               link
               type="primary"
+              :disabled="row.executable === false"
               :loading="executingKey === row.kind + '-' + row.id"
               @click="executeItem(row)"
-              >执行</el-button
+              >{{ row.executable === false ? '需管理员' : '执行' }}</el-button
             >
           </template>
         </el-table-column>
@@ -373,7 +374,8 @@ const carrierSummary = computed(() => {
 const highCount = computed(
   () =>
     (overview.command?.nextActions || []).filter(
-      (row) => row.severity === 'HIGH' && row.kind !== 'SANDBOX'
+      (row) =>
+        row.severity === 'HIGH' && row.kind !== 'SANDBOX' && row.executable !== false
     ).length
 )
 const behindSummary = computed(() => {
@@ -520,7 +522,8 @@ async function executeHigh() {
   batching.value = true
   try {
     const items = (overview.command?.nextActions || []).filter(
-      (row) => row.severity === 'HIGH' && row.kind !== 'SANDBOX'
+      (row) =>
+        row.severity === 'HIGH' && row.kind !== 'SANDBOX' && row.executable !== false
     )
     const result = await towerApi.commandBatch({ items, severity: 'HIGH' })
     ElMessage.success(`高等级已执行 ${result.success || 0} 条，失败 ${result.failed || 0} 条`)
