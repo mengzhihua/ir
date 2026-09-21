@@ -34,50 +34,58 @@
       <el-button type="primary" :icon="Search" @click="search">查询</el-button>
       <el-button @click="reset">重置</el-button>
     </div>
-    <div class="panel">
-      <el-table v-loading="loading" :data="rows" row-key="orderNo" stripe @row-click="openDetail">
-        <el-table-column prop="orderNo" label="订单号" min-width="170" />
-        <el-table-column label="OMS状态" width="120">
+    <div class="panel table-scroll">
+      <el-table
+        v-loading="loading"
+        :data="rows"
+        row-key="orderNo"
+        stripe
+        :fit="false"
+        style="min-width: 1080px"
+        @row-click="openDetail"
+      >
+        <el-table-column prop="orderNo" label="订单号" min-width="150" />
+        <el-table-column label="OMS状态" width="100">
           <template #default="{ row }">
             <el-tag :type="statusType(row.oms?.status)">
               {{ labelOf(row.oms?.status, orderStatusLabels) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="当前阶段" width="120">
+        <el-table-column label="当前阶段" width="100">
           <template #default="{ row }">
             <el-tag :type="stageType(row.stage)">
               {{ stageLabel(row.stage) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="oms.channelCode" label="渠道" width="100" />
-        <el-table-column prop="oms.warehouseCode" label="仓库" width="110" />
-        <el-table-column label="加急" width="80">
+        <el-table-column prop="oms.channelCode" label="渠道" width="80" />
+        <el-table-column prop="oms.warehouseCode" label="仓库" width="90" />
+        <el-table-column label="加急" width="70">
           <template #default="{ row }">
             <el-tag v-if="Number(row.oms?.priority) >= 10" type="danger">高优</el-tag>
             <span v-else>{{ row.oms?.priority ?? 0 }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="oms.carrierCode" label="承运商" width="100" />
-        <el-table-column label="订单金额" width="130" align="right">
+        <el-table-column prop="oms.carrierCode" label="承运商" width="80" />
+        <el-table-column label="订单金额" width="110" align="right">
           <template #default="{ row }">
             {{ formatMoney(row.oms?.payAmount) }}
           </template>
         </el-table-column>
-        <el-table-column label="成本合计" width="130" align="right">
+        <el-table-column label="成本合计" width="110" align="right">
           <template #default="{ row }">
             {{ formatMoney(row.costTotal) }}
           </template>
         </el-table-column>
-        <el-table-column label="卡滞小时" width="110" align="right">
+        <el-table-column label="卡滞小时" width="90" align="right">
           <template #default="{ row }">
             <span :class="{ danger: Number(row.stuckHours) > 0 }">
               {{ formatNumber(row.stuckHours, 0) }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="90" fixed="right">
+        <el-table-column label="操作" width="90">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="openDetail(row)"> 详情 </el-button>
           </template>

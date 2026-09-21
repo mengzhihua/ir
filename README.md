@@ -42,7 +42,6 @@ npm run dev
 
 ## 对接
 
-系统接入配置预置 OMS/TMS/WMS/BMS/SRM/SAP 为 `MOCK`。SRM HTTP 使用 `/api/purchase/order/page`、`/api/delivery/asn/page`、`/api/evaluation/page`，并通过 `POST /api/sourcing/pr` + `/submit` 下发采购申请、`PUT /api/purchase/order/{id}` 催单；SAP HTTP 使用 `/api/mm/stock`、`/api/fi/ap/open-items`、`/api/fi/ar/open-items`、`/api/dashboard/summary`。切换 HTTP 时使用 OTWB 事实表中的端点：OMS `/api/order/page`、`/api/inventory/page`、`/api/dashboard`、`/api/report/order-daily`；WMS `/api/outbound/order/page`、`/api/inventory/summary`、`/api/dashboard`、`/api/report/kpi`；TMS `/api/waybill/page`、`/api/billing/page`、`/api/dashboard`。BMS 约定 `GET /api/open/cost/records?from&to`，尚未上线。
 系统接入配置预置 OMS/TMS/WMS/BMS/SRM/SAP/OA/BOM/INV/CRM/DMS 为 `MOCK`。SRM HTTP 使用 `/api/purchase/order/page`、`/api/delivery/asn/page`、`/api/evaluation/page`，并通过 `POST /api/sourcing/pr` + `/submit` 下发采购申请、`PUT /api/purchase/order/{id}` 催单；SAP HTTP 使用 `/api/mm/stock`、`/api/fi/ap/open-items`、`/api/fi/ar/open-items`、`/api/dashboard/summary`；其他生态系统走 `/api/open/ir/snapshots` 与 `/api/open/ir/actions`。切换 HTTP 时使用 OTWB 事实表中的端点：OMS `/api/order/page`、`/api/inventory/page`、`/api/dashboard`、`/api/report/order-daily`；WMS `/api/outbound/order/page`、`/api/inventory/summary`、`/api/dashboard`、`/api/report/kpi`；TMS `/api/waybill/page`、`/api/billing/page`、`/api/dashboard`。BMS 成本走 `GET /api/open/cost/records?from&to`。
 
 HTTP 集成的 `baseUrl` 只接受 HTTP/HTTPS URL，并实现了 loopback、链路本地和
@@ -109,4 +108,4 @@ cd ir-1.0.0
 
 浏览器访问 `http://127.0.0.1:8090`。默认账号 `admin / admin123`。
 
-十二套系统可同时启动：OMS 8081 / WMS 8082 / TMS 8083 / BMS 8084 / SAP 8085 / OA 8086 / SRM 8087 / BOM 8088 / INV 8089 / IR 8090 / CRM 8091 / DMS 8092。
+十二套系统可同时启动：OMS 8081 / TMS 8082 / WMS 8083 / BMS 8084 / SAP 8085 / OA 8086 / SRM 8087 / BOM 8088 / INV 8089 / IR 8090 / CRM 8091 / DMS 8092。

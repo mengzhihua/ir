@@ -50,7 +50,7 @@
             ><template #default="{ row }">{{
               percent(row.serviceLevel)
             }}</template></el-table-column
-          ><el-table-column label="操作" width="220" fixed="right"
+          ><el-table-column label="操作" width="220"
             ><template #default="{ row }"
               ><el-button v-if="canWrite()" link @click.stop="run(row)">运行</el-button
               ><el-button v-if="canWrite()" link type="primary" @click.stop="apply(row, false)"

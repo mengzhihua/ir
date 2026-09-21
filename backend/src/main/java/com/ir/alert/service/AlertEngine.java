@@ -906,6 +906,15 @@ public class AlertEngine {
         if (row == null) {
             return;
         }
+        if ("WF_TASK".equals(row.getDataType())
+                || "OA_APPROVE_TASK".equals(alert.getSuggestedAction())) {
+            String taskId = row.getBizKey() != null ? row.getBizKey() : alert.getTargetKey();
+            params.put("taskId", taskId);
+            if (row.getTitle() != null) {
+                params.put("title", row.getTitle());
+            }
+            return;
+        }
         if (row.getSku() != null && !row.getSku().trim().isEmpty()) {
             params.put("sku", row.getSku());
             params.put("matnr", row.getSku());
@@ -969,6 +978,16 @@ public class AlertEngine {
         String warehouse = String.valueOf(params.getOrDefault("warehouseCode", "WH-SH"));
         Map<String, Object> wms = new LinkedHashMap<>();
         wms.put("warehouseCode", warehouse);
+        Object wmsSku = params.get("sku");
+        if (wmsSku == null || String.valueOf(wmsSku).trim().isEmpty()) {
+            wmsSku = sku;
+        }
+        if (wmsSku != null && !String.valueOf(wmsSku).trim().isEmpty()) {
+            wms.put("sku", wmsSku);
+        }
+        if (params.get("qty") != null) {
+            wms.put("qty", params.get("qty"));
+        }
         rows.add(dispatch("WMS_REPLENISH", warehouse, wms, alertId));
         return rows;
     }

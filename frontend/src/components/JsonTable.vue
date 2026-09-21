@@ -8,7 +8,7 @@
       :min-width="column.width || 120"
       show-overflow-tooltip
     />
-    <el-table-column v-if="$slots.actions" label="操作" width="180" fixed="right"
+    <el-table-column v-if="$slots.actions" label="操作" width="180"
       ><template #default="scope"><slot name="actions" v-bind="scope" /></template
     ></el-table-column>
   </el-table>
