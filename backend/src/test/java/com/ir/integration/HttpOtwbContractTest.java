@@ -133,6 +133,31 @@ class HttpOtwbContractTest {
         server.verify();
     }
 
+    @Test
+    void tmsActionsMissingFallsBackToDedicatedPath() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://tms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "tms-open-key"))
+                .andExpect(jsonPath("$.type").value("TMS_SYNC_TRACK"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://tms.local/api/open/ir/sync-track"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "tms-open-key"))
+                .andExpect(jsonPath("$.waybillCode").value("WB-IR-DELAY"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"code\":\"WB-IR-DELAY\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        ClientFactory factory = factory(http, "OMS,WMS,TMS");
+        ActionCommand command = new ActionCommand();
+        command.setType("TMS_SYNC_TRACK");
+        command.setTargetKey("WB-IR-DELAY");
+        factory.tms(system("TMS", "http://tms.local", "tms-open-key")).execute(command);
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),

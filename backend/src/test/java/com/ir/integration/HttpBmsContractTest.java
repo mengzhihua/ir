@@ -24,15 +24,16 @@ class HttpBmsContractTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
         LocalDate from = LocalDate.of(2026, 9, 16);
         LocalDate to = LocalDate.of(2026, 9, 17);
-        server.expect(requestTo("http://bms.local/api/open/cost/records?from=2026-09-16&to=2026-09-17"))
+        server.expect(requestTo("http://bms.local/api/open/ir/snapshots?from=2026-09-16&to=2026-09-17"))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("X-Api-Key", "bms-open-key"))
                 .andRespond(withSuccess(
-                        "{\"code\":0,\"data\":[{\"bizDate\":\"2026-09-17\",\"orderNo\":\"IR-SO-STUCK\","
+                        "{\"code\":0,\"data\":{\"system\":\"BMS\",\"costs\":["
+                                + "{\"bizDate\":\"2026-09-17\",\"orderNo\":\"IR-SO-STUCK\","
                                 + "\"warehouseCode\":\"WH-SH\",\"costType\":\"OUTBOUND\",\"amount\":88.0},"
                                 + "{\"bizDate\":\"2026-09-17\",\"orderNo\":\"IR-SO-STUCK\","
                                 + "\"warehouseCode\":\"WH-SH\",\"costType\":\"TRANSPORT\",\"amount\":36.0,"
-                                + "\"carrierCode\":\"SF\"}]}",
+                                + "\"carrierCode\":\"SF\"}],\"snapshots\":[]}}",
                         MediaType.APPLICATION_JSON));
 
         ClientFactory factory = new ClientFactory(
@@ -50,6 +51,39 @@ class HttpBmsContractTest {
         assertEquals("OUTBOUND", rows.get(0).getCostType());
         assertEquals("FREIGHT", rows.get(1).getCostType());
         assertEquals("SF", rows.get(1).getCarrierCode());
+        server.verify();
+    }
+
+    @Test
+    void fetchCostsFallsBackToOpenRecordsWhenSnapshotsMissing() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        LocalDate from = LocalDate.of(2026, 9, 16);
+        LocalDate to = LocalDate.of(2026, 9, 17);
+        server.expect(requestTo("http://bms.local/api/open/ir/snapshots?from=2026-09-16&to=2026-09-17"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Api-Key", "bms-open-key"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://bms.local/api/open/cost/records?from=2026-09-16&to=2026-09-17"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Api-Key", "bms-open-key"))
+                .andRespond(withSuccess(
+                        "{\"code\":0,\"data\":[{\"bizDate\":\"2026-09-17\",\"orderNo\":\"IR-SO-STUCK\","
+                                + "\"warehouseCode\":\"WH-SH\",\"costType\":\"OUTBOUND\",\"amount\":88.0}]}",
+                        MediaType.APPLICATION_JSON));
+
+        ClientFactory factory = new ClientFactory(
+                null, null, null, null, null, null, new MockEcosystemClient(),
+                new com.ir.integration.client.BaseUrlValidator(true), http, "BMS");
+        CtSystem bms = new CtSystem();
+        bms.setCode("BMS");
+        bms.setMode("MOCK");
+        bms.setBaseUrl("http://bms.local");
+        bms.setApiKey("bms-open-key");
+        List<CostRecord> rows = factory.bms(bms).fetchCosts(from, to);
+        assertEquals(1, rows.size());
+        assertEquals("IR-SO-STUCK", rows.get(0).getOrderNo());
         server.verify();
     }
 }
