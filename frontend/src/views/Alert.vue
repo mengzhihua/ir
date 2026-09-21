@@ -45,10 +45,14 @@
       />
       <el-button type="primary" @click="search">查询</el-button>
     </div>
-    <div class="panel">
-      <el-table v-loading="loading" :data="rows" stripe>
-        <el-table-column prop="title" label="预警标题" min-width="220" />
-        <el-table-column prop="type" label="规则类型" width="150" />
+    <div class="panel table-scroll">
+      <el-table v-loading="loading" :data="rows" stripe :fit="false" style="min-width: 1280px">
+        <el-table-column prop="title" label="预警标题" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="type" label="规则类型" width="120"
+          ><template #default="{ row }">{{
+            labelOf(row.type, ruleTypeLabels)
+          }}</template></el-table-column
+        >
         <el-table-column prop="severity" label="等级" width="90"
           ><template #default="{ row }"
             ><el-tag :type="tagTypes.severity[row.severity]">{{
@@ -72,7 +76,7 @@
         <el-table-column prop="createdAt" label="创建时间" width="165"
           ><template #default="{ row }">{{ formatDate(row.createdAt) }}</template></el-table-column
         >
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button v-if="canWrite() && row.status === 'OPEN'" link @click="operate(row, 'ack')"
               >确认</el-button
@@ -123,6 +127,7 @@ import {
   actionTypeLabels,
   alertStatusLabels,
   labelOf,
+  ruleTypeLabels,
   severityLabels,
   tagTypes
 } from '../utils/labels'

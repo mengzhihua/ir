@@ -63,6 +63,21 @@ export const severityLabels = {
   LOW: '低'
 }
 
+export const ruleTypeLabels = {
+  ORDER_STUCK: '订单卡单',
+  WMS_STUCK: '仓库卡单',
+  TMS_DELAY: '运输延误',
+  TMS_OPEN: '待调度',
+  LOW_STOCK: '低库存',
+  COST_OVERRUN: '成本超支',
+  FORECAST_STOCKOUT: '预测缺货',
+  EXT_STATUS: '外部状态',
+  ASN_DELAY: 'ASN 延误',
+  SUPPLIER_RISK: '供应商风险',
+  SAP_LOW_STOCK: 'ERP 低库存',
+  SAP_MO_OPEN: '生产订单待释放'
+}
+
 export const systemModeLabels = {
   MOCK: '模拟',
   HTTP: '在线'
