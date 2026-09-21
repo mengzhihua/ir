@@ -34,8 +34,16 @@
       <el-button type="primary" :icon="Search" @click="search">查询</el-button>
       <el-button @click="reset">重置</el-button>
     </div>
-    <div class="panel">
-      <el-table v-loading="loading" :data="rows" row-key="orderNo" stripe @row-click="openDetail">
+    <div class="panel table-scroll">
+      <el-table
+        v-loading="loading"
+        :data="rows"
+        row-key="orderNo"
+        stripe
+        :fit="false"
+        style="min-width: 1280px"
+        @row-click="openDetail"
+      >
         <el-table-column prop="orderNo" label="订单号" min-width="170" />
         <el-table-column label="OMS状态" width="120">
           <template #default="{ row }">
@@ -77,7 +85,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="90" fixed="right">
+        <el-table-column label="操作" width="90">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="openDetail(row)"> 详情 </el-button>
           </template>
