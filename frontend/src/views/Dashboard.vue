@@ -3,7 +3,7 @@
     <div class="page-title">
       <div>
         <h2>控制塔总览</h2>
-        <p class="subtitle">订单、库存、运输、采购、ERP 与经销商网络实时看板</p>
+        <p class="subtitle">感知全局、判断优先级，并从这里直接下发跨系统指令</p>
       </div>
       <el-button type="primary" :loading="loading" @click="load">刷新数据</el-button>
     </div>
@@ -42,6 +42,87 @@
         {{ overview.policy?.replenishLeadDays ?? '-' }} 天
         <template v-if="carrierSummary"> · 在途承运 {{ carrierSummary }}</template>
       </div>
+    </div>
+    <div class="panel command-panel">
+      <div class="panel-title">
+        <h3>下一步动作</h3>
+        <div>
+          <el-tag :type="tagTypes.capitalVerdict[overview.recommendation?.capitalVerdict] || 'info'">
+            资金
+            {{ labelOf(overview.recommendation?.capitalVerdict, capitalVerdictLabels) }}
+          </el-tag>
+          <el-button
+            v-if="canWrite() && highCount > 0"
+            type="warning"
+            :loading="batching"
+            style="margin-left: 8px"
+            @click="executeHigh"
+            >执行高等级 {{ highCount }}</el-button
+          >
+        </div>
+      </div>
+      <div class="command-stats">
+        <div>
+          <span class="muted">目标达成</span>
+          <b>{{ formatNumber(overview.objectives?.score, 1) }}</b>
+        </div>
+        <div>
+          <span class="muted">未达标目标</span>
+          <b :class="{ danger: overview.objectives?.behindCount }">{{
+            overview.objectives?.behindCount || 0
+          }}</b>
+        </div>
+        <div>
+          <span class="muted">待审批决策</span>
+          <b :class="{ danger: overview.balance?.pendingDecisions }">{{
+            overview.balance?.pendingDecisions || 0
+          }}</b>
+        </div>
+        <div>
+          <span class="muted">延误 ASN</span>
+          <b :class="{ danger: overview.supply?.delayedAsn }">{{
+            overview.supply?.delayedAsn || 0
+          }}</b>
+        </div>
+        <div>
+          <span class="muted">队列</span>
+          <b>{{ overview.command?.counts?.total || 0 }}</b>
+        </div>
+      </div>
+      <p v-if="behindSummary" class="muted">{{ behindSummary }}</p>
+      <el-table :data="overview.command?.nextActions || []" stripe>
+        <el-table-column label="来源" width="110"
+          ><template #default="{ row }">{{
+            labelOf(row.kind, commandKindLabels)
+          }}</template></el-table-column
+        >
+        <el-table-column prop="title" label="事项" min-width="220" />
+        <el-table-column label="建议动作" width="160"
+          ><template #default="{ row }">{{
+            labelOf(row.suggestedType, actionTypeLabels)
+          }}</template></el-table-column
+        >
+        <el-table-column prop="targetKey" label="对象" width="140" />
+        <el-table-column label="等级" width="80"
+          ><template #default="{ row }"
+            ><el-tag :type="tagTypes.severity[row.severity]">{{
+              labelOf(row.severity, severityLabels)
+            }}</el-tag></template
+          ></el-table-column
+        >
+        <el-table-column v-if="canWrite()" label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              :loading="executingKey === row.kind + '-' + row.id"
+              @click="executeItem(row)"
+              >执行</el-button
+            >
+          </template>
+        </el-table-column>
+        <template #empty><el-empty description="暂无待处理动作" /></template>
+      </el-table>
     </div>
     <div class="stats">
       <div
@@ -110,6 +191,18 @@
               formatDate(row.createdAt)
             }}</template></el-table-column
           >
+          <el-table-column v-if="canWrite()" label="操作" width="100">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.suggestedAction"
+                link
+                type="primary"
+                :loading="executingKey === 'ALERT-' + row.id"
+                @click="executeItem({ kind: 'ALERT', id: row.id })"
+                >执行</el-button
+              >
+            </template>
+          </el-table-column>
           <template #empty><el-empty description="暂无开放预警" /></template>
         </el-table>
       </div>
@@ -164,6 +257,18 @@
         <p v-if="overview.recommendation?.pickRationale?.reason" class="muted">
           {{ overview.recommendation.pickRationale.reason }}
         </p>
+        <el-button
+          v-if="canWrite() && overview.recommendation"
+          type="primary"
+          :loading="executingKey === 'SANDBOX-' + overview.recommendation.id"
+          @click="
+            executeItem({
+              kind: 'SANDBOX',
+              id: overview.recommendation.id
+            })
+          "
+          >采用推荐并生成待办</el-button
+        >
         <el-empty v-if="!overview.recommendation" description="尚未产生自动沙盘推荐" />
       </div>
     </div>
@@ -208,11 +313,12 @@ import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { sandboxApi, towerApi } from '../api'
 import { canWrite } from '../auth'
-import { balanceApi, objectiveApi } from '../api'
 import Chart from '../components/Chart.vue'
 import { formatDate, formatMoney, formatNumber, percent } from '../utils/format'
 import {
+  actionTypeLabels,
   capitalVerdictLabels,
+  commandKindLabels,
   labelOf,
   severityLabels,
   systemModeLabels,
@@ -220,8 +326,8 @@ import {
 } from '../utils/labels'
 
 const loading = ref(false)
-const board = reactive({ score: 0, metrics: {} })
-const balance = reactive({})
+const executingKey = ref('')
+const batching = ref(false)
 const overview = reactive({
   kpi: {},
   funnel: {},
@@ -231,6 +337,10 @@ const overview = reactive({
   systems: [],
   recommendation: null,
   ecosystem: {},
+  objectives: { score: 0, behindCount: 0, behind: [] },
+  balance: { pendingDecisions: 0 },
+  supply: { delayedAsn: 0, delayedTop: [] },
+  command: { nextActions: [], counts: {} },
   policy: {
     costWeight: 0.5,
     efficiencyWeight: 0.5,
@@ -260,6 +370,20 @@ const carrierSummary = computed(() => {
     .map(([code, count]) => `${code} ${count}`)
     .join(' / ')
 })
+const highCount = computed(
+  () =>
+    (overview.command?.nextActions || []).filter(
+      (row) => row.severity === 'HIGH' && row.kind !== 'SANDBOX'
+    ).length
+)
+const behindSummary = computed(() => {
+  const rows = overview.objectives?.behind || []
+  if (!rows.length) return ''
+  return (
+    '未达标：' +
+    rows.map((row) => `${row.name} ${percent(row.attainment)}`).join(' · ')
+  )
+})
 function policyTip(value) {
   return `成本 ${((value || 0) / 100).toFixed(2)} / 效率 ${((100 - (value || 0)) / 100).toFixed(2)}`
 }
@@ -285,9 +409,10 @@ const cards = computed(() => [
   { label: 'DMS备件缺货', value: formatNumber(overview.kpi.dmsShortage, 0), color: '#f56c6c' },
   { label: 'CRM新工单', value: formatNumber(overview.kpi.crmOpenCases, 0), color: '#e6a23c' },
   { label: 'OA待办', value: formatNumber(overview.kpi.oaPendingTasks, 0), color: '#909399' },
-  { label: 'NPS估算', value: formatNumber(board.metrics.npsEstimate, 1), color: '#67c23a' },
-  { label: '目标达成分', value: formatNumber(board.score, 1), color: '#409eff' },
-  { label: '待审批决策', value: formatNumber(balance.pendingDecisions, 0), color: '#e6a23c' }
+  { label: 'NPS估算', value: formatNumber(overview.kpi.npsEstimate, 1), color: '#67c23a' },
+  { label: '目标达成分', value: formatNumber(overview.kpi.objectiveScore, 1), color: '#409eff' },
+  { label: '待审批决策', value: formatNumber(overview.kpi.pendingDecisions, 0), color: '#e6a23c' },
+  { label: '延误ASN', value: formatNumber(overview.kpi.delayedAsn, 0), color: '#f56c6c' }
 ])
 
 const costOption = computed(() => {
@@ -356,10 +481,52 @@ async function load() {
     if (!Number.isNaN(cost)) {
       costPercent.value = Math.round(cost * 100)
     }
-    Object.assign(board, await objectiveApi.scoreboard())
-    Object.assign(balance, await balanceApi.overview())
   } finally {
     loading.value = false
+  }
+}
+
+function notifyCommand(result, fallback) {
+  if (!result) {
+    ElMessage.error('指令不存在')
+    return
+  }
+  if (result.status === 'FAILED') {
+    ElMessage.error(result.result || '执行失败')
+    return
+  }
+  if (result.status === 'APPLIED') {
+    ElMessage.success(`已生成 ${result.actionCount || 0} 条待办`)
+    return
+  }
+  ElMessage.success(fallback)
+}
+
+async function executeItem(row) {
+  executingKey.value = `${row.kind}-${row.id}`
+  try {
+    const result = await towerApi.command({
+      kind: row.kind,
+      id: row.id
+    })
+    notifyCommand(result, '已从控制塔下发')
+    await load()
+  } finally {
+    executingKey.value = ''
+  }
+}
+
+async function executeHigh() {
+  batching.value = true
+  try {
+    const items = (overview.command?.nextActions || []).filter(
+      (row) => row.severity === 'HIGH' && row.kind !== 'SANDBOX'
+    )
+    const result = await towerApi.commandBatch({ items, severity: 'HIGH' })
+    ElMessage.success(`高等级已执行 ${result.success || 0} 条，失败 ${result.failed || 0} 条`)
+    await load()
+  } finally {
+    batching.value = false
   }
 }
 
@@ -413,6 +580,29 @@ load()
   margin-bottom: 16px;
 }
 
+.command-panel {
+  margin-bottom: 16px;
+}
+
+.command-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.command-stats div {
+  padding: 10px 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+}
+
+.command-stats b {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+}
+
 .policy-row {
   display: grid;
   grid-template-columns: 48px 1fr 48px;
@@ -424,6 +614,10 @@ load()
 
 @media (max-width: 1200px) {
   .health-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .command-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

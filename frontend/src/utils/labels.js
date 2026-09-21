@@ -27,6 +27,19 @@ export const capitalVerdictLabels = {
   INSUFFICIENT: '不足'
 }
 
+export const commandKindLabels = {
+  ALERT: '预警',
+  ACTION: '待办指令',
+  DECISION: '平衡决策',
+  SANDBOX: '沙盘方案'
+}
+
+export const objectiveStatusLabels = {
+  ON_TRACK: '达标',
+  AT_RISK: '预警',
+  OFF_TRACK: '未达标'
+}
+
 export const alertStatusLabels = {
   OPEN: '待处理',
   ACKED: '已确认',
@@ -174,7 +187,8 @@ export const actionTypeLabels = {
   CRM_ESCALATE_CASE: '升级工单',
   DMS_REPLENISH_SHORTAGE: '经销商补货',
   OA_START_WORKFLOW: '发起审批',
-  OA_APPROVE_TASK: '完成待办'
+  OA_APPROVE_TASK: '完成待办',
+  APPLY_SANDBOX: '采用沙盘推荐'
 }
 
 export function labelOf(value, labels) {

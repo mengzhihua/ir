@@ -4,15 +4,20 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Service;
 import com.ir.action.entity.CtAction;
 import com.ir.action.mapper.CtActionMapper;
+import com.ir.balance.BalanceConfig;
+import com.ir.balance.BalanceEngine;
+import com.ir.balance.CtBalanceRun;
 import com.ir.cost.service.CostService;
 import com.ir.alert.entity.CtAlert;
 import com.ir.alert.mapper.CtAlertMapper;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mapper.CtSystemMapper;
+import com.ir.objective.ObjectiveService;
 import com.ir.sandbox.entity.CtScenario;
 import com.ir.sandbox.engine.ScenarioParams;
 import com.ir.sandbox.service.BalancePolicy;
 import com.ir.sandbox.service.SandboxService;
+import com.ir.supply.SupplyService;
 import com.ir.snapshot.entity.CostRecord;
 import com.ir.snapshot.entity.ExtSnapshot;
 import com.ir.snapshot.entity.InventorySnapshot;
@@ -50,6 +55,10 @@ public class TowerService {
     private final SandboxService sandbox;
     private final BalancePolicy policy;
     private final CostService costService;
+    private final ObjectiveService objectives;
+    private final BalanceEngine balance;
+    private final SupplyService supply;
+    private final TowerCommandService commands;
 
     public TowerService(
             OrderSnapshotMapper orders,
@@ -63,7 +72,11 @@ public class TowerService {
             CtSystemMapper systems,
             SandboxService sandbox,
             BalancePolicy policy,
-            CostService costService) {
+            CostService costService,
+            ObjectiveService objectives,
+            BalanceEngine balance,
+            SupplyService supply,
+            TowerCommandService commands) {
         this.orders = orders;
         this.wmsOrders = wmsOrders;
         this.shipments = shipments;
@@ -76,6 +89,10 @@ public class TowerService {
         this.sandbox = sandbox;
         this.policy = policy;
         this.costService = costService;
+        this.objectives = objectives;
+        this.balance = balance;
+        this.supply = supply;
+        this.commands = commands;
     }
 
     public Map<String, Object> overview() {
@@ -184,9 +201,10 @@ public class TowerService {
                 .orderByDesc(CtAlert::getCreatedAt)
                 .last("LIMIT 10")));
         result.put("systems", systems.selectList(null));
+        Map<String, Object> rec = null;
         CtScenario recommendation = sandbox.latestRecommendedAuto();
         if (recommendation != null) {
-            Map<String, Object> rec = new LinkedHashMap<>();
+            rec = new LinkedHashMap<>();
             rec.put("id", recommendation.getId());
             rec.put("name", recommendation.getName());
             rec.put("runNo", recommendation.getRunNo());
@@ -213,6 +231,84 @@ public class TowerService {
             }
             result.put("recommendation", rec);
         }
+        Map<String, Object> scoreboard = objectives.scoreboard();
+        Map<String, Object> objectiveView = objectiveView(scoreboard);
+        Map<String, Object> balanceView = balanceView();
+        Map<String, Object> supplyView = supplyView();
+        result.put("objectives", objectiveView);
+        result.put("balance", balanceView);
+        result.put("supply", supplyView);
+        Map<String, Object> command = commands.queue(rec);
+        result.put("command", command);
+        kpi.put("objectiveScore", objectiveView.get("score"));
+        kpi.put("npsEstimate", objectiveView.get("npsEstimate"));
+        kpi.put("pendingDecisions", balanceView.get("pendingDecisions"));
+        kpi.put("delayedAsn", supplyView.get("delayedAsn"));
+        Object counts = command.get("counts");
+        kpi.put("nextActions", counts instanceof Map
+                ? ((Map<?, ?>) counts).get("total") : 0);
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> objectiveView(Map<String, Object> scoreboard) {
+        Map<String, Object> metrics = (Map<String, Object>) scoreboard.getOrDefault(
+                "metrics", new LinkedHashMap<>());
+        List<Map<String, Object>> behind = new ArrayList<>();
+        int behindCount = 0;
+        for (Map<String, Object> row : (List<Map<String, Object>>) scoreboard.getOrDefault(
+                "objectives", new ArrayList<>())) {
+            String status = String.valueOf(row.get("status"));
+            if ("OFF_TRACK".equals(status) || "AT_RISK".equals(status)) {
+                behindCount++;
+                if (behind.size() < 3) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("code", row.get("code"));
+                    item.put("name", row.get("name"));
+                    item.put("status", status);
+                    item.put("attainment", row.get("attainment"));
+                    behind.add(item);
+                }
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("score", scoreboard.get("score"));
+        result.put("npsEstimate", metrics.get("npsEstimate"));
+        result.put("behindCount", behindCount);
+        result.put("behind", behind);
+        return result;
+    }
+
+    private Map<String, Object> balanceView() {
+        Map<String, Object> overview = balance.overview();
+        Map<String, Object> result = new LinkedHashMap<>();
+        Object config = overview.get("config");
+        result.put("mode", config instanceof BalanceConfig
+                ? ((BalanceConfig) config).getMode() : "AUTO");
+        result.put("pendingDecisions", overview.get("pendingDecisions"));
+        result.put("executed30d", overview.get("executed30d"));
+        result.put("saving30d", overview.get("saving30d"));
+        Object lastRun = overview.get("lastRun");
+        if (lastRun instanceof CtBalanceRun) {
+            CtBalanceRun run = (CtBalanceRun) lastRun;
+            result.put("lastRunStatus", run.getStatus());
+            result.put("lastRunAt", run.getFinishedAt());
+            result.put("scoreBefore", run.getScoreBefore());
+            result.put("scoreAfter", run.getScoreAfter());
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> supplyView() {
+        Map<String, Object> overview = supply.overview();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("delayedAsn", overview.get("delayedAsn"));
+        result.put("openAmount", overview.get("openAmount"));
+        List<Map<String, Object>> delayed = (List<Map<String, Object>>) overview.getOrDefault(
+                "delayedList", new ArrayList<>());
+        result.put("delayedTop", delayed.size() > 5
+                ? new ArrayList<>(delayed.subList(0, 5)) : delayed);
         return result;
     }
 

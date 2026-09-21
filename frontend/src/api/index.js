@@ -6,7 +6,11 @@ export const authApi = {
   logout: () => http.post('/auth/logout'),
   password: (data) => http.post('/auth/password', data)
 }
-export const towerApi = { overview: () => http.get('/tower/overview') }
+export const towerApi = {
+  overview: () => http.get('/tower/overview'),
+  command: (data) => http.post('/tower/command', data),
+  commandBatch: (data) => http.post('/tower/command/batch', data || { severity: 'HIGH' })
+}
 export const traceApi = {
   page: (params) => http.get('/trace/page', { params }),
   detail: (id) => http.get(`/trace/${id}`)
