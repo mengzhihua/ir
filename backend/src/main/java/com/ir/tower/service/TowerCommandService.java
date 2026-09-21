@@ -73,8 +73,7 @@ public class TowerCommandService {
         }
         for (CtAlert alert : alerts.selectList(new LambdaQueryWrapper<CtAlert>()
                 .eq(CtAlert::getStatus, "OPEN")
-                .orderByDesc(CtAlert::getCreatedAt)
-                .last("LIMIT 40"))) {
+                .last(severityThenTime("severity", "created_at", 40)))) {
             if (alert.getSuggestedAction() == null || alert.getSuggestedAction().trim().isEmpty()) {
                 continue;
             }
@@ -89,8 +88,7 @@ public class TowerCommandService {
         for (CtBalanceDecision decision : decisions.selectList(
                 new LambdaQueryWrapper<CtBalanceDecision>()
                         .eq(CtBalanceDecision::getStatus, "PENDING")
-                        .orderByDesc(CtBalanceDecision::getId)
-                        .last("LIMIT 20"))) {
+                        .last(severityThenTime("risk_level", "id", 20)))) {
             items.add(decisionItem(decision));
         }
         items.sort(Comparator
@@ -377,21 +375,31 @@ public class TowerCommandService {
         return value == null ? "" : String.valueOf(value).trim();
     }
 
+    private static String severityThenTime(String severityColumn, String timeColumn, int limit) {
+        return "ORDER BY CASE " + severityColumn
+                + " WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 ELSE 1 END DESC, "
+                + timeColumn + " DESC LIMIT " + limit;
+    }
+
     private static Long idOf(Object value) {
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        }
         if (value == null) {
             return null;
+        }
+        if (value instanceof Long || value instanceof Integer
+                || value instanceof Short || value instanceof Byte) {
+            return ((Number) value).longValue();
         }
         String text = String.valueOf(value).trim();
         if (text.isEmpty()) {
             return null;
         }
         try {
-            return Long.parseLong(text);
-        } catch (NumberFormatException ex) {
-            throw new BizException("id 必须为数字");
+            java.math.BigDecimal decimal = value instanceof java.math.BigDecimal
+                    ? (java.math.BigDecimal) value
+                    : new java.math.BigDecimal(text);
+            return decimal.toBigIntegerExact().longValueExact();
+        } catch (NumberFormatException | ArithmeticException ex) {
+            throw new BizException("id 必须为整数");
         }
     }
 }

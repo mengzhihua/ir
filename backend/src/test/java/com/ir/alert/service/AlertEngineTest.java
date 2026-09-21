@@ -571,6 +571,24 @@ class AlertEngineTest {
         assertEquals(0, open);
     }
 
+    @Test
+    void executeSuggestedRejectsReplay() {
+        alertEngine.evaluate();
+        CtAlert open = alertMapper.selectList(null).stream()
+                .filter(a -> "OPEN".equals(a.getStatus())
+                        && "OMS_STUCK".equals(a.getRuleCode())
+                        && a.getSuggestedAction() != null
+                        && !a.getSuggestedAction().trim().isEmpty())
+                .findFirst()
+                .orElse(null);
+        assertNotNull(open);
+        assertNotNull(alertEngine.executeSuggested(open.getId()));
+        assertEquals("RESOLVED", alertMapper.selectById(open.getId()).getStatus());
+        org.junit.jupiter.api.Assertions.assertThrows(com.ir.common.BizException.class,
+                () -> alertEngine.executeSuggested(open.getId()));
+        assertEquals("RESOLVED", alertMapper.selectById(open.getId()).getStatus());
+    }
+
     private InventorySnapshot stock(String sku, String warehouse, String available) {
         InventorySnapshot item = new InventorySnapshot();
         item.setSourceSystem("WMS");
