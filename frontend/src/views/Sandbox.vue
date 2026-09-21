@@ -16,8 +16,9 @@
           <h3>场景列表</h3>
           <el-button @click="load">刷新</el-button>
         </div>
-        <el-table v-loading="loading" :data="rows" stripe @row-click="select"
-          ><el-table-column prop="name" label="场景名称" min-width="150" /><el-table-column
+        <div class="table-scroll">
+        <el-table v-loading="loading" :data="rows" stripe :fit="false" style="min-width: 980px" @row-click="select"
+          ><el-table-column prop="name" label="场景名称" min-width="140" show-overflow-tooltip /><el-table-column
             prop="status"
             label="状态"
             ><template #default="{ row }"
@@ -25,7 +26,7 @@
                 labelOf(row.status, scenarioStatusLabels)
               }}</el-tag></template
             ></el-table-column
-          ><el-table-column prop="totalCost" label="总成本" align="right"
+          ><el-table-column prop="totalCost" label="总成本" align="right" width="110"
             ><template #default="{ row }">{{
               formatMoney(row.totalCost)
             }}</template></el-table-column
@@ -49,7 +50,7 @@
             ><template #default="{ row }">{{
               percent(row.serviceLevel)
             }}</template></el-table-column
-          ><el-table-column label="操作" width="240"
+          ><el-table-column label="操作" width="220" fixed="right"
             ><template #default="{ row }"
               ><el-button v-if="canWrite()" link @click.stop="run(row)">运行</el-button
               ><el-button v-if="canWrite()" link type="primary" @click.stop="apply(row, false)"
@@ -60,6 +61,7 @@
             ></el-table-column
           ><template #empty><el-empty description="暂无沙盘场景" /></template
         ></el-table>
+        </div>
         <div class="pagination">
           <el-pagination
             v-model:current-page="pager.current"

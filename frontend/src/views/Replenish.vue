@@ -29,36 +29,59 @@
         >批量转指令</el-button
       >
     </div>
-    <div class="panel">
-      <el-table v-loading="loading" :data="rows" stripe @selection-change="selected = $event"
+    <div class="panel table-scroll">
+      <el-table
+        v-loading="loading"
+        :data="rows"
+        stripe
+        :fit="false"
+        style="min-width: 1180px"
+        @selection-change="selected = $event"
         ><el-table-column type="selection" width="50" /><el-table-column
           prop="sku"
-          label="SKU" /><el-table-column prop="warehouseCode" label="仓库" /><el-table-column
-          prop="available"
+          label="SKU"
+          width="110" /><el-table-column prop="warehouseCode" label="仓库" width="90" /><el-table-column
           label="可用"
-          align="right" /><el-table-column
-          prop="inTransit"
+          width="90"
+          align="right"
+          ><template #default="{ row }">{{ formatNumber(row.available, 2) }}</template></el-table-column
+        ><el-table-column
           label="采购在途"
-          align="right" /><el-table-column
-          prop="suggestQty"
+          width="100"
+          align="right"
+          ><template #default="{ row }">{{ formatNumber(row.inTransit, 2) }}</template></el-table-column
+        ><el-table-column
           label="建议数量"
-          align="right" /><el-table-column
-          prop="onHandDays"
+          width="110"
+          align="right"
+          ><template #default="{ row }">{{ formatNumber(row.suggestQty, 2) }}</template></el-table-column
+        ><el-table-column
           label="可覆盖天数"
-          align="right" /><el-table-column
-          prop="coverDays"
+          width="110"
+          align="right"
+          ><template #default="{ row }">{{ formatNumber(row.onHandDays, 1) }}</template></el-table-column
+        ><el-table-column
           label="再订货点天数"
-          align="right" /><el-table-column
+          width="120"
+          align="right"
+          ><template #default="{ row }">{{ formatNumber(row.coverDays, 0) }}</template></el-table-column
+        ><el-table-column
           prop="stockoutDate"
-          label="预计缺货日期" /><el-table-column
+          label="预计缺货日期"
+          width="120" /><el-table-column
           prop="orderByDate"
-          label="最晚下单" /><el-table-column
-          prop="serviceDays"
+          label="最晚下单"
+          width="120" /><el-table-column
           label="保障天数"
-          align="right" /><el-table-column
-          prop="replenishLeadDays"
+          width="90"
+          align="right"
+          ><template #default="{ row }">{{ formatNumber(row.serviceDays, 0) }}</template></el-table-column
+        ><el-table-column
           label="提前期"
-          align="right" /><el-table-column label="操作"
+          width="80"
+          align="right"
+          ><template #default="{ row }">{{ formatNumber(row.replenishLeadDays, 0) }}</template></el-table-column
+        ><el-table-column label="操作" width="90" fixed="right"
           ><template #default="{ row }"
             ><el-button v-if="canWrite()" link type="primary" @click="toAction(row)"
               >转指令</el-button
@@ -95,6 +118,7 @@ import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { forecastApi, sandboxApi } from '../api'
 import { canWrite } from '../auth'
+import { formatNumber } from '../utils/format'
 const filters = reactive({ sku: '', warehouseCode: '' })
 const belowRopOnly = ref(true)
 const policy = reactive({ safetyDays: 3, replenishLeadDays: 3 })
