@@ -2,7 +2,11 @@ package com.ir.tower.service;
 
 import com.ir.alert.entity.CtAlert;
 import com.ir.alert.mapper.CtAlertMapper;
+import com.ir.balance.CtBalanceDecision;
+import com.ir.balance.CtBalanceDecisionMapper;
 import com.ir.common.BizException;
+import com.ir.system.auth.CurrentUser;
+import com.ir.system.entity.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,6 +31,8 @@ class TowerCommandServiceTest {
     private TowerCommandService commands;
     @Autowired
     private CtAlertMapper alerts;
+    @Autowired
+    private CtBalanceDecisionMapper decisions;
 
     @Test
     void queueKeepsOlderHighAlertAheadOfNewerLowAlerts() {
@@ -57,6 +63,47 @@ class TowerCommandServiceTest {
         request.put("id", 1.9);
         BizException ex = assertThrows(BizException.class, () -> commands.execute(request));
         assertEquals("id 必须为整数", ex.getMessage());
+    }
+
+    @Test
+    void plannerCannotBatchHighRiskDecisions() {
+        User planner = new User();
+        planner.setRole(User.PLANNER);
+        CurrentUser.set(planner);
+        try {
+            alerts.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CtAlert>()
+                    .eq(CtAlert::getStatus, "OPEN"));
+            CtBalanceDecision decision = new CtBalanceDecision();
+            decision.setRunId(1L);
+            decision.setStrategy("COST");
+            decision.setTargetSystem("TMS");
+            decision.setActionType("TMS_SWITCH_CARRIER");
+            decision.setTargetKey("WB-PLANNER");
+            decision.setRiskLevel("HIGH");
+            decision.setStatus("PENDING");
+            decision.setReason("高风险换承运商");
+            decisions.insert(decision);
+            Map<String, Object> queue = commands.queue(null);
+            @SuppressWarnings("unchecked")
+            java.util.List<Map<String, Object>> items =
+                    (java.util.List<Map<String, Object>>) queue.get("nextActions");
+            Map<String, Object> row = items.stream()
+                    .filter(item -> "DECISION".equals(item.get("kind"))
+                            && decision.getId().equals(asLong(item.get("id"))))
+                    .findFirst()
+                    .orElse(null);
+            org.junit.jupiter.api.Assertions.assertNotNull(row);
+            assertEquals(Boolean.FALSE, row.get("executable"));
+            assertTrue(String.valueOf(row.get("reason")).contains("管理员"));
+            Map<String, Object> request = new LinkedHashMap<>();
+            request.put("items", java.util.List.of(row));
+            Map<String, Object> batch = commands.executeBatch(request);
+            assertEquals(0, batch.get("success"));
+            assertEquals(0, batch.get("failed"));
+            assertEquals("PENDING", decisions.selectById(decision.getId()).getStatus());
+        } finally {
+            CurrentUser.clear();
+        }
     }
 
     private static Long asLong(Object value) {

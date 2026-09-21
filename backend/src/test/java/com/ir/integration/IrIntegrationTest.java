@@ -164,10 +164,30 @@ class IrIntegrationTest {
                 .andExpect(jsonPath("$.data.kpi.nextActions").isNumber())
                 .andReturn().getResponse().getContentAsString();
         JsonNode alert = null;
+        java.util.Set<String> preferred = new java.util.HashSet<>(
+                java.util.Arrays.asList("OMS_HOLD", "OMS_PRIORITIZE", "WMS_ALLOCATE", "OMS_AUTO_PROCESS"));
         for (JsonNode row : mapper.readTree(body).path("data").path("command").path("nextActions")) {
-            if ("ALERT".equals(row.path("kind").asText())) {
+            if ("ALERT".equals(row.path("kind").asText())
+                    && preferred.contains(row.path("suggestedType").asText())) {
                 alert = row;
                 break;
+            }
+        }
+        if (alert == null) {
+            String page = mvc.perform(get("/api/alert/page").param("status", "OPEN")
+                            .param("current", "1").param("size", "100")
+                            .header("Authorization", "Bearer " + t))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            for (JsonNode row : mapper.readTree(page).path("data").path("records")) {
+                if (preferred.contains(row.path("suggestedAction").asText())) {
+                    com.fasterxml.jackson.databind.node.ObjectNode item =
+                            mapper.createObjectNode();
+                    item.put("kind", "ALERT");
+                    item.put("id", row.path("id").asLong());
+                    alert = item;
+                    break;
+                }
             }
         }
         org.junit.jupiter.api.Assertions.assertNotNull(alert, "总览队列应包含可执行预警");

@@ -14,6 +14,8 @@ import com.ir.balance.CtBalanceDecisionMapper;
 import com.ir.common.BizException;
 import com.ir.sandbox.entity.CtScenario;
 import com.ir.sandbox.service.SandboxService;
+import com.ir.system.auth.CurrentUser;
+import com.ir.system.entity.User;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -127,10 +129,19 @@ public class TowerCommandService {
                 severity = "HIGH";
             }
             for (Map<String, Object> row : nextActions(null)) {
-                if (severity.equalsIgnoreCase(String.valueOf(row.get("severity")))) {
+                if (severity.equalsIgnoreCase(String.valueOf(row.get("severity")))
+                        && executable(row)) {
                     items.add(row);
                 }
             }
+        } else {
+            List<Map<String, Object>> filtered = new ArrayList<>();
+            for (Map<String, Object> row : items) {
+                if (executable(row)) {
+                    filtered.add(row);
+                }
+            }
+            items = filtered;
         }
         if (items.size() > BATCH_LIMIT) {
             items = new ArrayList<>(items.subList(0, BATCH_LIMIT));
@@ -276,6 +287,13 @@ public class TowerCommandService {
                 null,
                 decision.getCreatedAt());
         row.put("rank", rank("DECISION", severity));
+        if (!canApprove(severity)) {
+            row.put("executable", false);
+            String reason = decision.getReason() == null ? "" : decision.getReason();
+            row.put("reason", reason.isEmpty()
+                    ? "高风险决策仅管理员可审批"
+                    : reason + "；高风险决策仅管理员可审批");
+        }
         return row;
     }
 
@@ -355,6 +373,18 @@ public class TowerCommandService {
 
     private static boolean ok(Object status) {
         return "SUCCESS".equals(status) || "EXECUTED".equals(status) || "APPLIED".equals(status);
+    }
+
+    private static boolean executable(Map<String, Object> row) {
+        return row == null || !Boolean.FALSE.equals(row.get("executable"));
+    }
+
+    static boolean canApprove(String severity) {
+        if (!"HIGH".equals(severity)) {
+            return true;
+        }
+        User user = CurrentUser.get();
+        return user == null || User.ADMIN.equals(user.getRole());
     }
 
     @SuppressWarnings("unchecked")
