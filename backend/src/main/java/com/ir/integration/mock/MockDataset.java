@@ -140,7 +140,11 @@ public class MockDataset {
         shipment.setFreightAmount(BigDecimal.valueOf(20 + index % 60));
         shipment.setExceptionFlag(index % 37 == 0);
 
-        if (index % 31 == 0 || shipment.getExceptionFlag()) {
+        if (index % 41 == 0) {
+            shipment.setStatus("CREATED");
+            shipment.setPlannedArriveTime(now.plusHours(8));
+            shipment.setExceptionFlag(false);
+        } else if (index % 31 == 0 || shipment.getExceptionFlag()) {
             shipment.setStatus("IN_TRANSIT");
             shipment.setPlannedArriveTime(now.minusHours(8));
         } else {

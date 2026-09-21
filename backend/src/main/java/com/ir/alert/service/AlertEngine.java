@@ -130,6 +130,8 @@ public class AlertEngine {
                 evaluateAsnDelay(rule, params, active);
             } else if ("SUPPLIER_RISK".equals(rule.getType())) {
                 evaluateSupplierRisk(rule, params, active);
+            } else if ("TMS_OPEN".equals(rule.getType())) {
+                evaluateOpenDispatch(rule, active);
             }
         }
         resolveCleared(active, evaluatedRules);
@@ -391,6 +393,18 @@ public class AlertEngine {
                         com.ir.common.WarehouseCodes.toOms(shipment.getFromSiteCode()),
                         "运输到达延迟", detail, suggested, active);
             }
+        }
+    }
+
+    private void evaluateOpenDispatch(CtRule rule, Set<String> active) {
+        for (ShipmentSnapshot shipment : shipmentMapper.selectList(null)) {
+            if (!"CREATED".equals(shipment.getStatus())) {
+                continue;
+            }
+            add(rule, "WAYBILL", shipment.getWaybillCode(),
+                    com.ir.common.WarehouseCodes.toOms(shipment.getFromSiteCode()),
+                    "运输单待调度", "尚未派车，建议调度",
+                    rule.getSuggestedAction(), active);
         }
     }
 
