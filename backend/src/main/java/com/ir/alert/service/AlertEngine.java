@@ -13,6 +13,7 @@ import com.ir.alert.entity.CtAlert;
 import com.ir.alert.entity.CtRule;
 import com.ir.alert.mapper.CtAlertMapper;
 import com.ir.alert.mapper.CtRuleMapper;
+import com.ir.common.BizException;
 import com.ir.common.CodeGenerator;
 import com.ir.cost.service.CostService;
 import com.ir.forecast.service.ForecastService;
@@ -208,66 +209,107 @@ public class AlertEngine {
     }
 
     public CtAction executeSuggested(Long id) {
-        CtAlert alert = alertMapper.selectById(id);
+        CtAlert alert = claimOpen(id);
         if (alert == null) {
             return null;
         }
         if (alert.getSuggestedAction() == null || alert.getSuggestedAction().trim().isEmpty()) {
+            restoreOpen(alert);
             return null;
         }
-        if ("COST_OVERRUN".equals(alert.getType())) {
-            return executeOverrun(alert);
-        }
-        if ("LOW_STOCK".equals(alert.getType()) || "FORECAST_STOCKOUT".equals(alert.getType())) {
-            return executeStockout(alert);
-        }
-        Map<String, Object> params = new LinkedHashMap<>();
-        fillFromExt(alert, params);
-        fillFromShipment(alert, params);
-        String type = alert.getSuggestedAction();
-        String targetKey = actionKey(alert, params);
-        BalanceAdvisor.Advice advice = null;
-        if ("TMS_DELAY".equals(alert.getType())) {
-            ShipmentSnapshot shipment = shipmentOf(alert.getTargetKey());
-            advice = balanceAdvisor.adviseDelay(shipment);
-            if (advice != null) {
-                type = advice.getType();
-                targetKey = advice.getTargetKey();
-                params.putAll(advice.params());
+        try {
+            if ("COST_OVERRUN".equals(alert.getType())) {
+                return releasedIfIdle(alert, executeOverrun(alert));
             }
-        } else if ("ORDER_STUCK".equals(alert.getType())) {
-            OrderSnapshot order = orderOf(alert.getTargetKey());
-            advice = balanceAdvisor.adviseStuckOrder(
-                    order, alert.getRuleCode());
-            if (advice != null) {
-                type = advice.getType();
-                targetKey = advice.getTargetKey();
-                params.putAll(advice.params());
+            if ("LOW_STOCK".equals(alert.getType()) || "FORECAST_STOCKOUT".equals(alert.getType())) {
+                return releasedIfIdle(alert, executeStockout(alert));
             }
-        } else if ("WMS_STUCK".equals(alert.getType())) {
-            WmsOrderSnapshot outbound = wmsOf(alert.getTargetKey());
-            OrderSnapshot order = outbound == null ? null : orderOf(outbound.getExternalNo());
-            advice = balanceAdvisor.adviseWmsStuck(outbound, order);
-            if (advice != null) {
-                type = advice.getType();
-                targetKey = advice.getTargetKey();
-                params.putAll(advice.params());
+            Map<String, Object> params = new LinkedHashMap<>();
+            fillFromExt(alert, params);
+            fillFromShipment(alert, params);
+            String type = alert.getSuggestedAction();
+            String targetKey = actionKey(alert, params);
+            BalanceAdvisor.Advice advice = null;
+            if ("TMS_DELAY".equals(alert.getType())) {
+                ShipmentSnapshot shipment = shipmentOf(alert.getTargetKey());
+                advice = balanceAdvisor.adviseDelay(shipment);
+                if (advice != null) {
+                    type = advice.getType();
+                    targetKey = advice.getTargetKey();
+                    params.putAll(advice.params());
+                }
+            } else if ("ORDER_STUCK".equals(alert.getType())) {
+                OrderSnapshot order = orderOf(alert.getTargetKey());
+                advice = balanceAdvisor.adviseStuckOrder(
+                        order, alert.getRuleCode());
+                if (advice != null) {
+                    type = advice.getType();
+                    targetKey = advice.getTargetKey();
+                    params.putAll(advice.params());
+                }
+            } else if ("WMS_STUCK".equals(alert.getType())) {
+                WmsOrderSnapshot outbound = wmsOf(alert.getTargetKey());
+                OrderSnapshot order = outbound == null ? null : orderOf(outbound.getExternalNo());
+                advice = balanceAdvisor.adviseWmsStuck(outbound, order);
+                if (advice != null) {
+                    type = advice.getType();
+                    targetKey = advice.getTargetKey();
+                    params.putAll(advice.params());
+                }
             }
+            Map<String, Object> request = new LinkedHashMap<>();
+            request.put("type", type);
+            request.put("targetKey", targetKey);
+            request.put("params", params);
+            request.put("alertId", id);
+            request.put("expectedSaving", savingOf(advice, type, targetKey, params));
+            CtAction action = actions.createAndExecute(request);
+            List<CtAction> batch = new ArrayList<>();
+            batch.add(action);
+            if (action != null && "SUCCESS".equals(action.getStatus())
+                    && "SAP_LOW_STOCK".equals(alert.getRuleCode())) {
+                batch.addAll(fanOutPurchase(params, targetKey, id));
+            }
+            finishBatch(alert, type, batch);
+            return action;
+        } catch (RuntimeException ex) {
+            restoreOpen(alert);
+            throw ex;
         }
-        Map<String, Object> request = new LinkedHashMap<>();
-        request.put("type", type);
-        request.put("targetKey", targetKey);
-        request.put("params", params);
-        request.put("alertId", id);
-        request.put("expectedSaving", savingOf(advice, type, targetKey, params));
-        CtAction action = actions.createAndExecute(request);
-        List<CtAction> batch = new ArrayList<>();
-        batch.add(action);
-        if (action != null && "SUCCESS".equals(action.getStatus())
-                && "SAP_LOW_STOCK".equals(alert.getRuleCode())) {
-            batch.addAll(fanOutPurchase(params, targetKey, id));
+    }
+
+    private CtAlert claimOpen(Long id) {
+        if (id == null) {
+            return null;
         }
-        finishBatch(alert, type, batch);
+        int claimed = alertMapper.update(null, new LambdaUpdateWrapper<CtAlert>()
+                .eq(CtAlert::getId, id)
+                .eq(CtAlert::getStatus, "OPEN")
+                .set(CtAlert::getStatus, "HANDLING"));
+        if (claimed > 0) {
+            return alertMapper.selectById(id);
+        }
+        if (alertMapper.selectById(id) == null) {
+            return null;
+        }
+        throw new BizException("预警已处理或不是开放状态");
+    }
+
+    private void restoreOpen(CtAlert alert) {
+        if (alert == null || alert.getId() == null) {
+            return;
+        }
+        alert.setStatus("OPEN");
+        alertMapper.update(null, new LambdaUpdateWrapper<CtAlert>()
+                .eq(CtAlert::getId, alert.getId())
+                .eq(CtAlert::getStatus, "HANDLING")
+                .set(CtAlert::getStatus, "OPEN"));
+    }
+
+    private CtAction releasedIfIdle(CtAlert alert, CtAction action) {
+        if (action == null) {
+            restoreOpen(alert);
+        }
         return action;
     }
 
@@ -589,6 +631,9 @@ public class AlertEngine {
             active.add(activeKey(rule.getCode(), targetKey));
         }
         CtAlert existing = findAlert(rule.getCode(), targetKey, warehouse, "OPEN", false);
+        if (existing == null) {
+            existing = findAlert(rule.getCode(), targetKey, warehouse, "HANDLING", false);
+        }
         String suggested = suggestedAction == null || suggestedAction.trim().isEmpty()
                 ? rule.getSuggestedAction() : suggestedAction;
         if (existing != null) {
@@ -633,8 +678,7 @@ public class AlertEngine {
             close(alert);
             return primary;
         }
-        alert.setActionId(null);
-        alertMapper.updateById(alert);
+        restoreOpen(alert);
         return primary;
     }
 

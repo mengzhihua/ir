@@ -180,6 +180,18 @@ class IrIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"));
         mvc.perform(post("/api/tower/command").header("Authorization", "Bearer " + t)
                         .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"ALERT\",\"id\":" + alert.path("id").asLong() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(1))
+                .andExpect(jsonPath("$.msg").value(org.hamcrest.Matchers.containsString("已处理")));
+        mvc.perform(post("/api/tower/command").header("Authorization", "Bearer " + t)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"ALERT\",\"id\":1.9}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(1))
+                .andExpect(jsonPath("$.msg").value(org.hamcrest.Matchers.containsString("整数")));
+        mvc.perform(post("/api/tower/command").header("Authorization", "Bearer " + t)
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"kind\":\"UNKNOWN\",\"id\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(1));
