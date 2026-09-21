@@ -77,6 +77,11 @@ public class HttpSapClient implements SapClient {
 
     @Override
     public List<FinanceSnapshot> fetchFinance() {
+        if (hasApiKey()) {
+            return financeFromSnapshots(HttpEcosystemClient.snapshots(
+                    HttpSupport.getMap(http, baseUrl + "/api/open/ir/snapshots",
+                            HttpSupport.apiKey(apiKey))));
+        }
         List<FinanceSnapshot> result = new ArrayList<>();
         result.add(sum("AP_OPEN", "/api/fi/ap/open-items"));
         result.add(sum("AR_OPEN", "/api/fi/ar/open-items"));
@@ -107,6 +112,31 @@ public class HttpSapClient implements SapClient {
         } catch (IntegrationException ex) {
             return false;
         }
+    }
+
+    private static List<FinanceSnapshot> financeFromSnapshots(List<Map<String, Object>> rows) {
+        List<FinanceSnapshot> result = new ArrayList<>();
+        result.add(sumByType(rows, "AP_OPEN", "AP_OPEN"));
+        result.add(sumByType(rows, "AR_OPEN", "AR_OPEN"));
+        result.add(sumByType(rows, "STOCK", "STOCK_VALUE"));
+        return result;
+    }
+
+    private static FinanceSnapshot sumByType(List<Map<String, Object>> rows, String dataType, String metric) {
+        double total = 0;
+        int count = 0;
+        for (Map<String, Object> row : rows) {
+            if (dataType.equals(HttpSupport.string(row, "dataType"))) {
+                total += HttpSupport.doubleValue(row, "amount", "dmbtr", "wrbtr", "stockValue");
+                count++;
+            }
+        }
+        FinanceSnapshot snapshot = new FinanceSnapshot();
+        snapshot.setMetric(metric);
+        snapshot.setDimension("ALL");
+        snapshot.setAmount(BigDecimal.valueOf(total));
+        snapshot.setItemCount(count);
+        return snapshot;
     }
 
     private FinanceSnapshot sum(String metric, String path) {

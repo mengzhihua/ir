@@ -4,12 +4,14 @@ import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.ClientFactory;
 import com.ir.integration.entity.CtSystem;
 import com.ir.integration.mock.MockEcosystemClient;
+import com.ir.snapshot.FinanceSnapshot;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -143,6 +145,39 @@ class HttpProcureContractTest {
     }
 
     @Test
+    void sapFinanceUsesOpenIrWhenApiKeySet() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://sap.local/api/open/ir/snapshots"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Api-Key", "sap-open-key"))
+                .andRespond(withSuccess(
+                        "{\"code\":0,\"data\":{\"system\":\"SAP\",\"snapshots\":["
+                                + "{\"dataType\":\"AP_OPEN\",\"bizKey\":\"IRFI0001/1\","
+                                + "\"status\":\"OPEN\",\"amount\":18650},"
+                                + "{\"dataType\":\"AR_OPEN\",\"bizKey\":\"IRFI0002/1\","
+                                + "\"status\":\"OPEN\",\"amount\":24230},"
+                                + "{\"dataType\":\"STOCK\",\"bizKey\":\"M1099/1000/0001\","
+                                + "\"status\":\"LOW\",\"sku\":\"MAT-1000\",\"qty\":3,"
+                                + "\"amount\":135,\"plantCode\":\"1000\"}]}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP");
+        CtSystem sap = system("SAP", "http://sap.local", "sap-open-key");
+        List<FinanceSnapshot> finance = factory.sap(sap).fetchFinance();
+        assertEquals(3, finance.size());
+        FinanceSnapshot ap = metric(finance, "AP_OPEN");
+        assertEquals(1, ap.getItemCount().intValue());
+        assertEquals(0, ap.getAmount().compareTo(BigDecimal.valueOf(18650.0)));
+        FinanceSnapshot ar = metric(finance, "AR_OPEN");
+        assertEquals(1, ar.getItemCount().intValue());
+        assertEquals(0, ar.getAmount().compareTo(BigDecimal.valueOf(24230.0)));
+        FinanceSnapshot stock = metric(finance, "STOCK_VALUE");
+        assertEquals(1, stock.getItemCount().intValue());
+        assertEquals(0, stock.getAmount().compareTo(BigDecimal.valueOf(135.0)));
+        server.verify();
+    }
+
+    @Test
     void ecosystemExecuteForwardsIdempotencyKey() {
         RestTemplate http = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
@@ -212,6 +247,15 @@ class HttpProcureContractTest {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),
                 new com.ir.integration.client.BaseUrlValidator(true), http, systems);
+    }
+
+    private static FinanceSnapshot metric(List<FinanceSnapshot> rows, String name) {
+        for (FinanceSnapshot row : rows) {
+            if (name.equals(row.getMetric())) {
+                return row;
+            }
+        }
+        throw new AssertionError("缺少财务指标 " + name);
     }
 
     private static CtSystem system(String code, String url, String apiKey) {
