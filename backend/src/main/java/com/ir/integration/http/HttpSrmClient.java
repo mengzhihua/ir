@@ -134,6 +134,12 @@ public class HttpSrmClient implements SrmClient {
             body.put("plantCode", params.get("plantCode"));
             body.put("remark", params.getOrDefault("reason", params.get("remark")));
             body.put("params", params);
+            if ("SRM_SUBMIT_PR".equals(command.getType()) || "SRM_APPROVE_PR".equals(command.getType())) {
+                body.put("code", params.getOrDefault("code", command.getTargetKey()));
+            }
+            if ("SRM_EXPEDITE_PO".equals(command.getType())) {
+                body.put("poCode", params.getOrDefault("poCode", command.getTargetKey()));
+            }
             if (command.getIdempotencyKey() != null) {
                 body.put("idempotencyKey", command.getIdempotencyKey());
             }
@@ -142,11 +148,12 @@ public class HttpSrmClient implements SrmClient {
                 response = HttpSupport.postMap(
                         http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
             } catch (IntegrationException ex) {
-                if (!"SRM_PURCHASE_SUGGEST".equals(command.getType()) || ex.isOutcomeUnknown()) {
+                String path = dedicatedPath(command.getType());
+                if (path == null || ex.isOutcomeUnknown()) {
                     throw ex;
                 }
                 response = HttpSupport.postMap(
-                        http, baseUrl + "/api/open/ir/purchase-suggest", body, HttpSupport.apiKey(apiKey));
+                        http, baseUrl + path, body, HttpSupport.apiKey(apiKey));
             }
             Object data = response.get("data");
             if (data instanceof Map) {
@@ -450,5 +457,21 @@ public class HttpSrmClient implements SrmClient {
     private static LocalDateTime dateTime(Map<String, Object> row, String... names) {
         String value = HttpSupport.string(row, names);
         return value == null ? null : LocalDateTime.parse(value.replace(" ", "T"));
+    }
+
+    private static String dedicatedPath(String type) {
+        if ("SRM_PURCHASE_SUGGEST".equals(type)) {
+            return "/api/open/ir/purchase-suggest";
+        }
+        if ("SRM_SUBMIT_PR".equals(type)) {
+            return "/api/open/ir/submit-pr";
+        }
+        if ("SRM_APPROVE_PR".equals(type)) {
+            return "/api/open/ir/approve-pr";
+        }
+        if ("SRM_EXPEDITE_PO".equals(type)) {
+            return "/api/open/ir/expedite-po";
+        }
+        return null;
     }
 }
