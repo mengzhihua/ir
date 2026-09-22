@@ -52,6 +52,8 @@ public class MockEcosystemClient implements EcosystemClient {
         } else if ("SRM".equals(code)) {
             rows.add(row("PR", "PR-IR-001", "DRAFT", "SKU001",
                     bd("30"), null, "P001", "采购申请 PR-IR-001"));
+            rows.add(row("PR", "PR-IR-003", "SUBMITTED", "SKU001",
+                    bd("18"), null, "P001", "采购申请 PR-IR-003"));
             rows.add(row("PR", "PR-IR-002", "APPROVED", "SKU002",
                     bd("12"), null, "P001", "采购申请 PR-IR-002"));
             rows.add(row("PO", "PO-88001", "SENT", "SKU002",
@@ -70,6 +72,10 @@ public class MockEcosystemClient implements EcosystemClient {
                     bd("1"), null, "P001", "车型 A1 工程 BOM"));
             rows.add(row("ECN", "ECN-2026-01", "DRAFT", "VEH-A1",
                     bd("1"), null, "P001", "电池模组变更"));
+            rows.add(row("ECN", "ECN-2026-02", "SUBMITTED", "VEH-A1",
+                    bd("1"), null, "P001", "线束规格变更"));
+            rows.add(row("ECN", "ECN-2026-03", "APPROVED", "VEH-A1",
+                    bd("1"), null, "P001", "内饰面料变更"));
         } else if ("INV".equals(code)) {
             rows.add(row("INVOICE_REQUEST", "IR-INV-001", "DRAFT", "SO000010",
                     bd("1"), bd("12800"), "OMS", "开票申请 IR-INV-001"));
@@ -77,6 +83,8 @@ public class MockEcosystemClient implements EcosystemClient {
                     bd("1"), bd("8600"), "OMS", "开票申请 IR-INV-002"));
             rows.add(row("INPUT_INVOICE", "10001001", "UNVERIFIED", "032002300001",
                     bd("1"), bd("22600"), "PO-IR-EXPEDITE", "恒信电子进项"));
+            rows.add(row("SALES_INVOICE", "00002000", "ISSUED", "031002300112",
+                    bd("1"), bd("5650"), "NORMAL", "北方快消品牌有限公司"));
         } else if ("CRM".equals(code)) {
             rows.add(row("OPPORTUNITY", "1", "QUALIFICATION", "华东经销商扩网",
                     bd("1"), bd("2400000"), null, "华东经销商扩网"));
@@ -94,8 +102,8 @@ public class MockEcosystemClient implements EcosystemClient {
         } else if ("OA".equals(code)) {
             rows.add(row("WF_INSTANCE", "WF1001", "RUNNING", "PR-IR-001",
                     bd("1"), bd("6000"), "IR", "采购申请审批 PR-IR-001"));
-            rows.add(row("WF_TASK", "8801", "PENDING", "WF1001",
-                    bd("1"), null, null, "待办 8801"));
+            rows.add(row("WF_TASK", "8801", "PENDING", "IR-DEMO-WF",
+                    bd("1"), null, "WF1001", "IR 控制塔演示待办 · 部门主管"));
         }
         return rows;
     }

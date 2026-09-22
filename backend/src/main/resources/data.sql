@@ -77,6 +77,9 @@ KEY (code)
 VALUES ('SRM_PR_DRAFT', 'SRM 采购申请待提交', 'EXT_STATUS', '{"system":"SRM","dataType":"PR","status":"DRAFT"}', 'MEDIUM', TRUE, 'SRM_SUBMIT_PR');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
+VALUES ('SRM_PR_SUBMITTED', 'SRM 采购申请待批准', 'EXT_STATUS', '{"system":"SRM","dataType":"PR","status":"SUBMITTED"}', 'MEDIUM', TRUE, 'SRM_APPROVE_PR');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
 VALUES ('INV_REQUEST_DRAFT', '开票申请待提交', 'EXT_STATUS', '{"system":"INV","dataType":"INVOICE_REQUEST","status":"DRAFT"}', 'LOW', TRUE, 'INV_SUBMIT_REQUEST');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
@@ -89,6 +92,12 @@ KEY (code)
 VALUES ('BOM_ECN_DRAFT', '工程变更待提交', 'EXT_STATUS', '{"system":"BOM","dataType":"ECN","status":"DRAFT"}', 'MEDIUM', TRUE, 'BOM_SUBMIT_ECN');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
+VALUES ('BOM_ECN_SUBMITTED', '工程变更待批准', 'EXT_STATUS', '{"system":"BOM","dataType":"ECN","status":"SUBMITTED"}', 'MEDIUM', TRUE, 'BOM_APPROVE_ECN');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
+VALUES ('BOM_ECN_APPROVED', '工程变更待实施', 'EXT_STATUS', '{"system":"BOM","dataType":"ECN","status":"APPROVED"}', 'HIGH', TRUE, 'BOM_IMPLEMENT_ECN');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
 VALUES ('CRM_STALE_OPP', '商机停留在资格评估', 'EXT_STATUS', '{"system":"CRM","dataType":"OPPORTUNITY","status":"QUALIFICATION"}', 'MEDIUM', TRUE, 'CRM_ADVANCE_STAGE');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
@@ -96,6 +105,9 @@ VALUES ('CRM_OPEN_CASE', '客服工单待升级', 'EXT_STATUS', '{"system":"CRM"
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
 VALUES ('DMS_PART_SHORTAGE', '经销商备件缺货', 'EXT_STATUS', '{"system":"DMS","dataType":"SHORTAGE","status":"SHORT"}', 'HIGH', TRUE, 'DMS_REPLENISH_SHORTAGE');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
+VALUES ('DMS_REPLENISH_DRAFT', '经销商补货单待下发', 'EXT_STATUS', '{"system":"DMS","dataType":"REPLENISH","status":"DRAFT"}', 'MEDIUM', TRUE, 'DMS_PUSH_REPLENISH');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
 VALUES ('OA_WF_PENDING', 'OA 审批待办积压', 'EXT_STATUS', '{"system":"OA","dataType":"WF_TASK","status":"PENDING"}', 'MEDIUM', TRUE, 'OA_APPROVE_TASK');

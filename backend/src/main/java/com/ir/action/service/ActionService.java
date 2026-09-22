@@ -348,6 +348,7 @@ public class ActionService {
                 type("CRM_ADVANCE_STAGE", "CRM", field("opportunityId", "商机ID", true)),
                 type("CRM_ESCALATE_CASE", "CRM", field("caseNo", "工单号", true)),
                 type("DMS_REPLENISH_SHORTAGE", "DMS", field("dealerCode", "经销商编码", true)),
+                type("DMS_PUSH_REPLENISH", "DMS", field("replenishNo", "补货单号", true)),
                 type("OA_START_WORKFLOW", "OA", field("targetKey", "业务单号", true),
                         field("definitionCode", "流程编码", false)),
                 type("OA_APPROVE_TASK", "OA", field("taskId", "待办ID", true)));
@@ -470,16 +471,11 @@ public class ActionService {
                     .eq(ExtSnapshot::getBizKey, action.getTargetKey())
                     .last("LIMIT 1"));
             if (snapshot != null) {
-                if (action.getType().contains("SUBMIT")) {
-                    snapshot.setStatus("SUBMITTED");
-                } else if (action.getType().contains("APPROVE") || action.getType().contains("RELEASE")) {
-                    snapshot.setStatus("RELEASED");
-                } else if (action.getType().contains("ESCALATE")) {
-                    snapshot.setStatus("ESCALATED");
-                } else if (action.getType().contains("ADVANCE")) {
-                    snapshot.setStatus("NEEDS_ANALYSIS");
+                String next = ecosystemStatus(action.getType());
+                if (next != null) {
+                    snapshot.setStatus(next);
+                    extMapper.updateById(snapshot);
                 }
-                extMapper.updateById(snapshot);
             }
         }
     }
@@ -611,6 +607,37 @@ public class ActionService {
         Map<String, Object> params = read(action.getParamsJson());
         Object value = params.get("carrierCode");
         return value == null ? null : String.valueOf(value);
+    }
+
+    private static String ecosystemStatus(String type) {
+        if (type == null) {
+            return null;
+        }
+        if (type.contains("SUBMIT")) {
+            return "SUBMITTED";
+        }
+        if (type.contains("RELEASE")) {
+            return "RELEASED";
+        }
+        if (type.contains("APPROVE")) {
+            return "APPROVED";
+        }
+        if (type.contains("ESCALATE")) {
+            return "ESCALATED";
+        }
+        if (type.contains("ADVANCE")) {
+            return "NEEDS_ANALYSIS";
+        }
+        if (type.contains("PUSH")) {
+            return "PUSHED";
+        }
+        if (type.contains("VERIFY")) {
+            return "VERIFIED";
+        }
+        if (type.contains("IMPLEMENT")) {
+            return "IMPLEMENTED";
+        }
+        return null;
     }
 
     private Map<String, Object> type(
