@@ -132,9 +132,18 @@ public class HttpOmsClient implements OmsClient {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("type", command.getType());
             body.put("targetKey", command.getTargetKey());
+            body.put("orderNo", command.getTargetKey());
             body.put("params", command.getParams());
             HttpSupport.putIdempotency(body, command);
-            HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            try {
+                HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            } catch (IntegrationException ex) {
+                String path = dedicatedPath(command.getType());
+                if (path == null || ex.isOutcomeUnknown()) {
+                    throw ex;
+                }
+                HttpSupport.postMap(http, baseUrl + path, body, HttpSupport.apiKey(apiKey));
+            }
             cachedSnapshot = null;
             return;
         }
@@ -213,6 +222,28 @@ public class HttpOmsClient implements OmsClient {
 
     private boolean hasApiKey() {
         return apiKey != null && !apiKey.trim().isEmpty();
+    }
+
+    private static String dedicatedPath(String type) {
+        if ("OMS_HOLD".equals(type)) {
+            return "/api/open/ir/hold";
+        }
+        if ("OMS_UNHOLD".equals(type)) {
+            return "/api/open/ir/unhold";
+        }
+        if ("OMS_REROUTE_WAREHOUSE".equals(type)) {
+            return "/api/open/ir/reroute";
+        }
+        if ("OMS_AUTO_PROCESS".equals(type)) {
+            return "/api/open/ir/auto";
+        }
+        if ("OMS_CANCEL".equals(type)) {
+            return "/api/open/ir/cancel";
+        }
+        if ("OMS_PRIORITIZE".equals(type)) {
+            return "/api/open/ir/prioritize";
+        }
+        return null;
     }
 
     private synchronized String login() {

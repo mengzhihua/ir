@@ -313,7 +313,7 @@ public class HttpSrmClient implements SrmClient {
     }
 
     private Map<String, Object> findPurchaseOrder(String code) {
-        String url = baseUrl + "/api/purchase/order/page?page=1&size=20&keyword=" + encode(code);
+        String url = baseUrl + "/api/purchase/order/page?current=1&size=20&keyword=" + encode(code);
         for (Map<String, Object> row : HttpSupport.rows(HttpSupport.getMap(http, url, headers()))) {
             if (code.equals(HttpSupport.string(row, "code"))) {
                 return row;
@@ -400,7 +400,7 @@ public class HttpSrmClient implements SrmClient {
         int page = 1;
         int size = 200;
         while (page <= 50) {
-            String url = baseUrl + path + "?page=" + page + "&size=" + size;
+            String url = baseUrl + path + "?current=" + page + "&size=" + size;
             List<Map<String, Object>> current =
                     HttpSupport.rows(HttpSupport.getMap(http, url, headers()));
             rows.addAll(current);

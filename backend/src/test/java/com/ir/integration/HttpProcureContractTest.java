@@ -244,6 +244,54 @@ class HttpProcureContractTest {
     }
 
     @Test
+    void invActionsMissingFallsBackToDedicatedPath() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://inv.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "inv-open-key"))
+                .andExpect(jsonPath("$.type").value("INV_VERIFY_INPUT"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://inv.local/api/open/ir/verify-input"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "inv-open-key"))
+                .andExpect(jsonPath("$.targetKey").value("10001001"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"verifyStatus\":\"VERIFIED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "INV");
+        ActionCommand command = new ActionCommand();
+        command.setType("INV_VERIFY_INPUT");
+        command.setTargetKey("10001001");
+        factory.ecosystem(system("INV", "http://inv.local", "inv-open-key")).execute(command);
+        server.verify();
+    }
+
+    @Test
+    void srmLoginModePagesUseCurrent() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://srm.local/api/auth/login"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"token\":\"srm-token\"}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://srm.local/api/purchase/order/page?current=1&size=200"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("Authorization", "Bearer srm-token"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"records\":[{"
+                        + "\"code\":\"PO-IR-1\",\"status\":\"CONFIRMED\",\"totalAmount\":100}]}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP,OA,SRM");
+        CtSystem srm = system("SRM", "http://srm.local", null);
+        srm.setUsername("admin");
+        srm.setPassword("admin123");
+        java.util.List<com.ir.snapshot.PurchaseSnapshot> orders = factory.srm(srm).fetchPurchaseOrders();
+        assertEquals(1, orders.size());
+        assertEquals("PO-IR-1", orders.get(0).getCode());
+        server.verify();
+    }
+
+    @Test
     void srmActionsMissingFallsBackToPurchaseSuggest() {
         RestTemplate http = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();

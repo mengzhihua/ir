@@ -2,6 +2,7 @@ package com.ir.integration.http;
 
 import com.ir.integration.client.ActionCommand;
 import com.ir.integration.client.EcosystemClient;
+import com.ir.integration.client.IntegrationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
@@ -36,10 +37,21 @@ public class HttpEcosystemClient implements EcosystemClient {
         body.put("type", command.getType());
         body.put("targetKey", command.getTargetKey());
         body.put("params", command.getParams());
-        if (command.getIdempotencyKey() != null && !command.getIdempotencyKey().trim().isEmpty()) {
-            body.put("idempotencyKey", command.getIdempotencyKey());
+        HttpSupport.putIdempotency(body, command);
+        if (command.getParams() != null) {
+            copyParam(body, command.getParams(), "invoiceNo");
+            copyParam(body, command.getParams(), "requestNo");
+            copyParam(body, command.getParams(), "orderNo");
         }
-        HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, headers());
+        try {
+            HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, headers());
+        } catch (IntegrationException ex) {
+            String path = dedicatedPath(command.getType());
+            if (path == null || ex.isOutcomeUnknown()) {
+                throw ex;
+            }
+            HttpSupport.postMap(http, baseUrl + path, body, headers());
+        }
     }
 
     @Override
@@ -61,6 +73,26 @@ public class HttpEcosystemClient implements EcosystemClient {
 
     private HttpHeaders headers() {
         return HttpSupport.apiKey(apiKey);
+    }
+
+    private static void copyParam(Map<String, Object> body, Map<String, Object> params, String name) {
+        Object value = params.get(name);
+        if (value != null) {
+            body.put(name, value);
+        }
+    }
+
+    private static String dedicatedPath(String type) {
+        if ("INV_VERIFY_INPUT".equals(type)) {
+            return "/api/open/ir/verify-input";
+        }
+        if ("INV_SUBMIT_REQUEST".equals(type)) {
+            return "/api/open/ir/submit-request";
+        }
+        if ("INV_APPROVE_REQUEST".equals(type)) {
+            return "/api/open/ir/approve-request";
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")

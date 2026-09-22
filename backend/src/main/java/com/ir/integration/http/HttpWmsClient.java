@@ -7,7 +7,10 @@ import com.ir.integration.client.IntegrationException;
 import com.ir.integration.client.WmsClient;
 import com.ir.snapshot.entity.InventorySnapshot;
 import com.ir.snapshot.entity.WmsOrderSnapshot;
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -110,10 +113,22 @@ public class HttpWmsClient implements WmsClient {
             return;
         }
         if ("WMS_ALLOCATE".equals(command.getType())) {
-            HttpSupport.postMap(http, baseUrl + "/api/outbound/order/"
-                    + command.getTargetKey() + "/allocate", command.getParams(), headers());
+            long id = resolveOutboundId(command.getTargetKey());
+            HttpSupport.postMap(http, baseUrl + "/api/outbound/order/" + id + "/allocate",
+                    command.getParams(), headers());
         } else if ("WMS_REPLENISH".equals(command.getType())) {
-            Map<String, Object> generate = new LinkedHashMap<>(command.getParams());
+            Map<String, Object> generate = new LinkedHashMap<>();
+            if (command.getParams() != null) {
+                generate.putAll(command.getParams());
+            }
+            String warehouse = first(
+                    command.getParams() == null ? null : HttpSupport.string(command.getParams(), "warehouseCode"),
+                    command.getTargetKey());
+            generate.put("warehouseCode", toWmsWarehouse(warehouse));
+            Object from = command.getParams() == null ? null : command.getParams().get("fromWarehouseCode");
+            if (from != null) {
+                generate.put("fromWarehouseCode", toWmsWarehouse(String.valueOf(from)));
+            }
             if (command.getIdempotencyKey() != null) {
                 generate.put("requestNo", command.getIdempotencyKey());
             }
@@ -200,6 +215,51 @@ public class HttpWmsClient implements WmsClient {
         return apiKey != null && !apiKey.trim().isEmpty();
     }
 
+    private long resolveOutboundId(String key) {
+        if (key != null && key.matches("\\d+")) {
+            return Long.parseLong(key);
+        }
+        if (key == null || key.trim().isEmpty()) {
+            throw new IntegrationException("WMS 分配缺少出库单号");
+        }
+        String url = baseUrl + "/api/outbound/order/page?current=1&size=20&keyword=" + encode(key.trim());
+        for (Map<String, Object> row : HttpSupport.rows(HttpSupport.getMap(http, url, headers()))) {
+            if (key.equals(HttpSupport.string(row, "code", "orderCode", "orderNo"))
+                    || key.equals(HttpSupport.string(row, "externalNo", "sourceNo"))) {
+                long id = HttpSupport.longValue(row, "id");
+                if (id > 0) {
+                    return id;
+                }
+            }
+        }
+        throw new IntegrationException("WMS 出库单不存在: " + key);
+    }
+
+    static String toWmsWarehouse(String code) {
+        if (code == null) {
+            return null;
+        }
+        if ("WH-SH".equals(code)) {
+            return "WH01";
+        }
+        if ("WH-BJ".equals(code)) {
+            return "WH02";
+        }
+        if ("WH-GZ".equals(code)) {
+            return "WH03";
+        }
+        return code;
+    }
+
+    private static String first(String... values) {
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty() && !"null".equals(value)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
     private static Map<String, Object> openIrBody(ActionCommand command) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("type", command.getType());
@@ -233,6 +293,14 @@ public class HttpWmsClient implements WmsClient {
             return "/api/open/ir/replenish";
         }
         return null;
+    }
+
+    private static String encode(String value) {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException ex) {
+            throw new IntegrationException("URL 编码失败: " + value);
+        }
     }
 
     private static BigDecimal decimal(Map<String, Object> row, String... names) {
