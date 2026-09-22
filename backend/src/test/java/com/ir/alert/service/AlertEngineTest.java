@@ -84,6 +84,7 @@ class AlertEngineTest {
         assertTrue(rules.contains("SAP_LOW_STOCK"));
         assertTrue(rules.contains("SRM_PR_DRAFT"));
         assertTrue(rules.contains("DMS_PART_SHORTAGE"));
+        assertTrue(rules.contains("DMS_REPLENISH_DRAFT"));
         assertTrue(rules.contains("CRM_OPEN_CASE"));
         assertTrue(rules.contains("OA_WF_PENDING"));
         assertTrue(rules.contains("ASN_DELAY"));

@@ -201,6 +201,7 @@ export const actionTypeLabels = {
   CRM_ADVANCE_STAGE: '推进商机',
   CRM_ESCALATE_CASE: '升级工单',
   DMS_REPLENISH_SHORTAGE: '经销商补货',
+  DMS_PUSH_REPLENISH: '下发补货单',
   OA_START_WORKFLOW: '发起审批',
   OA_APPROVE_TASK: '完成待办',
   APPLY_SANDBOX: '采用沙盘推荐'

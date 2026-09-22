@@ -348,6 +348,7 @@ public class ActionService {
                 type("CRM_ADVANCE_STAGE", "CRM", field("opportunityId", "商机ID", true)),
                 type("CRM_ESCALATE_CASE", "CRM", field("caseNo", "工单号", true)),
                 type("DMS_REPLENISH_SHORTAGE", "DMS", field("dealerCode", "经销商编码", true)),
+                type("DMS_PUSH_REPLENISH", "DMS", field("replenishNo", "补货单号", true)),
                 type("OA_START_WORKFLOW", "OA", field("targetKey", "业务单号", true),
                         field("definitionCode", "流程编码", false)),
                 type("OA_APPROVE_TASK", "OA", field("taskId", "待办ID", true)));

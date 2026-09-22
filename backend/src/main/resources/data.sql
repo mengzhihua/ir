@@ -98,6 +98,9 @@ KEY (code)
 VALUES ('DMS_PART_SHORTAGE', '经销商备件缺货', 'EXT_STATUS', '{"system":"DMS","dataType":"SHORTAGE","status":"SHORT"}', 'HIGH', TRUE, 'DMS_REPLENISH_SHORTAGE');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
+VALUES ('DMS_REPLENISH_DRAFT', '经销商补货单待下发', 'EXT_STATUS', '{"system":"DMS","dataType":"REPLENISH","status":"DRAFT"}', 'MEDIUM', TRUE, 'DMS_PUSH_REPLENISH');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
 VALUES ('OA_WF_PENDING', 'OA 审批待办积压', 'EXT_STATUS', '{"system":"OA","dataType":"WF_TASK","status":"PENDING"}', 'MEDIUM', TRUE, 'OA_APPROVE_TASK');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
