@@ -405,6 +405,91 @@ class HttpProcureContractTest {
         server.verify();
     }
 
+    @Test
+    void crmActionsMissingFallsBackToEscalateCase() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://crm.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "crm-open-key"))
+                .andExpect(jsonPath("$.type").value("CRM_ESCALATE_CASE"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://crm.local/api/open/ir/escalate-case"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "crm-open-key"))
+                .andExpect(jsonPath("$.targetKey").value("CS-IR-NEW"))
+                .andExpect(jsonPath("$.caseNo").value("CS-IR-NEW"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"ESCALATED\",\"priority\":\"HIGH\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "CRM");
+        ActionCommand command = new ActionCommand();
+        command.setType("CRM_ESCALATE_CASE");
+        command.setTargetKey("CS-IR-NEW");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
+        params.put("caseNo", "CS-IR-NEW");
+        command.setParams(params);
+        factory.ecosystem(system("CRM", "http://crm.local", "crm-open-key")).execute(command);
+        server.verify();
+    }
+
+    @Test
+    void dmsActionsMissingFallsBackToPushReplenish() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://dms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "dms-open-key"))
+                .andExpect(jsonPath("$.type").value("DMS_PUSH_REPLENISH"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://dms.local/api/open/ir/push-replenish"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "dms-open-key"))
+                .andExpect(jsonPath("$.targetKey").value("RPL-IR-DRAFT"))
+                .andExpect(jsonPath("$.replenishNo").value("RPL-IR-DRAFT"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"PUSHED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "DMS");
+        ActionCommand command = new ActionCommand();
+        command.setType("DMS_PUSH_REPLENISH");
+        command.setTargetKey("RPL-IR-DRAFT");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
+        params.put("replenishNo", "RPL-IR-DRAFT");
+        command.setParams(params);
+        factory.ecosystem(system("DMS", "http://dms.local", "dms-open-key")).execute(command);
+        server.verify();
+    }
+
+    @Test
+    void srmActionsMissingFallsBackToExpeditePo() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://srm.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "srm-wms-key"))
+                .andExpect(jsonPath("$.type").value("SRM_EXPEDITE_PO"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://srm.local/api/open/ir/expedite-po"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "srm-wms-key"))
+                .andExpect(jsonPath("$.targetKey").value("PO-IR-EXPEDITE"))
+                .andExpect(jsonPath("$.poCode").value("PO-IR-EXPEDITE"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"code\":\"PO-IR-EXPEDITE\",\"status\":\"CONFIRMED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP,OA,SRM");
+        ActionCommand command = new ActionCommand();
+        command.setType("SRM_EXPEDITE_PO");
+        command.setTargetKey("PO-IR-EXPEDITE");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
+        params.put("poCode", "PO-IR-EXPEDITE");
+        command.setParams(params);
+        Map<String, Object> result = factory.srm(system("SRM", "http://srm.local", "srm-wms-key")).execute(command);
+        assertEquals("PO-IR-EXPEDITE", result.get("code"));
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),

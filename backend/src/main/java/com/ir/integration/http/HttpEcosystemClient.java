@@ -51,6 +51,10 @@ public class HttpEcosystemClient implements EcosystemClient {
             copyParam(body, command.getParams(), "taskId");
             copyParam(body, command.getParams(), "definitionCode");
             copyParam(body, command.getParams(), "businessId");
+            copyParam(body, command.getParams(), "opportunityId");
+            copyParam(body, command.getParams(), "caseNo");
+            copyParam(body, command.getParams(), "dealerCode");
+            copyParam(body, command.getParams(), "replenishNo");
         }
         try {
             HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, headers());
@@ -127,6 +131,18 @@ public class HttpEcosystemClient implements EcosystemClient {
         }
         if ("OA_APPROVE_TASK".equals(type) || "OA_COMPLETE_TASK".equals(type)) {
             return "/api/open/ir/approve-task";
+        }
+        if ("CRM_ADVANCE_STAGE".equals(type)) {
+            return "/api/open/ir/advance-stage";
+        }
+        if ("CRM_ESCALATE_CASE".equals(type)) {
+            return "/api/open/ir/escalate-case";
+        }
+        if ("DMS_REPLENISH_SHORTAGE".equals(type)) {
+            return "/api/open/ir/replenish-shortage";
+        }
+        if ("DMS_PUSH_REPLENISH".equals(type)) {
+            return "/api/open/ir/push-replenish";
         }
         return null;
     }
