@@ -158,6 +158,63 @@ class HttpOtwbContractTest {
         server.verify();
     }
 
+    @Test
+    void omsActionsMissingFallsBackToDedicatedPath() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://oms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "oms-open-key"))
+                .andExpect(jsonPath("$.type").value("OMS_HOLD"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://oms.local/api/open/ir/hold"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "oms-open-key"))
+                .andExpect(jsonPath("$.orderNo").value("IR-SO-STUCK"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"HOLD\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        ClientFactory factory = factory(http, "OMS,WMS,TMS");
+        ActionCommand command = new ActionCommand();
+        command.setType("OMS_HOLD");
+        command.setTargetKey("IR-SO-STUCK");
+        factory.oms(system("OMS", "http://oms.local/", "oms-open-key")).execute(command);
+        server.verify();
+    }
+
+    @Test
+    void wmsLoginModeAllocatesByOrderCode() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://wms.local/api/auth/login"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"token\":\"wms-token\"}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://wms.local/api/outbound/order/page?current=1&size=20&keyword=SO-IR-STUCK"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("Authorization", "Bearer wms-token"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"records\":[{"
+                        + "\"id\":12,\"code\":\"SO-IR-STUCK\",\"externalNo\":\"IR-SO-STUCK\","
+                        + "\"status\":\"NEW\"}]}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://wms.local/api/outbound/order/12/allocate"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer wms-token"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"ALLOCATED\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        ClientFactory factory = factory(http, "OMS,WMS,TMS");
+        CtSystem wms = system("WMS", "http://wms.local", null);
+        wms.setUsername("admin");
+        wms.setPassword("admin123");
+        ActionCommand command = new ActionCommand();
+        command.setType("WMS_ALLOCATE");
+        command.setTargetKey("SO-IR-STUCK");
+        factory.wms(wms).execute(command);
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),
