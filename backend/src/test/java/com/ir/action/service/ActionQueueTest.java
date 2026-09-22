@@ -336,6 +336,14 @@ class ActionQueueTest {
         assertEquals("SUCCESS", actions.createAndExecute(
                 pending("SRM_APPROVE_PR", "PR-MUTATE-1", null)).getStatus());
         assertEquals("APPROVED", extMapper.selectById(pr.getId()).getStatus());
+
+        ExtSnapshot shortage = snapshot("DMS", "SHORTAGE", "D001/P-MUTATE-SHORT", "SHORT");
+        shortage.setSku("P-MUTATE-SHORT");
+        shortage.setPlantCode("D001");
+        extMapper.insert(shortage);
+        assertEquals("SUCCESS", actions.createAndExecute(
+                pending("DMS_REPLENISH_SHORTAGE", "D001/P-MUTATE-SHORT", null)).getStatus());
+        assertEquals("COVERED", extMapper.selectById(shortage.getId()).getStatus());
     }
 
     @Test
