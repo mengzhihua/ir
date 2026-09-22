@@ -17,11 +17,21 @@ public class HttpEcosystemClient implements EcosystemClient {
     private final RestTemplate http;
     private final String baseUrl;
     private final String apiKey;
+    private final String username;
+    private final String password;
+    private String token;
 
     public HttpEcosystemClient(RestTemplate http, String baseUrl, String apiKey) {
+        this(http, baseUrl, apiKey, null, null);
+    }
+
+    public HttpEcosystemClient(
+            RestTemplate http, String baseUrl, String apiKey, String username, String password) {
         this.http = http;
         this.baseUrl = baseUrl == null ? "" : baseUrl.replaceAll("/$", "");
         this.apiKey = apiKey;
+        this.username = username;
+        this.password = password;
     }
 
     @Override
@@ -33,6 +43,10 @@ public class HttpEcosystemClient implements EcosystemClient {
 
     @Override
     public void execute(ActionCommand command) {
+        if (!hasApiKey()) {
+            executeLogin(command);
+            return;
+        }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("type", command.getType());
         body.put("targetKey", command.getTargetKey());
@@ -86,6 +100,130 @@ public class HttpEcosystemClient implements EcosystemClient {
 
     private HttpHeaders headers() {
         return HttpSupport.apiKey(apiKey);
+    }
+
+    private boolean hasApiKey() {
+        return apiKey != null && !apiKey.trim().isEmpty();
+    }
+
+    private void executeLogin(ActionCommand command) {
+        Map<String, Object> params = command.getParams() == null
+                ? Collections.<String, Object>emptyMap() : command.getParams();
+        String type = command.getType();
+        String target = command.getTargetKey();
+        if ("SAP_CREATE_PR".equals(type)) {
+            String plant = first(str(params.get("werks")), str(params.get("plantCode")), "1000");
+            Map<String, Object> item = new LinkedHashMap<String, Object>();
+            item.put("matnr", first(str(params.get("sku")), str(params.get("matnr")), target));
+            item.put("menge", params.get("qty") == null ? Integer.valueOf(1) : params.get("qty"));
+            item.put("netpr", Integer.valueOf(0));
+            item.put("werks", plant);
+            Map<String, Object> body = new LinkedHashMap<String, Object>();
+            body.put("requester", "IR");
+            body.put("werks", plant);
+            body.put("items", Collections.singletonList(item));
+            HttpSupport.postMap(http, baseUrl + "/api/mm/pr", body, bearer());
+            return;
+        }
+        if ("SAP_RELEASE_PR".equals(type)) {
+            HttpSupport.postMap(http, baseUrl + "/api/mm/pr/"
+                    + encode(first(str(params.get("banfn")), target)) + "/release",
+                    Collections.emptyMap(), bearer());
+            return;
+        }
+        if ("SAP_RELEASE_MO".equals(type)) {
+            HttpSupport.postMap(http, baseUrl + "/api/pp/orders/"
+                    + encode(first(str(params.get("aufnr")), target)) + "/release",
+                    Collections.emptyMap(), bearer());
+            return;
+        }
+        if ("DMS_REPLENISH_SHORTAGE".equals(type)) {
+            String dealer = first(str(params.get("dealerCode")), dealerOf(target), target);
+            HttpSupport.postMap(http, baseUrl + "/api/oms/replenish/from-shortage?dealerCode="
+                    + encode(dealer), Collections.emptyMap(), bearer());
+            return;
+        }
+        if ("DMS_PUSH_REPLENISH".equals(type)) {
+            String no = first(str(params.get("replenishNo")), target);
+            HttpSupport.postMap(http, baseUrl + "/api/oms/replenish/" + replenishId(no) + "/push",
+                    Collections.emptyMap(), bearer());
+            return;
+        }
+        throw new IntegrationException("登录模式不支持的指令: " + type);
+    }
+
+    private long replenishId(String replenishNo) {
+        if (replenishNo != null && replenishNo.matches("\\d+")) {
+            return Long.parseLong(replenishNo);
+        }
+        String url = baseUrl + "/api/oms/replenish/page?current=1&size=20&keyword=" + encode(replenishNo);
+        for (Map<String, Object> row : HttpSupport.rows(HttpSupport.getMap(http, url, bearer()))) {
+            if (replenishNo != null && replenishNo.equals(HttpSupport.string(row, "replenishNo", "code"))) {
+                long id = HttpSupport.longValue(row, "id");
+                if (id > 0) {
+                    return id;
+                }
+            }
+        }
+        throw new IntegrationException("补货单不存在: " + replenishNo);
+    }
+
+    private HttpHeaders bearer() {
+        return HttpSupport.bearer(login());
+    }
+
+    private synchronized String login() {
+        if (token != null) {
+            return token;
+        }
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("username", username);
+        body.put("password", password);
+        Map<String, Object> response = HttpSupport.loginPost(
+                http, baseUrl + "/api/auth/login", body);
+        Object data = response.get("data");
+        if (data instanceof Map) {
+            token = HttpSupport.string((Map<String, Object>) data, "token", "accessToken");
+        }
+        if (token == null) {
+            token = HttpSupport.string(response, "token", "accessToken");
+        }
+        if (token == null) {
+            throw new IntegrationException("登录未返回 token");
+        }
+        return token;
+    }
+
+    private static String dealerOf(String targetKey) {
+        if (targetKey == null) {
+            return null;
+        }
+        int slash = targetKey.indexOf('/');
+        return slash > 0 ? targetKey.substring(0, slash) : targetKey;
+    }
+
+    private static String first(String... values) {
+        for (String value : values) {
+            if (value != null && !value.trim().isEmpty() && !"null".equals(value)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static String str(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static String encode(String value) {
+        if (value == null) {
+            throw new IntegrationException("登录模式缺少业务键");
+        }
+        try {
+            return java.net.URLEncoder.encode(value, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException ex) {
+            throw new IntegrationException("URL 编码失败: " + value);
+        }
     }
 
     private static void copyParam(Map<String, Object> body, Map<String, Object> params, String name) {

@@ -124,10 +124,31 @@ public class HttpWmsClient implements WmsClient {
             String warehouse = first(
                     command.getParams() == null ? null : HttpSupport.string(command.getParams(), "warehouseCode"),
                     command.getTargetKey());
-            generate.put("warehouseCode", toWmsWarehouse(warehouse));
+            String toWarehouse = toWmsWarehouse(warehouse);
+            generate.put("warehouseCode", toWarehouse);
             Object from = command.getParams() == null ? null : command.getParams().get("fromWarehouseCode");
-            if (from != null) {
-                generate.put("fromWarehouseCode", toWmsWarehouse(String.valueOf(from)));
+            String fromWarehouse = from == null ? null : toWmsWarehouse(String.valueOf(from));
+            if (fromWarehouse != null && !fromWarehouse.equals(toWarehouse)) {
+                Map<String, Object> transfer = new LinkedHashMap<>();
+                transfer.put("fromWarehouseCode", fromWarehouse);
+                transfer.put("warehouseCode", toWarehouse);
+                if (command.getParams() != null) {
+                    Object sku = command.getParams().get("sku");
+                    Object qty = command.getParams().get("qty");
+                    Object owner = command.getParams().get("ownerCode");
+                    if (sku != null) {
+                        transfer.put("sku", sku);
+                    }
+                    if (qty != null) {
+                        transfer.put("qty", qty);
+                    }
+                    if (owner != null) {
+                        transfer.put("ownerCode", owner);
+                    }
+                }
+                HttpSupport.postMap(http, baseUrl + "/api/inventory/replenish/transfer",
+                        transfer, headers());
+                return;
             }
             if (command.getIdempotencyKey() != null) {
                 generate.put("requestNo", command.getIdempotencyKey());

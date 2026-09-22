@@ -490,6 +490,68 @@ class HttpProcureContractTest {
         server.verify();
     }
 
+    @Test
+    void sapLoginModeCreatesPr() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://sap.local/api/auth/login"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"token\":\"sap-token\"}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://sap.local/api/mm/pr"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer sap-token"))
+                .andExpect(jsonPath("$.werks").value("1000"))
+                .andExpect(jsonPath("$.items[0].matnr").value("MAT-1000"))
+                .andExpect(jsonPath("$.items[0].menge").value(16))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"banfn\":\"1000000099\",\"status\":\"CREATED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP");
+        CtSystem sap = system("SAP", "http://sap.local", null);
+        sap.setUsername("admin");
+        sap.setPassword("admin123");
+        ActionCommand command = new ActionCommand();
+        command.setType("SAP_CREATE_PR");
+        command.setTargetKey("MAT-1000");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
+        params.put("sku", "MAT-1000");
+        params.put("qty", 16);
+        params.put("plantCode", "1000");
+        command.setParams(params);
+        factory.ecosystem(sap).execute(command);
+        server.verify();
+    }
+
+    @Test
+    void dmsLoginModePushesReplenishByCode() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://dms.local/api/auth/login"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"token\":\"dms-token\"}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://dms.local/api/oms/replenish/page?current=1&size=20&keyword=RPL-IR-DRAFT"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("Authorization", "Bearer dms-token"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"records\":[{"
+                        + "\"id\":7,\"replenishNo\":\"RPL-IR-DRAFT\",\"status\":\"DRAFT\"}]}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://dms.local/api/oms/replenish/7/push"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer dms-token"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"PUSHED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "DMS");
+        CtSystem dms = system("DMS", "http://dms.local", null);
+        dms.setUsername("admin");
+        dms.setPassword("admin123");
+        ActionCommand command = new ActionCommand();
+        command.setType("DMS_PUSH_REPLENISH");
+        command.setTargetKey("RPL-IR-DRAFT");
+        factory.ecosystem(dms).execute(command);
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),
