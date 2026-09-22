@@ -42,6 +42,15 @@ public class HttpEcosystemClient implements EcosystemClient {
             copyParam(body, command.getParams(), "invoiceNo");
             copyParam(body, command.getParams(), "requestNo");
             copyParam(body, command.getParams(), "orderNo");
+            copyParam(body, command.getParams(), "aufnr");
+            copyParam(body, command.getParams(), "banfn");
+            copyParam(body, command.getParams(), "sku");
+            copyParam(body, command.getParams(), "matnr");
+            copyParam(body, command.getParams(), "ecnNo");
+            copyParam(body, command.getParams(), "bomNo");
+            copyParam(body, command.getParams(), "taskId");
+            copyParam(body, command.getParams(), "definitionCode");
+            copyParam(body, command.getParams(), "businessId");
         }
         try {
             HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, headers());
@@ -91,6 +100,33 @@ public class HttpEcosystemClient implements EcosystemClient {
         }
         if ("INV_APPROVE_REQUEST".equals(type)) {
             return "/api/open/ir/approve-request";
+        }
+        if ("SAP_CREATE_PR".equals(type)) {
+            return "/api/open/ir/create-pr";
+        }
+        if ("SAP_RELEASE_PR".equals(type)) {
+            return "/api/open/ir/release-pr";
+        }
+        if ("SAP_RELEASE_MO".equals(type)) {
+            return "/api/open/ir/release-mo";
+        }
+        if ("BOM_EXPLODE".equals(type)) {
+            return "/api/open/ir/explode";
+        }
+        if ("BOM_SUBMIT_ECN".equals(type)) {
+            return "/api/open/ir/submit-ecn";
+        }
+        if ("BOM_APPROVE_ECN".equals(type)) {
+            return "/api/open/ir/approve-ecn";
+        }
+        if ("BOM_IMPLEMENT_ECN".equals(type)) {
+            return "/api/open/ir/implement-ecn";
+        }
+        if ("OA_START_WORKFLOW".equals(type)) {
+            return "/api/open/ir/start-workflow";
+        }
+        if ("OA_APPROVE_TASK".equals(type) || "OA_COMPLETE_TASK".equals(type)) {
+            return "/api/open/ir/approve-task";
         }
         return null;
     }
