@@ -80,6 +80,9 @@ KEY (code)
 VALUES ('INV_REQUEST_DRAFT', '开票申请待提交', 'EXT_STATUS', '{"system":"INV","dataType":"INVOICE_REQUEST","status":"DRAFT"}', 'LOW', TRUE, 'INV_SUBMIT_REQUEST');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)
+VALUES ('INV_REQUEST_SUBMITTED', '开票申请待审核', 'EXT_STATUS', '{"system":"INV","dataType":"INVOICE_REQUEST","status":"SUBMITTED"}', 'MEDIUM', TRUE, 'INV_APPROVE_REQUEST');
+MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
+KEY (code)
 VALUES ('INV_INPUT_UNVERIFIED', '进项发票待查验', 'EXT_STATUS', '{"system":"INV","dataType":"INPUT_INVOICE","status":"UNVERIFIED"}', 'MEDIUM', TRUE, 'INV_VERIFY_INPUT');
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)

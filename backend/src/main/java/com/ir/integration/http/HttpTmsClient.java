@@ -90,7 +90,15 @@ public class HttpTmsClient implements TmsClient {
         body.put("waybillCode", command.getTargetKey());
         body.put("params", command.getParams());
         HttpSupport.putIdempotency(body, command);
-        HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, authHeaders());
+        try {
+            HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, authHeaders());
+        } catch (IntegrationException ex) {
+            String path = dedicatedPath(command.getType());
+            if (path == null || ex.isOutcomeUnknown()) {
+                throw ex;
+            }
+            HttpSupport.postMap(http, baseUrl + path, body, authHeaders());
+        }
         cachedSnapshot = null;
     }
 
@@ -139,6 +147,19 @@ public class HttpTmsClient implements TmsClient {
             }
             page++;
         }
+    }
+
+    private static String dedicatedPath(String type) {
+        if ("TMS_DISPATCH".equals(type)) {
+            return "/api/open/ir/dispatch";
+        }
+        if ("TMS_SYNC_TRACK".equals(type)) {
+            return "/api/open/ir/sync-track";
+        }
+        if ("TMS_SWITCH_CARRIER".equals(type)) {
+            return "/api/open/ir/switch-carrier";
+        }
+        return null;
     }
 
     private HttpHeaders authHeaders() {

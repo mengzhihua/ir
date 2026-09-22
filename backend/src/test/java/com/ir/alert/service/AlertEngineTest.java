@@ -88,6 +88,7 @@ class AlertEngineTest {
         assertTrue(rules.contains("OA_WF_PENDING"));
         assertTrue(rules.contains("ASN_DELAY"));
         assertTrue(rules.contains("INV_REQUEST_DRAFT"));
+        assertTrue(rules.contains("INV_REQUEST_SUBMITTED"));
         assertTrue(rules.contains("INV_INPUT_UNVERIFIED"));
         assertTrue(rules.contains("BOM_ECN_DRAFT"));
         assertTrue(rules.contains("SAP_PR_OPEN"));
