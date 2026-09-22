@@ -313,6 +313,32 @@ class ActionQueueTest {
     }
 
     @Test
+    void ecosystemActionsAdvanceLocalSnapshot() {
+        ExtSnapshot replenish = snapshot("DMS", "REPLENISH", "RPL-MUTATE-1", "DRAFT");
+        replenish.setSku("P-OIL-01");
+        replenish.setPlantCode("D001");
+        extMapper.insert(replenish);
+        ExtSnapshot invoice = snapshot("INV", "INPUT_INVOICE", "INV-MUTATE-1", "UNVERIFIED");
+        extMapper.insert(invoice);
+        ExtSnapshot pr = snapshot("SRM", "PR", "PR-MUTATE-1", "SUBMITTED");
+        pr.setSku("SKU001");
+        pr.setPlantCode("P001");
+        extMapper.insert(pr);
+
+        assertEquals("SUCCESS", actions.createAndExecute(
+                pending("DMS_PUSH_REPLENISH", "RPL-MUTATE-1", null)).getStatus());
+        assertEquals("PUSHED", extMapper.selectById(replenish.getId()).getStatus());
+
+        assertEquals("SUCCESS", actions.createAndExecute(
+                pending("INV_VERIFY_INPUT", "INV-MUTATE-1", null)).getStatus());
+        assertEquals("VERIFIED", extMapper.selectById(invoice.getId()).getStatus());
+
+        assertEquals("SUCCESS", actions.createAndExecute(
+                pending("SRM_APPROVE_PR", "PR-MUTATE-1", null)).getStatus());
+        assertEquals("APPROVED", extMapper.selectById(pr.getId()).getStatus());
+    }
+
+    @Test
     void policyUpdateRestoresBalanced() {
         policy.update(BigDecimal.valueOf(0.5), BigDecimal.valueOf(0.5));
         assertEquals("BALANCED", policy.stance());
@@ -328,6 +354,17 @@ class ActionQueueTest {
         }
         request.put("params", params);
         return request;
+    }
+
+    private ExtSnapshot snapshot(String system, String dataType, String bizKey, String status) {
+        ExtSnapshot row = new ExtSnapshot();
+        row.setSourceSystem(system);
+        row.setDataType(dataType);
+        row.setBizKey(bizKey);
+        row.setStatus(status);
+        row.setTitle(dataType + " " + bizKey);
+        row.setSyncedAt(LocalDateTime.now());
+        return row;
     }
 
     private BigDecimal paramDecimal(CtAction action, String key) {

@@ -83,6 +83,7 @@ class AlertEngineTest {
         assertTrue(rules.contains("EXCEPTION_SHIPMENT"));
         assertTrue(rules.contains("SAP_LOW_STOCK"));
         assertTrue(rules.contains("SRM_PR_DRAFT"));
+        assertTrue(rules.contains("SRM_PR_SUBMITTED"));
         assertTrue(rules.contains("DMS_PART_SHORTAGE"));
         assertTrue(rules.contains("DMS_REPLENISH_DRAFT"));
         assertTrue(rules.contains("CRM_OPEN_CASE"));
@@ -92,6 +93,8 @@ class AlertEngineTest {
         assertTrue(rules.contains("INV_REQUEST_SUBMITTED"));
         assertTrue(rules.contains("INV_INPUT_UNVERIFIED"));
         assertTrue(rules.contains("BOM_ECN_DRAFT"));
+        assertTrue(rules.contains("BOM_ECN_SUBMITTED"));
+        assertTrue(rules.contains("BOM_ECN_APPROVED"));
         assertTrue(rules.contains("SAP_PR_OPEN"));
         assertTrue(rules.contains("SAP_MO_OPEN"));
         assertTrue(rules.contains("CRM_STALE_OPP"));
