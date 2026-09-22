@@ -637,6 +637,9 @@ public class ActionService {
         if (type.contains("IMPLEMENT")) {
             return "IMPLEMENTED";
         }
+        if (type.contains("REPLENISH_SHORTAGE")) {
+            return "COVERED";
+        }
         return null;
     }
 

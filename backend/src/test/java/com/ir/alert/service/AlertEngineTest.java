@@ -159,6 +159,15 @@ class AlertEngineTest {
     }
 
     @Test
+    void ecosystemLadderSuggestedActions() {
+        alertEngine.evaluate();
+        assertSuggested("SAP_MO_OPEN", "SAP_RELEASE_MO");
+        assertSuggested("BOM_ECN_APPROVED", "BOM_IMPLEMENT_ECN");
+        assertSuggested("CRM_OPEN_CASE", "CRM_ESCALATE_CASE");
+        assertSuggested("DMS_PART_SHORTAGE", "DMS_REPLENISH_SHORTAGE");
+    }
+
+    @Test
     void costOverrunExecutesSwitchOnWaybillNotWarehouse() {
         alertEngine.evaluate();
         CtAlert overrun = alertMapper.selectList(null).stream()
@@ -657,5 +666,13 @@ class AlertEngineTest {
         assertNotNull(after);
         assertEquals("RESOLVED", after.getStatus());
         assertNotNull(after.getResolvedAt());
+    }
+
+    private void assertSuggested(String ruleCode, String action) {
+        CtAlert alert = alertMapper.selectList(null).stream()
+                .filter(row -> ruleCode.equals(row.getRuleCode()))
+                .findFirst().orElse(null);
+        assertNotNull(alert, "应打出规则 " + ruleCode);
+        assertEquals(action, alert.getSuggestedAction());
     }
 }

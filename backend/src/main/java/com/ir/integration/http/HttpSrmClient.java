@@ -137,8 +137,17 @@ public class HttpSrmClient implements SrmClient {
             if (command.getIdempotencyKey() != null) {
                 body.put("idempotencyKey", command.getIdempotencyKey());
             }
-            Map<String, Object> response = HttpSupport.postMap(
-                    http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            Map<String, Object> response;
+            try {
+                response = HttpSupport.postMap(
+                        http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            } catch (IntegrationException ex) {
+                if (!"SRM_PURCHASE_SUGGEST".equals(command.getType()) || ex.isOutcomeUnknown()) {
+                    throw ex;
+                }
+                response = HttpSupport.postMap(
+                        http, baseUrl + "/api/open/ir/purchase-suggest", body, HttpSupport.apiKey(apiKey));
+            }
             Object data = response.get("data");
             if (data instanceof Map) {
                 result.putAll((Map<String, Object>) data);
@@ -147,6 +156,7 @@ public class HttpSrmClient implements SrmClient {
             }
             result.put("type", command.getType());
             result.put("targetKey", command.getTargetKey());
+            cachedSnapshot = null;
             return result;
         }
         if ("SRM_PURCHASE_SUGGEST".equals(command.getType())) {

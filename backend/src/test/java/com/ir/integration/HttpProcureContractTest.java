@@ -291,6 +291,36 @@ class HttpProcureContractTest {
         server.verify();
     }
 
+    @Test
+    void srmActionsMissingFallsBackToPurchaseSuggest() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://srm.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "srm-wms-key"))
+                .andExpect(jsonPath("$.type").value("SRM_PURCHASE_SUGGEST"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://srm.local/api/open/ir/purchase-suggest"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "srm-wms-key"))
+                .andExpect(jsonPath("$.sku").value("SKU001"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"code\":\"PR-FALLBACK\",\"status\":\"DRAFT\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP,OA,SRM");
+        ActionCommand command = new ActionCommand();
+        command.setType("SRM_PURCHASE_SUGGEST");
+        command.setTargetKey("SKU001");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
+        params.put("sku", "SKU001");
+        params.put("qty", 5);
+        command.setParams(params);
+        command.setIdempotencyKey("SRM-SUG-FALLBACK");
+        Map<String, Object> result = factory.srm(system("SRM", "http://srm.local", "srm-wms-key")).execute(command);
+        assertEquals("PR-FALLBACK", result.get("code"));
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),
