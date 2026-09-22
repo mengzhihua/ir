@@ -158,6 +158,31 @@ class HttpOtwbContractTest {
         server.verify();
     }
 
+    @Test
+    void wmsActionsMissingFallsBackToDedicatedPath() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://wms.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "wms-open-key"))
+                .andExpect(jsonPath("$.type").value("WMS_ALLOCATE"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://wms.local/api/open/ir/allocate"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "wms-open-key"))
+                .andExpect(jsonPath("$.orderCode").value("SO-IR-STUCK"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"ALLOCATED\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        ClientFactory factory = factory(http, "OMS,WMS,TMS");
+        ActionCommand command = new ActionCommand();
+        command.setType("WMS_ALLOCATE");
+        command.setTargetKey("SO-IR-STUCK");
+        factory.wms(system("WMS", "http://wms.local", "wms-open-key")).execute(command);
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),

@@ -95,13 +95,17 @@ public class HttpWmsClient implements WmsClient {
 
     @Override
     public void execute(ActionCommand command) {
+        Map<String, Object> body = openIrBody(command);
         if (hasApiKey()) {
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("type", command.getType());
-            body.put("targetKey", command.getTargetKey());
-            body.put("params", command.getParams());
-            HttpSupport.putIdempotency(body, command);
-            HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            try {
+                HttpSupport.postMap(http, baseUrl + "/api/open/ir/actions", body, HttpSupport.apiKey(apiKey));
+            } catch (IntegrationException ex) {
+                String path = dedicatedPath(command.getType());
+                if (path == null || ex.isOutcomeUnknown()) {
+                    throw ex;
+                }
+                HttpSupport.postMap(http, baseUrl + path, body, HttpSupport.apiKey(apiKey));
+            }
             cachedSnapshot = null;
             return;
         }
@@ -109,12 +113,12 @@ public class HttpWmsClient implements WmsClient {
             HttpSupport.postMap(http, baseUrl + "/api/outbound/order/"
                     + command.getTargetKey() + "/allocate", command.getParams(), headers());
         } else if ("WMS_REPLENISH".equals(command.getType())) {
-            Map<String, Object> body = new LinkedHashMap<>(command.getParams());
+            Map<String, Object> generate = new LinkedHashMap<>(command.getParams());
             if (command.getIdempotencyKey() != null) {
-                body.put("requestNo", command.getIdempotencyKey());
+                generate.put("requestNo", command.getIdempotencyKey());
             }
             HttpSupport.postMap(http, baseUrl + "/api/inventory/replenish/generate",
-                    body, headers());
+                    generate, headers());
         }
     }
 
@@ -194,6 +198,41 @@ public class HttpWmsClient implements WmsClient {
 
     private boolean hasApiKey() {
         return apiKey != null && !apiKey.trim().isEmpty();
+    }
+
+    private static Map<String, Object> openIrBody(ActionCommand command) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", command.getType());
+        body.put("targetKey", command.getTargetKey());
+        body.put("orderCode", command.getTargetKey());
+        body.put("warehouseCode", command.getTargetKey());
+        body.put("params", command.getParams());
+        if (command.getParams() != null) {
+            copyParam(body, command.getParams(), "warehouseCode");
+            copyParam(body, command.getParams(), "fromWarehouseCode");
+            copyParam(body, command.getParams(), "sku");
+            copyParam(body, command.getParams(), "qty");
+            copyParam(body, command.getParams(), "ownerCode");
+        }
+        HttpSupport.putIdempotency(body, command);
+        return body;
+    }
+
+    private static void copyParam(Map<String, Object> body, Map<String, Object> params, String name) {
+        Object value = params.get(name);
+        if (value != null) {
+            body.put(name, value);
+        }
+    }
+
+    private static String dedicatedPath(String type) {
+        if ("WMS_ALLOCATE".equals(type)) {
+            return "/api/open/ir/allocate";
+        }
+        if ("WMS_REPLENISH".equals(type)) {
+            return "/api/open/ir/replenish";
+        }
+        return null;
     }
 
     private static BigDecimal decimal(Map<String, Object> row, String... names) {
