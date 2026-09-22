@@ -321,6 +321,91 @@ class HttpProcureContractTest {
         server.verify();
     }
 
+    @Test
+    void sapActionsMissingFallsBackToReleaseMo() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://sap.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "sap-open-key"))
+                .andExpect(jsonPath("$.type").value("SAP_RELEASE_MO"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://sap.local/api/open/ir/release-mo"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "sap-open-key"))
+                .andExpect(jsonPath("$.targetKey").value("IR10000100"))
+                .andExpect(jsonPath("$.aufnr").value("IR10000100"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"REL\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP,OA,BOM");
+        ActionCommand command = new ActionCommand();
+        command.setType("SAP_RELEASE_MO");
+        command.setTargetKey("IR10000100");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
+        params.put("aufnr", "IR10000100");
+        command.setParams(params);
+        factory.ecosystem(system("SAP", "http://sap.local", "sap-open-key")).execute(command);
+        server.verify();
+    }
+
+    @Test
+    void bomActionsMissingFallsBackToImplementEcn() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://bom.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "bom-open-key"))
+                .andExpect(jsonPath("$.type").value("BOM_IMPLEMENT_ECN"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://bom.local/api/open/ir/implement-ecn"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "bom-open-key"))
+                .andExpect(jsonPath("$.targetKey").value("ECN-IR-APPROVED"))
+                .andExpect(jsonPath("$.ecnNo").value("ECN-IR-APPROVED"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"status\":\"IMPLEMENTED\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP,OA,BOM");
+        ActionCommand command = new ActionCommand();
+        command.setType("BOM_IMPLEMENT_ECN");
+        command.setTargetKey("ECN-IR-APPROVED");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
+        params.put("ecnNo", "ECN-IR-APPROVED");
+        command.setParams(params);
+        factory.ecosystem(system("BOM", "http://bom.local", "bom-open-key")).execute(command);
+        server.verify();
+    }
+
+    @Test
+    void oaActionsMissingFallsBackToStartWorkflow() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://oa.local/api/open/ir/actions"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "oa-open-key"))
+                .andExpect(jsonPath("$.type").value("OA_START_WORKFLOW"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.NOT_FOUND));
+        server.expect(requestTo("http://oa.local/api/open/ir/start-workflow"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Api-Key", "oa-open-key"))
+                .andExpect(jsonPath("$.targetKey").value("MAT-1000"))
+                .andExpect(jsonPath("$.definitionCode").value("GENERAL"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"instanceNo\":\"WF-FALLBACK\"}}",
+                        MediaType.APPLICATION_JSON));
+        ClientFactory factory = factory(http, "SAP,OA,BOM");
+        ActionCommand command = new ActionCommand();
+        command.setType("OA_START_WORKFLOW");
+        command.setTargetKey("MAT-1000");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
+        params.put("definitionCode", "GENERAL");
+        command.setParams(params);
+        factory.ecosystem(system("OA", "http://oa.local", "oa-open-key")).execute(command);
+        server.verify();
+    }
+}
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),
