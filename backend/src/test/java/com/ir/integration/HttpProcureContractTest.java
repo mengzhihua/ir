@@ -404,7 +404,6 @@ class HttpProcureContractTest {
         factory.ecosystem(system("OA", "http://oa.local", "oa-open-key")).execute(command);
         server.verify();
     }
-}
 
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
