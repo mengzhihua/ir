@@ -23,6 +23,7 @@
           >登录控制塔</el-button
         >
       </el-form>
+      <div class="hint"><router-link to="/intro">先看这套系统能做什么</router-link></div>
       <div class="hint">默认管理员：admin / admin123</div>
     </div>
   </div>

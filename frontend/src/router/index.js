@@ -96,6 +96,7 @@ export const menus = [
 export const visibleMenus = () => menus.filter((item) => !item.adminOnly || isAdmin())
 const routes = [
   { path: '/login', component: () => import('../views/Login.vue') },
+  { path: '/intro', component: () => import('../views/Intro.vue') },
   {
     path: '/',
     component: Layout,
@@ -105,6 +106,7 @@ const routes = [
 ]
 const router = createRouter({ history: createWebHistory(), routes })
 router.beforeEach((to) => {
+  if (to.path === '/intro') return true
   if (to.path === '/login') return auth.token ? '/dashboard' : true
   if (!auth.token) return { path: '/login', query: { redirect: to.fullPath } }
   if (to.path.startsWith('/system') && !isAdmin()) return '/dashboard'
