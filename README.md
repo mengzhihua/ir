@@ -42,7 +42,45 @@ npm run dev
 
 ## 对接
 
-系统接入配置预置 OMS/TMS/WMS/BMS/SRM/SAP/OA/BOM/INV/CRM/DMS 为 `MOCK`。SRM HTTP 使用 `/api/purchase/order/page`、`/api/delivery/asn/page`、`/api/evaluation/page`，并通过 `POST /api/sourcing/pr` + `/submit` 下发采购申请、`PUT /api/purchase/order/{id}` 催单；SAP HTTP 使用 `/api/mm/stock`、`/api/fi/ap/open-items`、`/api/fi/ar/open-items`、`/api/dashboard/summary`；其他生态系统走 `/api/open/ir/snapshots` 与 `/api/open/ir/actions`。切换 HTTP 时使用 OTWB 事实表中的端点：OMS `/api/order/page`、`/api/inventory/page`、`/api/dashboard`、`/api/report/order-daily`；WMS `/api/outbound/order/page`、`/api/inventory/summary`、`/api/dashboard`、`/api/report/kpi`；TMS `/api/waybill/page`、`/api/billing/page`、`/api/dashboard`。BMS 成本走 `GET /api/open/cost/records?from&to`。
+接入配置预置 OMS / TMS / WMS / BMS / SRM / SAP / OA / BOM / INV / CRM / DMS 为 `MOCK`。切到 HTTP 后，读快照优先 `GET /api/open/ir/snapshots`（请求头 `X-Api-Key`）。没有 Key 时，OMS / WMS / TMS / SRM / SAP 回退各系统自己的分页和看板接口。BMS 成本始终走 `GET /api/open/cost/records?from&to`，不接受写指令。
+
+写指令看有没有 API Key。
+
+**有 Key**：先 `POST /api/open/ir/actions`，请求体带 `idempotencyKey`。对方返回可判定的失败（例如旧版本没有统一口，HTTP 404）时，按指令类型回退专用口；超时或结果不明则不再重试，避免重复下发。专用口都挂在 `/api/open/ir` 下：
+
+| 系统 | 专用口 |
+| --- | --- |
+| OMS | `/hold` `/unhold` `/reroute` `/auto` `/cancel` `/prioritize` |
+| WMS | `/allocate` `/replenish` |
+| TMS | `/dispatch` `/sync-track` `/switch-carrier` |
+| SRM | `/purchase-suggest` `/submit-pr` `/approve-pr` `/expedite-po` |
+| SAP | `/create-pr` `/release-pr` `/release-mo` |
+| BOM | `/explode` `/submit-ecn` `/approve-ecn` `/implement-ecn` |
+| INV | `/verify-input` `/submit-request` `/approve-request` |
+| OA | `/start-workflow` `/approve-task` |
+| CRM | `/advance-stage` `/escalate-case` |
+| DMS | `/replenish-shortage` `/push-replenish` |
+
+**没有 Key（登录模式）**：用接入配置里的账号密码登录，再打业务口。仓号 `WH-SH` / `WH-BJ` / `WH-GZ` 下发 WMS 时映成 `WH01` / `WH02` / `WH03`。
+
+| 指令 | 业务口 |
+| --- | --- |
+| OMS 挂起 / 解挂 / 改仓 / 一键处理 / 取消 | `POST /api/order/{orderNo}/hold`、`/unhold`、`/reroute`、`/auto`、`/cancel` |
+| OMS 加急 | `POST /api/order/{orderNo}/remark` |
+| WMS 分配 | 按出库单号查出 id，`POST /api/outbound/order/{id}/allocate` |
+| WMS 补货 | 源仓与目标仓不同：`POST /api/inventory/replenish/transfer`；同仓：`POST /api/inventory/replenish/generate` |
+| TMS | 仍打 Open IR `/actions` 与专用口，不走运单登录口 |
+| SRM 采购建议 / 提交 / 审批 | `POST /api/sourcing/pr`，再 `/{id}/submit` 或 `/{id}/approve` |
+| SRM 催单 | 按采购单号查出 id，`PUT /api/purchase/order/{id}` |
+| SAP 建采购申请 | `POST /api/mm/pr` |
+| SAP 释放采购申请 / 生产订单 | `POST /api/mm/pr/{banfn}/release`、`POST /api/pp/orders/{aufnr}/release` |
+| DMS 按缺货生成 | `POST /api/oms/replenish/from-shortage?dealerCode=` |
+| DMS 下发补货 | 按补货单号查出 id，`POST /api/oms/replenish/{id}/push` |
+| OA / BOM / INV / CRM | 登录模式不执行，需要 API Key |
+
+OMS 挂起只接受 `CREATED` / `AUDITED`，解除挂起回到 `CREATED`。OA 通用流程登录口不允许带业务单号，所以发起审批仍走 Open IR。
+
+无 Key 时的读数回退：OMS `/api/order/page`、`/api/inventory/page`、`/api/dashboard`、`/api/report/order-daily`；WMS `/api/outbound/order/page`、`/api/inventory/summary`、`/api/dashboard`、`/api/report/kpi`；TMS `/api/waybill/page`、`/api/billing/page`、`/api/dashboard`；SRM `/api/purchase/order/page`、`/api/delivery/asn/page`、`/api/evaluation/page`；SAP `/api/mm/stock`、`/api/fi/ap/open-items`、`/api/fi/ar/open-items`、`/api/dashboard/summary`。
 
 HTTP 集成的 `baseUrl` 只接受 HTTP/HTTPS URL，并实现了 loopback、链路本地和
 `169.254.0.0/16` 云元数据地址检查。默认
