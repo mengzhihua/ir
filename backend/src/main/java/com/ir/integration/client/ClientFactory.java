@@ -155,7 +155,8 @@ public class ClientFactory {
 
     public EcosystemClient ecosystem(CtSystem system) {
         if (httpMode(system)) {
-            return new HttpEcosystemClient(http, system.getBaseUrl(), system.getApiKey());
+            return new HttpEcosystemClient(http, system.getBaseUrl(), system.getApiKey(),
+                    system.getUsername(), system.getPassword());
         }
         String code = system == null ? "SAP" : system.getCode();
         return new EcosystemClient() {

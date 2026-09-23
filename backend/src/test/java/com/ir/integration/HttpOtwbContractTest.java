@@ -240,6 +240,40 @@ class HttpOtwbContractTest {
         server.verify();
     }
 
+    @Test
+    void wmsLoginModeTransfersAcrossWarehouses() {
+        RestTemplate http = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(http).build();
+        server.expect(requestTo("http://wms.local/api/auth/login"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"code\":0,\"data\":{\"token\":\"wms-token\"}}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://wms.local/api/inventory/replenish/transfer"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer wms-token"))
+                .andExpect(jsonPath("$.fromWarehouseCode").value("WH01"))
+                .andExpect(jsonPath("$.warehouseCode").value("WH02"))
+                .andExpect(jsonPath("$.sku").value("SKU001"))
+                .andRespond(withSuccess("{\"code\":0,\"data\":[{\"status\":\"DONE\"}]}",
+                        MediaType.APPLICATION_JSON));
+
+        ClientFactory factory = factory(http, "OMS,WMS,TMS");
+        CtSystem wms = system("WMS", "http://wms.local", null);
+        wms.setUsername("admin");
+        wms.setPassword("admin123");
+        ActionCommand command = new ActionCommand();
+        command.setType("WMS_REPLENISH");
+        command.setTargetKey("WH-BJ");
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<String, Object>();
+        params.put("warehouseCode", "WH-BJ");
+        params.put("fromWarehouseCode", "WH-SH");
+        params.put("sku", "SKU001");
+        params.put("qty", 5);
+        command.setParams(params);
+        factory.wms(wms).execute(command);
+        server.verify();
+    }
+
     private static ClientFactory factory(RestTemplate http, String systems) {
         return new ClientFactory(
                 null, null, null, null, null, null, new MockEcosystemClient(),
