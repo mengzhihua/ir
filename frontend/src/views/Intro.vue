@@ -48,6 +48,29 @@
     </section>
 
     <section class="block">
+      <h2>和震坤行采购商城怎么对上</h2>
+      <p class="note">对照的是 zkh.com 公开讲的找货、协议价、需求清单和批量询价，不是把对方的商品数量、仓网或送达时效写到我们头上。</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>震坤行公开在讲</th>
+              <th>我们现在有</th>
+              <th>还要补</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in zkh" :key="row.theirs">
+              <td>{{ row.theirs }}</td>
+              <td>{{ row.ours }}</td>
+              <td>{{ row.next }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block">
       <h2>十二套系统各自站在哪</h2>
       <div class="grid">
         <article v-for="card in systems" :key="card.name" class="card">
@@ -117,13 +140,30 @@ const compare = [
     next: '把每次能力发布写成控制塔里的更新说明'
   }
 ]
+const zkh = [
+  {
+    theirs: '按目录、品牌、制造商料号和关键词找货',
+    ours: '物料记下品牌和制造商料号。一段文字按编码、料号，或品牌加料号匹配',
+    next: '按品类做商城式浏览，而不是只在采购页里选物料'
+  },
+  {
+    theirs: '协议价、折扣和批量询价后立刻下单',
+    ours: '采购订单没填单价时，用当天有效且达到起订量的协议价。询价定标仍会生成采购订单',
+    next: '把折扣档和协议价放在同一个选品页面'
+  },
+  {
+    theirs: '需求清单先收集，再核对匹配结果',
+    ours: '需求清单可以转成采购申请草稿。还有未匹配的行时，整单不转',
+    next: '收藏、浏览历史和优惠券'
+  }
+]
 const systems = [
   { kicker: '执行', name: 'OMS 订单', text: '接单、审核、分仓、拆单、合单、推出库。发运后登记短信或邮件，默认不连通知网关。' },
   { kicker: '执行', name: 'WMS 仓储', text: '入库、库存、波次拣选、复核装箱。计件金额按仓库、货主和班次汇总。' },
   { kicker: '执行', name: 'TMS 运配', text: '运单、发车、在途和签收。取号报文按承运商组装，并标明这是沙箱报文。' },
   { kicker: '执行', name: 'BMS 核算', text: '同一张费率表支持固定、单价、阶梯、累进和首重续重。运费差额可以单独入账。' },
   { kicker: '决策', name: 'IR 控制塔', text: '把十二套系统的快照放在一起，做预警、补货、资金盘沙盘和跨系统指令。' },
-  { kicker: '供应', name: 'SRM / BOM / DMS', text: '采购、工程变更和渠道补货。收货数量按累计回传，避免重复加数。' },
+  { kicker: '供应', name: 'SRM / BOM / DMS', text: '采购申请、询价和协议价。需求可以按品牌和制造商料号匹配，匹配不上的不转申请。' },
   { kicker: '财务', name: 'SAP / INV', text: '演示财务过账、交货和进项三单匹配，开具与查验分开。' },
   { kicker: '协同', name: 'CRM / OA', text: '商机推进到谈判后单独关单。待办审批不代替业务单据往下走。' }
 ]
