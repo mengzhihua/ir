@@ -128,6 +128,25 @@ const page = await context.newPage()
 const results = []
 
 try {
+  await page.goto(`${baseUrl}/intro`, { waitUntil: 'networkidle' })
+  const intro = await page.locator('body').innerText()
+  if (!intro.includes('科捷') || !intro.includes('承运商择优') || !intro.includes('分阶段补齐')) {
+    results.push('/intro FAIL 介绍页缺少对照或阶段说明')
+  } else if (invalidText(intro)) {
+    results.push('/intro FAIL 页面包含非法占位文本')
+  } else {
+    results.push('/intro PASS')
+  }
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(`${baseUrl}/intro`, { waitUntil: 'networkidle' })
+  const narrow = await page.locator('h1').boundingBox()
+  if (!narrow || narrow.width > 390) {
+    results.push('/intro mobile FAIL 标题超出窄屏')
+  } else {
+    results.push('/intro mobile PASS')
+  }
+  await page.setViewportSize({ width: 1280, height: 800 })
+
   await login(page, 'admin', 'admin123')
   for (const [route, interaction] of routes) {
     try {

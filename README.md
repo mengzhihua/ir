@@ -37,6 +37,7 @@ npm run dev
 前端使用 Vite + Vue 3 + vue-router 4 + Element Plus + ECharts/vue-echarts，位于
 `frontend/`。开发服务监听 `5174`，并将 `/api` 代理到 `http://localhost:8090`。
 登录令牌保存在 `localStorage` 的 `ir_token`，用户信息保存在 `ir_user`。
+未登录可打开 `/intro`，查看和科捷金库四件套的对照、已经有的能力，以及后面要补的运配评级、逆向和计件。登录后顶栏也能进入这一页。
 控制塔、业务目标、自动平衡、供应协同、追踪、预警、规则、动作、预测、补货、沙盘、场景对比、成本、系统集成、
 用户和操作日志页面均已提供；前端写操作按 ADMIN/PLANNER 与 VIEWER 角色隐藏。
 

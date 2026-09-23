@@ -18,8 +18,9 @@
     </el-aside>
     <el-container>
       <el-header class="header">
-        <div>
+        <div class="header-title">
           <span class="crumb">供应链控制塔</span><span class="muted"> / {{ currentName }}</span>
+          <el-button link type="primary" @click="router.push('/intro')">产品介绍</el-button>
         </div>
         <el-dropdown @command="command">
           <span class="user"
@@ -107,6 +108,11 @@ async function changePassword() {
   align-items: center;
   background: #fff;
   border-bottom: 1px solid #e9eef5;
+}
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .crumb {
   font-weight: 600;
