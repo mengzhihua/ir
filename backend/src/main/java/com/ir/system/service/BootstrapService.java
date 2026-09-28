@@ -24,6 +24,9 @@ public class BootstrapService implements CommandLineRunner {
     @Value("${ir.sandbox.auto-on-startup:true}")
     private boolean autoOnStartup;
 
+    @Value("${ir.admin-password:admin123}")
+    private String adminPassword;
+
     public BootstrapService(
             SyncService syncService,
             WarehouseCodeMigration warehouseCodeMigration,
@@ -54,8 +57,16 @@ public class BootstrapService implements CommandLineRunner {
         sandboxService.ensureBaseline();
         User admin = users.find("admin");
         if (admin != null && UserStore.verify("admin123", admin.getPassword())) {
-            org.slf4j.LoggerFactory.getLogger(BootstrapService.class)
-                    .warn("admin仍使用默认密码，请尽快修改");
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(BootstrapService.class);
+            if (adminPassword != null
+                    && !adminPassword.trim().isEmpty()
+                    && !"admin123".equals(adminPassword)) {
+                admin.setPassword(UserStore.hash(adminPassword));
+                users.save(admin);
+                logger.info("已按 IR_ADMIN_PASSWORD 设置管理员初始密码");
+            } else {
+                logger.warn("admin仍使用默认密码，请尽快修改");
+            }
         }
         if (autoOnStartup) {
             autoSandboxService.run();
