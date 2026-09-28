@@ -24,7 +24,7 @@ public class BootstrapService implements CommandLineRunner {
     @Value("${ir.sandbox.auto-on-startup:true}")
     private boolean autoOnStartup;
 
-    @Value("${ir.admin-password:admin123}")
+    @Value("${ir.auth.admin-password:admin123}")
     private String adminPassword;
 
     public BootstrapService(

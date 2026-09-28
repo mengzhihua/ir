@@ -17,7 +17,7 @@ import org.springframework.test.context.TestPropertySource;
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
         "spring.datasource.url=jdbc:h2:mem:admin-password;MODE=MySQL;DB_CLOSE_DELAY=-1",
-        "ir.admin-password=Str0ngPass!"
+        "ir.auth.admin-password=Str0ngPass!"
 })
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class AdminPasswordBootstrapTest {
