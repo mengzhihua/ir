@@ -112,10 +112,14 @@ Pull Request 会执行后端 Maven verify、前端 lint、Prettier 检查、Vite
 ## Docker 部署
 
 ```bash
+cp .env.example .env
+# Set IR_AUTH_SECRET in .env before startup.
 docker compose up -d
 ```
 
-服务监听 `8090`，H2 数据保存在 `ir-data` volume 中。可复制 `.env.example` 为本地环境文件后调整配置。
+首次登录后请立即修改管理员密码。默认端口仅绑定本机 `127.0.0.1:8090`；
+如需外部访问，请在前面配置反向代理，或修改 Compose 的端口映射。
+H2 数据保存在 `ir-data` volume 中，`.env` 用于覆盖部署配置。
 
 ## 业务目标与自动平衡
 

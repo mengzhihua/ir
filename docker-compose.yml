@@ -1,10 +1,11 @@
 services:
   ir:
     build: .
-    ports:
-      - "8090:8090"
     env_file:
-      - .env.example
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:8090:8090"
     volumes:
       - ir-data:/app/data
 

@@ -84,10 +84,14 @@ async function command(value) {
 async function changePassword() {
   if (!oldPassword.value) return ElMessage.warning('请输入旧密码')
   if (newPassword.value.length < 6) return ElMessage.warning('新密码至少 6 位')
-  await authApi.password({
-    oldPassword: oldPassword.value,
-    newPassword: newPassword.value
-  })
+  try {
+    await authApi.password({
+      oldPassword: oldPassword.value,
+      newPassword: newPassword.value
+    })
+  } catch {
+    return
+  }
   ElMessage.success('密码修改成功，请重新登录')
   clearAuth()
   router.replace('/login')
