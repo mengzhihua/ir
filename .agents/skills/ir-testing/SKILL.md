@@ -16,6 +16,7 @@ description: Run role-aware browser end-to-end checks for the IR supply-chain co
 - Check `backend/src/main/resources/data.sql` rather than guessing passwords from usernames.
 - At the tested seed revision, admin, planner, and viewer all use `admin123`; hashes are already PBKDF2.
 - Login of those seeds does not test legacy SHA-256 migration. That requires an explicitly authorized legacy-hash fixture.
+- Chrome may show a native compromised-password warning after seed login. Dismiss it visibly before scripted menu sweeps, and assert the expected URL after each menu click; DOM clicks can otherwise appear to succeed behind the native modal.
 - The planner can sync and execute actions but cannot save integration system configuration or enter the frontend `/system/user` route. Viewer write controls are hidden on Alert/Sandbox/Action.
 
 ## Useful UI paths
@@ -24,6 +25,7 @@ description: Run role-aware browser end-to-end checks for the IR supply-chain co
 - Lead0 plus higher demand can eliminate stockouts; use a positive lead time scenario if warehouse-SKU replenishment targets are required.
 - Compare offers all scenario kinds, including auto candidates; the baseline may be at the bottom of the select menu.
 - Batch replenishment defaults to executing immediately and may return an existing action. The demo can have only one shortage row.
+- If replenishment is empty with 只看缺口 selected, switch to 全部 and click 查询 to distinguish a healthy zero-shortage state from a data-loading failure. Do not infer a failed endpoint from the default empty view.
 - Balance manual runs can return zero new decisions because all candidates are cooling down. Record that result separately from approving/rejecting existing pending decisions.
 - Action creation with purchase quantity0 provides a non-destructive FAILED action fixture. Retry creates a new failed row and marks the original RETRIED.
 - Rule UI exposes updates, not create/delete. Test JSON validation and persistence, then restore parameters.
