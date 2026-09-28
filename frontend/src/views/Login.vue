@@ -44,8 +44,8 @@ async function submit() {
     const data = await authApi.login(form)
     setAuth(data.token, data.user)
     router.replace(route.query.redirect || '/dashboard')
-  } catch (e) {
-    ElMessage.error(e.message || '登录失败')
+  } catch {
+    // 拦截器已提示错误
   } finally {
     loading.value = false
   }
