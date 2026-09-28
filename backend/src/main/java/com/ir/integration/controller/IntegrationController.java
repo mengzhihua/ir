@@ -22,6 +22,7 @@ import com.ir.snapshot.entity.ExtSnapshot;
 import com.ir.snapshot.mapper.ExtSnapshotMapper;
 import java.util.List;
 import java.util.Map;
+import javax.validation.Valid;
 
 @RestController
 @RequestMapping("/api/integration")
@@ -55,7 +56,7 @@ public class IntegrationController {
     @PutMapping("/system/{id}")
     public R<CtSystem> update(
             @PathVariable Long id,
-            @RequestBody CtSystem request) {
+            @Valid @RequestBody CtSystem request) {
         CtSystem existing = systemMapper.selectById(id);
         if (existing == null) {
             return R.fail(404, "系统不存在");
@@ -85,7 +86,7 @@ public class IntegrationController {
     }
 
     @PostMapping("/system")
-    public R<CtSystem> create(@RequestBody CtSystem request) {
+    public R<CtSystem> create(@Valid @RequestBody CtSystem request) {
         baseUrls.validate(request.getBaseUrl());
         systemMapper.insert(request);
         return R.ok(systemMapper.selectById(request.getId()));

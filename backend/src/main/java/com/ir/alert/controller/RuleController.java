@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import javax.validation.Valid;
 import com.ir.alert.entity.CtRule;
 import com.ir.alert.mapper.CtRuleMapper;
 import com.ir.common.R;
@@ -36,7 +37,7 @@ public class RuleController {
     @PutMapping("/{id}")
     public R<CtRule> update(
             @PathVariable Long id,
-            @RequestBody CtRule request) {
+            @Valid @RequestBody CtRule request) {
         request.setId(id);
         mapper.updateById(request);
         return R.ok(mapper.selectById(id));

@@ -2,7 +2,10 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { auth, clearAuth } from '../auth'
 
-const http = axios.create({ baseURL: '/api', timeout: 20000 })
+const http = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE || '/api',
+  timeout: 20000
+})
 http.interceptors.request.use((config) => {
   if (auth.token) config.headers.Authorization = `Bearer ${auth.token}`
   return config

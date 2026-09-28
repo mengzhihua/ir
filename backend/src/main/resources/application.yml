@@ -1,5 +1,5 @@
 server:
-  port: 8090
+  port: ${SERVER_PORT:8090}
 spring:
   application:
     name: ir-backend
@@ -53,3 +53,11 @@ ir:
     auto-purchase-amount-limit: ${IR_BALANCE_PURCHASE_LIMIT:20000}
     cooldown-hours: ${IR_BALANCE_COOLDOWN_HOURS:24}
     service-guard-attainment: ${IR_BALANCE_SERVICE_GUARD:0.9}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never

@@ -13,6 +13,9 @@ import com.ir.system.entity.User;
 import com.ir.system.service.TokenService;
 import com.ir.system.service.UserStore;
 import java.time.LocalDateTime;
+import javax.validation.Valid;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -27,7 +30,9 @@ public class AuthController {
 
     @Data
     public static class LoginReq {
+        @NotBlank(message = "用户名不能为空")
         private String username;
+        @NotBlank(message = "密码不能为空")
         private String password;
     }
 
@@ -39,11 +44,15 @@ public class AuthController {
 
     @Data
     public static class PasswordReq {
-        private String password;
+        @NotBlank(message = "旧密码不能为空")
+        private String oldPassword;
+        @NotBlank(message = "新密码不能为空")
+        @Size(min = 6, message = "新密码至少需要 6 位")
+        private String newPassword;
     }
 
     @PostMapping("/login")
-    public R<LoginResult> login(@RequestBody LoginReq request) {
+    public R<LoginResult> login(@Valid @RequestBody LoginReq request) {
         User user = users.find(request.getUsername());
         if (user == null || !UserStore.verify(request.getPassword(),
                 user.getPassword())) {
@@ -71,13 +80,12 @@ public class AuthController {
     }
 
     @PostMapping("/password")
-    public R<Void> password(@RequestBody PasswordReq request) {
-        if (request == null || request.getPassword() == null
-                || request.getPassword().length() < 6) {
-            throw new BizException("新密码至少需要 6 位");
-        }
+    public R<Void> password(@Valid @RequestBody PasswordReq request) {
         User user = CurrentUser.get();
-        user.setPassword(UserStore.hash(request.getPassword()));
+        if (!UserStore.verify(request.getOldPassword(), user.getPassword())) {
+            throw new BizException("旧密码错误");
+        }
+        user.setPassword(UserStore.hash(request.getNewPassword()));
         users.save(user);
         return R.ok();
     }

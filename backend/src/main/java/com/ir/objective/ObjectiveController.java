@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import javax.validation.Valid;
 
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,7 @@ public class ObjectiveController {
     }
 
     @PostMapping
-    public R<CtObjective> save(@RequestBody CtObjective objective) {
+    public R<CtObjective> save(@Valid @RequestBody CtObjective objective) {
         return R.ok(service.save(objective));
     }
 

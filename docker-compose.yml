@@ -1,0 +1,12 @@
+services:
+  ir:
+    build: .
+    ports:
+      - "8090:8090"
+    env_file:
+      - .env.example
+    volumes:
+      - ir-data:/app/data
+
+volumes:
+  ir-data:
