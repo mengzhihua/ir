@@ -1,0 +1,12 @@
+ir:
+  integration:
+    allow-private-hosts: false
+  sandbox:
+    auto-on-startup: false
+logging:
+  level:
+    root: INFO
+spring:
+  sql:
+    init:
+      continue-on-error: false

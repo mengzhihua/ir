@@ -93,9 +93,13 @@
               <el-button link>更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item v-if="row.status === 'OPEN'" command="ack">确认</el-dropdown-item>
+                  <el-dropdown-item v-if="row.status === 'OPEN'" command="ack"
+                    >确认</el-dropdown-item
+                  >
                   <el-dropdown-item command="resolve">解决</el-dropdown-item>
-                  <el-dropdown-item v-if="row.status === 'OPEN'" command="ignore">忽略</el-dropdown-item>
+                  <el-dropdown-item v-if="row.status === 'OPEN'" command="ignore"
+                    >忽略</el-dropdown-item
+                  >
                 </el-dropdown-menu>
               </template>
             </el-dropdown>

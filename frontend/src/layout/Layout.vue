@@ -43,8 +43,10 @@
   </el-container>
   <el-dialog v-model="passwordVisible" title="修改密码" width="420px">
     <el-form label-width="90px"
+      ><el-form-item label="旧密码"
+        ><el-input v-model="oldPassword" type="password" show-password /></el-form-item
       ><el-form-item label="新密码"
-        ><el-input v-model="password" type="password" show-password /></el-form-item
+        ><el-input v-model="newPassword" type="password" show-password /></el-form-item
     ></el-form>
     <template #footer
       ><el-button @click="passwordVisible = false">取消</el-button
@@ -66,10 +68,12 @@ const currentName = computed(
   () => sideMenus.value.find((item) => item.path === route.path)?.name || '工作台'
 )
 const passwordVisible = ref(false)
-const password = ref('')
+const oldPassword = ref('')
+const newPassword = ref('')
 async function command(value) {
   if (value === 'password') {
-    password.value = ''
+    oldPassword.value = ''
+    newPassword.value = ''
     passwordVisible.value = true
     return
   }
@@ -78,8 +82,12 @@ async function command(value) {
   router.replace('/login')
 }
 async function changePassword() {
-  if (password.value.length < 6) return ElMessage.warning('新密码至少 6 位')
-  await authApi.password({ password: password.value })
+  if (!oldPassword.value) return ElMessage.warning('请输入旧密码')
+  if (newPassword.value.length < 6) return ElMessage.warning('新密码至少 6 位')
+  await authApi.password({
+    oldPassword: oldPassword.value,
+    newPassword: newPassword.value
+  })
   ElMessage.success('密码修改成功，请重新登录')
   clearAuth()
   router.replace('/login')

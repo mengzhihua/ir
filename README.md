@@ -14,7 +14,7 @@ npm install
 npm run dev
 ```
 
-默认账号：`admin/admin123`。后端使用 `Authorization: Bearer <token>`，响应统一为 `{code,msg,data}`。首次启动在 MOCK 模式生成确定性演示数据并同步、评估预警、创建 baseline 场景。
+默认账号：`admin/admin123`。后端使用 `Authorization: Bearer <token>`，响应统一为 `{code,msg,data}`。首次启动在 MOCK 模式生成确定性演示数据并同步、评估预警、创建 baseline 场景。健康检查地址为 `/actuator/health`。
 
 ## 目录
 
@@ -88,11 +88,34 @@ HTTP 集成的 `baseUrl` 只接受 HTTP/HTTPS URL，并实现了 loopback、链�
 `ir.integration.allow-private-hosts=true` 以支持本地 OTWB；生产环境建议设置为
 `false`。HTTP 客户端连接超时为 3 秒，读取超时为 10 秒。
 
+## 开发规范与质量门禁
+
+```bash
+cd backend
+mvn -s /home/ubuntu/maven-settings-ir.xml clean verify
+cd ../frontend
+npm ci
+npm run lint
+npm run format:check
+npm test -- --run
+npm run build
+```
+
+Pull Request 会执行后端 Maven verify、前端 lint、Prettier 检查、Vitest 和生产构建。
+
 ### 生产部署
 
 生产环境请设置 `IR_ALLOW_PRIVATE_HOSTS=false`，避免集成地址指向内网或云元数据服务，
 并立即修改默认管理员密码 `admin/admin123`。
 链路本地地址以及 `169.254.*` 地址始终拒绝，即使允许其他私有地址。
+
+## Docker 部署
+
+```bash
+docker compose up -d
+```
+
+服务监听 `8090`，H2 数据保存在 `ir-data` volume 中。可复制 `.env.example` 为本地环境文件后调整配置。
 
 ## 业务目标与自动平衡
 

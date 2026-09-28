@@ -1,7 +1,9 @@
 <template>
   <div class="intro">
     <header class="nav">
-      <div class="brand"><el-icon><Compass /></el-icon><span>供应链控制塔</span></div>
+      <div class="brand">
+        <el-icon><Compass /></el-icon><span>供应链控制塔</span>
+      </div>
       <el-button type="primary" @click="enter">{{ auth.token ? '进入控制塔' : '登录' }}</el-button>
     </header>
 
@@ -12,7 +14,9 @@
         科捷把神州金库对外讲成四套系统：订单、仓储、运配、核算，再用案例和新闻让人记住。我们这十二套系统已经盖住这四块，并且能在成本、时效和资金盘之间做平衡。这一页把对照、已有能力和后续阶段说清楚。
       </p>
       <div class="hero-actions">
-        <el-button type="primary" size="large" @click="enter">{{ auth.token ? '回到工作台' : '登录后看控制塔' }}</el-button>
+        <el-button type="primary" size="large" @click="enter">{{
+          auth.token ? '回到工作台' : '登录后看控制塔'
+        }}</el-button>
         <el-button size="large" @click="scrollToPhases">看分阶段补齐</el-button>
       </div>
     </section>
@@ -49,7 +53,10 @@
 
     <section class="block">
       <h2>和震坤行采购商城怎么对上</h2>
-      <p class="note">对照的是 zkh.com 公开讲的找货、协议价、需求清单和批量询价，不是把对方的商品数量、仓网或送达时效写到我们头上。选品可以按工厂收窄，仍不是完整商城店面。</p>
+      <p class="note">
+        对照的是 zkh.com
+        公开讲的找货、协议价、需求清单和批量询价，不是把对方的商品数量、仓网或送达时效写到我们头上。选品可以按工厂收窄，仍不是完整商城店面。
+      </p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -97,7 +104,9 @@
     <section class="cta">
       <h2>先看控制塔怎么做决定，再下到各系统执行</h2>
       <p>默认账号 admin / admin123。介绍页不需要登录。</p>
-      <el-button type="primary" size="large" @click="enter">{{ auth.token ? '进入控制塔' : '登录' }}</el-button>
+      <el-button type="primary" size="large" @click="enter">{{
+        auth.token ? '进入控制塔' : '登录'
+      }}</el-button>
     </section>
   </div>
 </template>
@@ -158,14 +167,42 @@ const zkh = [
   }
 ]
 const systems = [
-  { kicker: '执行', name: 'OMS 订单', text: '接单、审核、分仓、拆单、合单、推出库。发运后登记短信或邮件，默认不连通知网关。' },
-  { kicker: '执行', name: 'WMS 仓储', text: '入库、库存、波次拣选、复核装箱。计件金额按仓库、货主和班次汇总。' },
-  { kicker: '执行', name: 'TMS 运配', text: '运单、发车、在途和签收。取号报文按承运商组装，并标明这是沙箱报文。' },
-  { kicker: '执行', name: 'BMS 核算', text: '同一张费率表支持固定、单价、阶梯、累进和首重续重。运费差额可以单独入账。' },
-  { kicker: '决策', name: 'IR 控制塔', text: '把十二套系统的快照放在一起，做预警、补货、资金盘沙盘和跨系统指令。' },
-  { kicker: '供应', name: 'SRM / BOM / DMS', text: '采购申请、询价和协议价。空单价会带上协议折扣和优惠券。邮件审批只登记，不发送。未匹配的需求不转申请。' },
+  {
+    kicker: '执行',
+    name: 'OMS 订单',
+    text: '接单、审核、分仓、拆单、合单、推出库。发运后登记短信或邮件，默认不连通知网关。'
+  },
+  {
+    kicker: '执行',
+    name: 'WMS 仓储',
+    text: '入库、库存、波次拣选、复核装箱。计件金额按仓库、货主和班次汇总。'
+  },
+  {
+    kicker: '执行',
+    name: 'TMS 运配',
+    text: '运单、发车、在途和签收。取号报文按承运商组装，并标明这是沙箱报文。'
+  },
+  {
+    kicker: '执行',
+    name: 'BMS 核算',
+    text: '同一张费率表支持固定、单价、阶梯、累进和首重续重。运费差额可以单独入账。'
+  },
+  {
+    kicker: '决策',
+    name: 'IR 控制塔',
+    text: '把十二套系统的快照放在一起，做预警、补货、资金盘沙盘和跨系统指令。'
+  },
+  {
+    kicker: '供应',
+    name: 'SRM / BOM / DMS',
+    text: '采购申请、询价和协议价。空单价会带上协议折扣和优惠券。邮件审批只登记，不发送。未匹配的需求不转申请。'
+  },
   { kicker: '财务', name: 'SAP / INV', text: '演示财务过账、交货和进项三单匹配，开具与查验分开。' },
-  { kicker: '协同', name: 'CRM / OA', text: '商机推进到谈判后单独关单。待办审批不代替业务单据往下走。' }
+  {
+    kicker: '协同',
+    name: 'CRM / OA',
+    text: '商机推进到谈判后单独关单。待办审批不代替业务单据往下走。'
+  }
 ]
 const phases = [
   {

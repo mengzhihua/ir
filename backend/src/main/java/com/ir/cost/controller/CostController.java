@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import javax.validation.Valid;
 import com.ir.common.R;
 import com.ir.cost.entity.CtCostTarget;
 import com.ir.cost.service.CostService;
@@ -57,7 +58,7 @@ public class CostController {
     }
 
     @PostMapping("/target")
-    public R<CtCostTarget> target(@RequestBody CtCostTarget target) {
+    public R<CtCostTarget> target(@Valid @RequestBody CtCostTarget target) {
         return R.ok(service.saveTarget(target));
     }
 

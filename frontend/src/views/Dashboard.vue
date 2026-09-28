@@ -47,7 +47,9 @@
       <div class="panel-title">
         <h3>下一步动作</h3>
         <div>
-          <el-tag :type="tagTypes.capitalVerdict[overview.recommendation?.capitalVerdict] || 'info'">
+          <el-tag
+            :type="tagTypes.capitalVerdict[overview.recommendation?.capitalVerdict] || 'info'"
+          >
             资金
             {{ labelOf(overview.recommendation?.capitalVerdict, capitalVerdictLabels) }}
           </el-tag>
@@ -91,40 +93,45 @@
       </div>
       <p v-if="behindSummary" class="muted">{{ behindSummary }}</p>
       <div class="table-scroll">
-      <el-table :data="overview.command?.nextActions || []" stripe :fit="false" style="min-width: 860px">
-        <el-table-column label="来源" width="110"
-          ><template #default="{ row }">{{
-            labelOf(row.kind, commandKindLabels)
-          }}</template></el-table-column
+        <el-table
+          :data="overview.command?.nextActions || []"
+          stripe
+          :fit="false"
+          style="min-width: 860px"
         >
-        <el-table-column prop="title" label="事项" min-width="220" />
-        <el-table-column label="建议动作" width="160"
-          ><template #default="{ row }">{{
-            labelOf(row.suggestedType, actionTypeLabels)
-          }}</template></el-table-column
-        >
-        <el-table-column prop="targetKey" label="对象" width="140" />
-        <el-table-column label="等级" width="80"
-          ><template #default="{ row }"
-            ><el-tag :type="tagTypes.severity[row.severity]">{{
-              labelOf(row.severity, severityLabels)
-            }}</el-tag></template
-          ></el-table-column
-        >
-        <el-table-column v-if="canWrite()" label="操作" width="110">
-          <template #default="{ row }">
-            <el-button
-              link
-              type="primary"
-              :disabled="row.executable === false"
-              :loading="executingKey === row.kind + '-' + row.id"
-              @click="executeItem(row)"
-              >{{ row.executable === false ? '需管理员' : '执行' }}</el-button
-            >
-          </template>
-        </el-table-column>
-        <template #empty><el-empty description="暂无待处理动作" /></template>
-      </el-table>
+          <el-table-column label="来源" width="110"
+            ><template #default="{ row }">{{
+              labelOf(row.kind, commandKindLabels)
+            }}</template></el-table-column
+          >
+          <el-table-column prop="title" label="事项" min-width="220" />
+          <el-table-column label="建议动作" width="160"
+            ><template #default="{ row }">{{
+              labelOf(row.suggestedType, actionTypeLabels)
+            }}</template></el-table-column
+          >
+          <el-table-column prop="targetKey" label="对象" width="140" />
+          <el-table-column label="等级" width="80"
+            ><template #default="{ row }"
+              ><el-tag :type="tagTypes.severity[row.severity]">{{
+                labelOf(row.severity, severityLabels)
+              }}</el-tag></template
+            ></el-table-column
+          >
+          <el-table-column v-if="canWrite()" label="操作" width="110">
+            <template #default="{ row }">
+              <el-button
+                link
+                type="primary"
+                :disabled="row.executable === false"
+                :loading="executingKey === row.kind + '-' + row.id"
+                @click="executeItem(row)"
+                >{{ row.executable === false ? '需管理员' : '执行' }}</el-button
+              >
+            </template>
+          </el-table-column>
+          <template #empty><el-empty description="暂无待处理动作" /></template>
+        </el-table>
       </div>
     </div>
     <div class="stats">
@@ -376,17 +383,13 @@ const carrierSummary = computed(() => {
 const highCount = computed(
   () =>
     (overview.command?.nextActions || []).filter(
-      (row) =>
-        row.severity === 'HIGH' && row.kind !== 'SANDBOX' && row.executable !== false
+      (row) => row.severity === 'HIGH' && row.kind !== 'SANDBOX' && row.executable !== false
     ).length
 )
 const behindSummary = computed(() => {
   const rows = overview.objectives?.behind || []
   if (!rows.length) return ''
-  return (
-    '未达标：' +
-    rows.map((row) => `${row.name} ${percent(row.attainment)}`).join(' · ')
-  )
+  return '未达标：' + rows.map((row) => `${row.name} ${percent(row.attainment)}`).join(' · ')
 })
 function policyTip(value) {
   return `成本 ${((value || 0) / 100).toFixed(2)} / 效率 ${((100 - (value || 0)) / 100).toFixed(2)}`
@@ -524,8 +527,7 @@ async function executeHigh() {
   batching.value = true
   try {
     const items = (overview.command?.nextActions || []).filter(
-      (row) =>
-        row.severity === 'HIGH' && row.kind !== 'SANDBOX' && row.executable !== false
+      (row) => row.severity === 'HIGH' && row.kind !== 'SANDBOX' && row.executable !== false
     )
     const result = await towerApi.commandBatch({ items, severity: 'HIGH' })
     ElMessage.success(`高等级已执行 ${result.success || 0} 条，失败 ${result.failed || 0} 条`)

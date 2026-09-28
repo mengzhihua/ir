@@ -17,6 +17,7 @@ import com.ir.system.entity.User;
 import com.ir.system.mapper.OpLogMapper;
 import com.ir.system.mapper.UserMapper;
 import com.ir.system.service.UserStore;
+import javax.validation.Valid;
 
 @RestController
 @RequestMapping("/api/system")
@@ -53,7 +54,7 @@ public class SystemController {
     }
 
     @PostMapping("/user")
-    public R<User> create(@RequestBody User user) {
+    public R<User> create(@Valid @RequestBody User user) {
         user.setPassword(UserStore.hash(user.getPassword()));
         if (user.getEnabled() == null) {
             user.setEnabled(true);
@@ -64,7 +65,7 @@ public class SystemController {
     }
 
     @PutMapping("/user/{id}")
-    public R<User> update(@PathVariable Long id, @RequestBody User request) {
+    public R<User> update(@PathVariable Long id, @Valid @RequestBody User request) {
         User existing = userMapper.selectById(id);
         if (existing == null) {
             return R.fail(404, "用户不存在");
