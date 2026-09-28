@@ -1,46 +1,46 @@
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('OMS', '订单管理系统', 'http://localhost:8081', 'BEARER', 'admin', 'admin123', 'oms-open-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('WMS', '仓储管理系统', 'http://localhost:8083', 'BEARER', 'admin', 'admin123', 'wms-open-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('TMS', '运输管理系统', 'http://localhost:8082', 'API_KEY', NULL, NULL, 'tms-open-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('BMS', '计费系统', 'http://localhost:8084', 'API_KEY', NULL, NULL, 'bms-open-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('SRM', '供应商管理系统', 'http://localhost:8087', 'API_KEY', 'admin', 'admin123', 'srm-wms-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('SAP', 'ERP 系统', 'http://localhost:8085', 'API_KEY', 'admin', 'admin123', 'sap-open-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('OA', '协同办公', 'http://localhost:8086', 'API_KEY', NULL, NULL, 'oa-open-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('BOM', '产品结构', 'http://localhost:8088', 'API_KEY', NULL, NULL, 'bom-open-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('INV', '发票税务', 'http://localhost:8089', 'API_KEY', NULL, NULL, 'inv-open-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('CRM', '客户关系', 'http://localhost:8091', 'API_KEY', NULL, NULL, 'crm-open-key', 'MOCK', TRUE);
-MERGE INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
-KEY (code)
-VALUES ('DMS', '经销商系统', 'http://localhost:8092', 'API_KEY', NULL, NULL, 'dms-open-key', 'MOCK', TRUE);
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'OMS', '订单管理系统', 'http://localhost:8081', 'BEARER', 'admin', 'admin123', 'oms-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'OMS');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'WMS', '仓储管理系统', 'http://localhost:8083', 'BEARER', 'admin', 'admin123', 'wms-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'WMS');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'TMS', '运输管理系统', 'http://localhost:8082', 'API_KEY', NULL, NULL, 'tms-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'TMS');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'BMS', '计费系统', 'http://localhost:8084', 'API_KEY', NULL, NULL, 'bms-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'BMS');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'SRM', '供应商管理系统', 'http://localhost:8087', 'API_KEY', 'admin', 'admin123', 'srm-wms-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'SRM');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'SAP', 'ERP 系统', 'http://localhost:8085', 'API_KEY', 'admin', 'admin123', 'sap-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'SAP');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'OA', '协同办公', 'http://localhost:8086', 'API_KEY', NULL, NULL, 'oa-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'OA');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'BOM', '产品结构', 'http://localhost:8088', 'API_KEY', NULL, NULL, 'bom-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'BOM');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'INV', '发票税务', 'http://localhost:8089', 'API_KEY', NULL, NULL, 'inv-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'INV');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'CRM', '客户关系', 'http://localhost:8091', 'API_KEY', NULL, NULL, 'crm-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'CRM');
+INSERT INTO ct_system (code, name, base_url, auth_type, username, password, api_key, mode, enabled)
+SELECT 'DMS', '经销商系统', 'http://localhost:8092', 'API_KEY', NULL, NULL, 'dms-open-key', 'MOCK', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_system WHERE code = 'DMS');
 
-MERGE INTO ct_user (username, password, real_name, role, enabled)
-KEY (username)
-VALUES ('admin', 'pbkdf2$120000$BNgKdkFKHOJ2O7XtGWPowg==$oxGZBIUTlmp8VfmydZIW4Eo78kSQCXFzV8SSGI2Rv9w=', '系统管理员', 'ADMIN', TRUE);
-MERGE INTO ct_user (username, password, real_name, role, enabled)
-KEY (username)
-VALUES ('planner', 'pbkdf2$120000$4UbYDRmMJYDzlXR4u87tzw==$+fzWyHrjFlMsqFdG3BxVXD6YgY42mm1SUD82RJ739Pg=', '计划员', 'PLANNER', TRUE);
-MERGE INTO ct_user (username, password, real_name, role, enabled)
-KEY (username)
-VALUES ('viewer', 'pbkdf2$120000$cf1Uyo9Ui4NB9TuOHkkdPw==$xUZfwOiI6WOnuDjsTWveU1+IR+zDyFcC8JcPMS9k99A=', '只读用户', 'VIEWER', TRUE);
+INSERT INTO ct_user (username, password, real_name, role, enabled)
+SELECT 'admin', 'pbkdf2$120000$BNgKdkFKHOJ2O7XtGWPowg==$oxGZBIUTlmp8VfmydZIW4Eo78kSQCXFzV8SSGI2Rv9w=', '系统管理员', 'ADMIN', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_user WHERE username = 'admin');
+INSERT INTO ct_user (username, password, real_name, role, enabled)
+SELECT 'planner', 'pbkdf2$120000$4UbYDRmMJYDzlXR4u87tzw==$+fzWyHrjFlMsqFdG3BxVXD6YgY42mm1SUD82RJ739Pg=', '计划员', 'PLANNER', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_user WHERE username = 'planner');
+INSERT INTO ct_user (username, password, real_name, role, enabled)
+SELECT 'viewer', 'pbkdf2$120000$cf1Uyo9Ui4NB9TuOHkkdPw==$xUZfwOiI6WOnuDjsTWveU1+IR+zDyFcC8JcPMS9k99A=', '只读用户', 'VIEWER', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM ct_user WHERE username = 'viewer');
 
 MERGE INTO ct_rule (code, name, type, params, severity, enabled, suggested_action)
 KEY (code)

@@ -383,14 +383,14 @@ CREATE TABLE IF NOT EXISTS ct_op_log (
 );
 ALTER TABLE ct_op_log ADD COLUMN IF NOT EXISTS success BOOLEAN;
 
-ALTER TABLE ct_scenario ADD COLUMN kind VARCHAR(16);
-ALTER TABLE ct_scenario ADD COLUMN recommended BOOLEAN;
-ALTER TABLE ct_scenario ADD COLUMN run_no VARCHAR(80);
-ALTER TABLE ct_scenario ADD COLUMN avg_lead_days DECIMAL(18,6);
-ALTER TABLE ct_scenario ADD COLUMN stockout_units DECIMAL(18,2);
-ALTER TABLE ct_scenario ADD COLUMN cost_score DECIMAL(18,6);
-ALTER TABLE ct_scenario ADD COLUMN efficiency_score DECIMAL(18,6);
-ALTER TABLE ct_scenario ADD COLUMN balance_score DECIMAL(18,6);
+ALTER TABLE ct_scenario ADD COLUMN IF NOT EXISTS kind VARCHAR(16);
+ALTER TABLE ct_scenario ADD COLUMN IF NOT EXISTS recommended BOOLEAN;
+ALTER TABLE ct_scenario ADD COLUMN IF NOT EXISTS run_no VARCHAR(80);
+ALTER TABLE ct_scenario ADD COLUMN IF NOT EXISTS avg_lead_days DECIMAL(18,6);
+ALTER TABLE ct_scenario ADD COLUMN IF NOT EXISTS stockout_units DECIMAL(18,2);
+ALTER TABLE ct_scenario ADD COLUMN IF NOT EXISTS cost_score DECIMAL(18,6);
+ALTER TABLE ct_scenario ADD COLUMN IF NOT EXISTS efficiency_score DECIMAL(18,6);
+ALTER TABLE ct_scenario ADD COLUMN IF NOT EXISTS balance_score DECIMAL(18,6);
 
 CREATE TABLE IF NOT EXISTS ct_setting (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -399,5 +399,5 @@ CREATE TABLE IF NOT EXISTS ct_setting (
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
-ALTER TABLE ct_setting ADD COLUMN setting_value VARCHAR(255);
-ALTER TABLE ct_order_snapshot ADD COLUMN priority INT;
+ALTER TABLE ct_setting ADD COLUMN IF NOT EXISTS setting_value VARCHAR(255);
+ALTER TABLE ct_order_snapshot ADD COLUMN IF NOT EXISTS priority INT;

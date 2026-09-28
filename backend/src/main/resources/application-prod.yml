@@ -6,7 +6,3 @@ ir:
 logging:
   level:
     root: INFO
-spring:
-  sql:
-    init:
-      continue-on-error: false
