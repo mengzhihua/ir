@@ -4,6 +4,8 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      SERVER_PORT: ${SERVER_PORT:-8090}
     ports:
       - "127.0.0.1:${SERVER_PORT:-8090}:${SERVER_PORT:-8090}"
     volumes:
