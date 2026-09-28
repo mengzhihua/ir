@@ -9,10 +9,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.web.server.LocalServerPort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:actuator-health;MODE=MySQL;DB_CLOSE_DELAY=-1")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ActuatorHealthTest {
     @Autowired
     private TestRestTemplate rest;
